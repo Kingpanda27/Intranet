@@ -1,0 +1,44 @@
+name: intranet
+
+services:
+  intranet:
+    build: .
+    container_name: telecom_intranet
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=mysql://root:nexus.rdom@mysql:3306/intranet
+      - REDIS_URL=redis://redis:6379
+      - NEXTAUTH_URL=https://intranet.telecomnetworks.org
+    env_file:
+      - .env.local
+    volumes:
+      # Persistencia de los archivos e imágenes subidas 
+      - ./public/uploads:/app/public/uploads
+    depends_on:
+      - mysql
+      - redis
+
+  mysql:
+    image: mysql:8.0
+    container_name: telecom_mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=nexus.rdom
+      - MYSQL_DATABASE=intranet
+    ports:
+      - "3306:3306"
+    volumes:
+      - intranet_mysql_data:/var/lib/mysql
+
+  redis:
+    image: redis:alpine
+    container_name: telecom_redis
+    restart: unless-stopped
+
+volumes:
+  intranet_mysql_data:
+    external: true
+
+
