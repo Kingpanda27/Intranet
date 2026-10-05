@@ -1,0 +1,481 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  ext_expires_in    Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id                   String             @id @default(cuid())
+  name                 String?
+  email                String?            @unique
+  emailVerified        DateTime?
+  image                String? @db.Text
+  role                 String             @default("USER")
+  roleId               String?
+  roleObj              Role?              @relation(fields: [roleId], references: [id])
+  status               String             @default("ACTIVE")
+  entraObjectId        String?            @unique
+  password             String?
+  projectId            String?
+  invitationToken      String?            @unique
+  invitationExpires    DateTime?
+  vacationBalance      Float              @default(14.0)
+  lastSeen             DateTime?
+  position             String?
+  location             String?
+  extension            String?
+  aboutMe              String?
+  skills               String?
+  socialLinkedIn       String?
+  socialTeams          String?
+  socialWebsite        String?
+  birthday             DateTime?
+  showBirthday         Boolean            @default(true)
+  createdAt            DateTime           @default(now())
+  accounts             Account[]
+  calendarEvents       CalendarEvent[]
+  sentMessages         ChatMessage[]      @relation("MessageAuthor")
+  comments             Comment[]
+  conversationsAsUser2 Conversation[]     @relation("User2Conversations")
+  conversationsAsUser1 Conversation[]     @relation("User1Conversations")
+  documents            Document[]
+  friendshipsReceived  Friendship[]       @relation("FriendshipReceiver")
+  friendshipsSent      Friendship[]       @relation("FriendshipSender")
+  articles             KnowledgeArticle[]
+  likes                Like[]
+  notifications        Notification[]
+  posts                Post[]
+  recognitionsReceived Recognition[]      @relation("RecognitionReceiver")
+  recognitionsSent     Recognition[]      @relation("RecognitionSender")
+  sessions             Session[]
+  requests             TimeOffRequest[]
+  createdRequests      TimeOffRequest[]   @relation("CreatedTimeOffRequests")
+  approvedRequests     TimeOffRequest[]   @relation("ApprovedTimeOffRequests")
+  rejectedRequests     TimeOffRequest[]   @relation("RejectedTimeOffRequests")
+  roleChangeRequests   RoleChangeRequest[] @relation("TargetUserRoleRequests")
+  requestedRoleChanges RoleChangeRequest[] @relation("RequestedByRoleRequests")
+  reviewedRoleChanges  RoleChangeRequest[] @relation("ReviewedByRoleRequests")
+  project              Project?           @relation(fields: [projectId], references: [id])
+  subLedProjects       Project[]          @relation("ProjectSubLeaders")
+  supervisedProjects   Project[]          @relation("ProjectSupervisors")
+  eventAttendances     EventAttendance[]
+  eventComments        EventComment[]
+}
+
+model Friendship {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  status     String   @default("PENDING")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  receiver   User     @relation("FriendshipReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender     User     @relation("FriendshipSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+}
+
+model Document {
+  id              String           @id @default(cuid())
+  title           String
+  url             String
+  category        String?          @default("GENERAL")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  authorId        String
+  isGlobal        Boolean          @default(false)
+  department      String           @default("General")
+  author          User             @relation(fields: [authorId], references: [id])
+  ollamaConfigs   OllamaConfig[]   @relation("OllamaDocuments")
+  projects        Project[]        @relation("ProjectDocuments")
+  whatsappConfigs WhatsappConfig[] @relation("WhatsappDocuments")
+  embeddings      DocumentEmbedding[]
+}
+
+model DocumentEmbedding {
+  id         String   @id @default(cuid())
+  documentId String
+  content    String
+  vector     String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+model Conversation {
+  id        String        @id @default(cuid())
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  user1Id   String
+  user2Id   String
+  messages  ChatMessage[]
+  user2     User          @relation("User2Conversations", fields: [user2Id], references: [id])
+  user1     User          @relation("User1Conversations", fields: [user1Id], references: [id])
+
+  @@unique([user1Id, user2Id])
+}
+
+model ChatMessage {
+  id             String       @id @default(cuid())
+  content        String?
+  imageUrl       String?
+  type           String       @default("TEXT")
+  createdAt      DateTime     @default(now())
+  authorId       String
+  conversationId String
+  author         User         @relation("MessageAuthor", fields: [authorId], references: [id])
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Project {
+  id              String            @id @default(cuid())
+  name            String
+  description     String?
+  createdAt       DateTime          @default(now())
+  email           String?
+  color           String?
+  icon            String?
+  image           String?
+  activities      ProjectActivity[]
+  members         User[]
+  documents       Document[]        @relation("ProjectDocuments")
+  subLeaders      User[]            @relation("ProjectSubLeaders")
+  supervisors     User[]            @relation("ProjectSupervisors")
+  whatsappConfigs WhatsappConfig[]  @relation("ProjectWhatsapp")
+  calendarEvents  CalendarEvent[]
+}
+
+model ProjectActivity {
+  id        String   @id @default(cuid())
+  projectId String
+  content   String
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model TimeOffRequest {
+  id             String   @id @default(cuid())
+  type           String   @default("VACATION")
+  startDate      DateTime
+  endDate        DateTime
+  requestedDays  Float    @default(0)
+  reason         String
+  status         String   @default("PENDING")
+  supervisorNote String?
+  affectsBonus   Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  userId         String
+  documentName   String?
+  documentUrl    String?
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Auditoría y Registro de Creación/Aprobación/Rechazo
+  createdById    String?
+  createdBy      User?     @relation("CreatedTimeOffRequests", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedAt     DateTime?
+  approvedById   String?
+  approvedBy     User?     @relation("ApprovedTimeOffRequests", fields: [approvedById], references: [id], onDelete: SetNull)
+  rejectedAt     DateTime?
+  rejectedById   String?
+  rejectedBy     User?     @relation("RejectedTimeOffRequests", fields: [rejectedById], references: [id], onDelete: SetNull)
+
+  // Reposición de Horas (type: "HOURS_MAKEUP")
+  absenceDate      DateTime?
+  hoursToMakeUp    Float?
+  makeupDate       DateTime?
+  makeupStartTime  String?
+  makeupEndTime    String?
+
+  // Permisos Especiales por Horas (type: "SPECIAL")
+  specialType      String? // FULL, HALF, HOURS
+  exitTime         String?
+  returnTime       String?
+  hoursRequested   Float?
+  hoursApproved    Float?
+  hoursUsed        Float?
+}
+
+model Post {
+  id         String    @id @default(cuid())
+  content    String
+  imageUrl   String?
+  isFeatured Boolean   @default(false)
+  type       String    @default("NORMAL")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  authorId   String
+  comments   Comment[]
+  likes      Like[]
+  author     User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  authorId  String
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  reaction  String   @default("LIKE")
+  createdAt DateTime @default(now())
+  authorId  String
+  postId    String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([authorId, postId])
+}
+
+model WhatsappConfig {
+  id          String     @id @default(cuid())
+  name        String?
+  phoneNumber String
+  code        String?
+  useAI       Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  projects    Project[]  @relation("ProjectWhatsapp")
+  documents   Document[] @relation("WhatsappDocuments")
+}
+
+model OllamaConfig {
+  id        String     @id @default(cuid())
+  name      String?    @default("Agente IA")
+  url       String     @default("http://192.168.50.233:11434")
+  modelName String     @default("llama3.2")
+  isGlobal  Boolean    @default(false)
+  documents Document[] @relation("OllamaDocuments")
+}
+
+model Holiday {
+  id        String   @id @default(cuid())
+  name      String
+  date      DateTime @unique
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("INFO")
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CalendarEvent {
+  id                String   @id @default(cuid())
+  title             String
+  description       String?
+  startDate         DateTime
+  endDate           DateTime
+  type              String   @default("CORPORATE")
+  color             String   @default("#3b82f6")
+  location          String?
+  responsible       String?
+  scope             String   @default("PUBLIC") // PUBLIC, GROUP, SUPERVISORS, HR
+  projectId         String?
+  sendNotification  Boolean  @default(false)
+  showReminder      Boolean  @default(false)
+  allowComments     Boolean  @default(false)
+  allowRSVP         Boolean  @default(false)
+  participantsScope String   @default("ALL") // ALL, GROUP, SPECIFIC
+  participantIds    String?  // IDs de usuarios separados por comas
+  createdAt         DateTime @default(now())
+  createdById       String
+  createdBy         User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  project           Project? @relation(fields: [projectId], references: [id])
+  attendances       EventAttendance[]
+  comments          EventComment[]
+}
+
+model Recognition {
+  id         String   @id @default(cuid())
+  type       String
+  message    String?
+  senderId   String
+  receiverId String
+  createdAt  DateTime @default(now())
+  receiver   User     @relation("RecognitionReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender     User     @relation("RecognitionSender", fields: [senderId], references: [id], onDelete: Cascade)
+}
+
+model KnowledgeCategory {
+  id          String             @id @default(cuid())
+  name        String
+  icon        String?
+  description String?
+  order       Int                @default(0)
+  articles    KnowledgeArticle[]
+}
+
+model KnowledgeArticle {
+  id         String            @id @default(cuid())
+  title      String
+  content    String
+  categoryId String
+  authorId   String
+  isFeatured Boolean           @default(false)
+  views      Int               @default(0)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  author     User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  category   KnowledgeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+}
+
+model EventAttendance {
+  id        String        @id @default(cuid())
+  eventId   String
+  userId    String
+  status    String        // ACCEPTED, DECLINED, TENTATIVE
+  createdAt DateTime      @default(now())
+  event     CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([eventId, userId])
+}
+
+model EventComment {
+  id        String        @id @default(cuid())
+  eventId   String
+  userId    String
+  content   String
+  createdAt DateTime      @default(now())
+  event     CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  userId       String?
+  actorUserId  String?
+  userName     String?
+  action       String
+  target       String?
+  targetUserId String?
+  oldValue     String?  @db.Text
+  newValue     String?  @db.Text
+  metadata     String?  @db.Text
+  ipAddress    String?
+  userAgent    String?
+  result       String   @default("SUCCESS")
+  createdAt    DateTime @default(now())
+
+  @@index([action])
+  @@index([createdAt])
+  @@index([actorUserId])
+  @@index([targetUserId])
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+  level       Int              @default(10)
+  isSystem    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       User[]
+  permissions RolePermission[]
+
+  @@index([name])
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  code        String           @unique
+  name        String
+  category    String           @default("GENERAL")
+  description String?
+  roles       RolePermission[]
+
+  @@index([code])
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+model RoleChangeRequest {
+  id              String    @id @default(cuid())
+  userId          String
+  requestedById   String
+  currentRole     String
+  requestedRole   String
+  reason          String    @db.Text
+  status          String    @default("PENDING")
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?   @db.Text
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user        User  @relation("TargetUserRoleRequests", fields: [userId], references: [id], onDelete: Cascade)
+  requestedBy User  @relation("RequestedByRoleRequests", fields: [requestedById], references: [id], onDelete: Cascade)
+  reviewedBy  User? @relation("ReviewedByRoleRequests", fields: [reviewedById], references: [id])
+
+  @@index([status])
+  @@index([userId])
+  @@index([requestedById])
+}
+
+model ApiConfiguration {
+  id          String   @id @default(cuid())
+  name        String
+  provider    String   // ej. "OpenAI", "Anthropic", "Custom"
+  apiKey      String   // La clave de acceso
+  baseUrl     String?  // Opcional por si es un proxy o servicio custom
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

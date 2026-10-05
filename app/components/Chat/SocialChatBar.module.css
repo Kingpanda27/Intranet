@@ -1,0 +1,215 @@
+.container {
+  position: fixed;
+  bottom: 0px;
+  right: 20px;
+  width: 280px;
+  z-index: 1000;
+  font-family: inherit;
+}
+
+.bar {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-bottom: none;
+  padding: 0.75rem 1rem;
+  border-radius: 8px 8px 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  box-shadow: 0 -4px 15px rgba(0,0,0,0.1);
+  transition: background 0.2s;
+}
+
+.bar:hover {
+  background: hsl(var(--muted)/0.5);
+}
+
+.iconBadge {
+  position: relative;
+  display: flex;
+}
+
+.onlineDot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  border: 2px solid hsl(var(--card));
+}
+
+.friendList {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  height: 400px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -4px 15px rgba(0,0,0,0.1);
+}
+
+.listHeader {
+  padding: 0.75rem;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.search {
+  width: 100%;
+  background: hsl(var(--muted)/0.3);
+  border: none;
+  border-radius: 20px;
+  padding: 0.4rem 0.75rem 0.4rem 2rem;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.listContent {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.friendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.friendItem:hover {
+  background: hsl(var(--muted)/0.5);
+}
+
+.statusDot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background: #10b981;
+  border-radius: 50%;
+  border: 2px solid hsl(var(--card));
+}
+
+/* Chat Windows */
+.windowsContainer {
+  position: fixed;
+  bottom: 0;
+  right: 320px;
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 10px;
+  z-index: 999;
+}
+
+.chatWindow {
+  width: 330px;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -4px 15px rgba(0,0,0,0.1);
+  transition: height 0.2s;
+}
+
+.minimized {
+  width: 200px;
+  height: auto;
+}
+
+.windowHeader {
+  padding: 0.5rem 0.75rem;
+  background: hsl(var(--card));
+  border-bottom: 1px solid hsl(var(--border));
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.windowContent {
+  height: 320px;
+  overflow-y: auto;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.windowFooter {
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid hsl(var(--border));
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.miniInput {
+  width: 100%;
+  background: hsl(var(--muted)/0.3);
+  border: none;
+  border-radius: 15px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.winBtn {
+  background: transparent;
+  border: none;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+}
+
+.winBtn:hover {
+  background: hsl(var(--muted));
+}
+
+.msgWrapper {
+  display: flex;
+  max-width: 85%;
+}
+
+.msgMe {
+  align-self: flex-end;
+}
+
+.msgThem {
+  align-self: flex-start;
+}
+
+.msgBubble {
+  padding: 0.5rem 0.75rem;
+  border-radius: 18px;
+  font-size: 0.85rem;
+}
+
+.msgMe .msgBubble {
+  background: hsl(var(--primary));
+  color: white;
+}
+
+.msgThem .msgBubble {
+  background: hsl(var(--muted)/0.5);
+}
+
+.msgImg {
+  max-width: 100%;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.footerIcon {
+  color: hsl(var(--primary));
+  cursor: pointer;
+  display: flex;
+}
