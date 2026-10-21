@@ -28,13 +28,21 @@ export async function getHomeMetrics() {
   const endOfDay = new Date(today)
   endOfDay.setHours(23, 59, 59, 999)
   
+  // Semana laboral estándar (Lunes 00:00:00 a Domingo 23:59:59)
+  const dayOfWeek = today.getDay()
+  const diffToMonday = (dayOfWeek === 0 ? -6 : 1) - dayOfWeek
   const startOfWeek = new Date(today)
-  startOfWeek.setDate(today.getDate() - today.getDay())
-  startOfWeek.setHours(0,0,0,0)
+  startOfWeek.setDate(today.getDate() + diffToMonday)
+  startOfWeek.setHours(0, 0, 0, 0)
+
+  const endOfWeek = new Date(startOfWeek)
+  endOfWeek.setDate(startOfWeek.getDate() + 6)
+  endOfWeek.setHours(23, 59, 59, 999)
 
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999)
 
-  const [activeUsersCount, absents, eventsThisWeek, recognitionsThisMonth, recentDocs] = await Promise.all([
+  const [activeUsersCount, absents, eventsThisWeek, recognitionsThisMonth, newDocsThisMonth, recentDocs] = await Promise.all([
     prisma.user.count({
       where: {
         lastSeen: { gte: startOfDay }
@@ -49,25 +57,32 @@ export async function getHomeMetrics() {
     }),
     prisma.calendarEvent.count({
       where: {
-        startDate: { gte: startOfWeek }
+        startDate: { lte: endOfWeek },
+        endDate: { gte: startOfWeek }
       }
     }),
     prisma.recognition.count({
       where: {
-        createdAt: { gte: startOfMonth }
+        createdAt: { gte: startOfMonth, lte: endOfMonth }
+      }
+    }),
+    prisma.document.count({
+      where: {
+        createdAt: { gte: startOfMonth, lte: endOfMonth }
       }
     }),
     prisma.document.findMany({
       orderBy: { createdAt: "desc" },
-      take: 5
+      take: 10
     })
   ])
 
   return {
-    activeEmployees: Math.max(activeUsersCount, 1),
+    activeEmployees: activeUsersCount,
     absentEmployees: absents,
     eventsThisWeek,
     recognitionsThisMonth,
+    newDocsThisMonth,
     recentDocs
   }
 }
@@ -201,15 +216,21 @@ export async function getAbsentEmployeesDetails() {
 
 export async function getEventsThisWeekDetails() {
   const today = new Date()
+  const dayOfWeek = today.getDay()
+  const diffToMonday = (dayOfWeek === 0 ? -6 : 1) - dayOfWeek
   const startOfWeek = new Date(today)
-  startOfWeek.setDate(today.getDate() - today.getDay())
-  startOfWeek.setHours(0,0,0,0)
+  startOfWeek.setDate(today.getDate() + diffToMonday)
+  startOfWeek.setHours(0, 0, 0, 0)
 
   const endOfWeek = new Date(startOfWeek)
-  endOfWeek.setDate(startOfWeek.getDate() + 7)
+  endOfWeek.setDate(startOfWeek.getDate() + 6)
+  endOfWeek.setHours(23, 59, 59, 999)
 
   return prisma.calendarEvent.findMany({
-    where: { startDate: { gte: startOfWeek, lte: endOfWeek } },
+    where: {
+      startDate: { lte: endOfWeek },
+      endDate: { gte: startOfWeek }
+    },
     orderBy: { startDate: "asc" }
   })
 }
@@ -217,9 +238,10 @@ export async function getEventsThisWeekDetails() {
 export async function getRecognitionsThisMonthDetails() {
   const today = new Date()
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999)
 
   const recognitions = await prisma.recognition.findMany({
-    where: { createdAt: { gte: startOfMonth } },
+    where: { createdAt: { gte: startOfMonth, lte: endOfMonth } },
     include: {
       sender: { select: { id: true, name: true, image: true } },
       receiver: { select: { id: true, name: true, image: true } }
@@ -241,8 +263,26 @@ export async function getRecognitionsThisMonthDetails() {
 }
 
 export async function getRecentDocsDetails() {
-  return prisma.document.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 10
-  })
+  const today = new Date()
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999)
+
+  const [newDocs, allDocs] = await Promise.all([
+    prisma.document.findMany({
+      where: { createdAt: { gte: startOfMonth, lte: endOfMonth } },
+      orderBy: { createdAt: "desc" },
+      include: { author: { select: { name: true } } }
+    }),
+    prisma.document.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      include: { author: { select: { name: true } } }
+    })
+  ])
+
+  return {
+    newDocsCount: newDocs.length,
+    newDocs,
+    allDocs
+  }
 }

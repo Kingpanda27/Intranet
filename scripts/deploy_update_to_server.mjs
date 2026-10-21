@@ -40,6 +40,8 @@ async function main() {
     { local: 'app/components/Chat/SocialChatBar.tsx', remote: '/var/www/html/app/components/Chat/SocialChatBar.tsx' },
     { local: 'app/components/Layout/Sidebar.tsx', remote: '/var/www/html/app/components/Layout/Sidebar.tsx' },
     { local: 'app/actions/ollamaActions.ts', remote: '/var/www/html/app/actions/ollamaActions.ts' },
+    { local: 'app/actions/homeActions.ts', remote: '/var/www/html/app/actions/homeActions.ts' },
+    { local: 'app/components/Dashboard/MetricsInteractiveCards.tsx', remote: '/var/www/html/app/components/Dashboard/MetricsInteractiveCards.tsx' },
     { local: 'middleware.ts', remote: '/var/www/html/middleware.ts' },
   ];
 
