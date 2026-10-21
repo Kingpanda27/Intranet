@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useTransition, useRef } from "react"
-import { updateUserAdmin, deleteUser, createUser, inviteUser, processBulkUsers } from "@/app/actions/userActions"
+import { updateUserAdmin, deleteUser, createUser, inviteUser, processBulkUsers, deleteBulkUsers } from "@/app/actions/userActions"
 import { createRoleChangeRequest } from "@/app/actions/roleRequestActions"
 import { updateUserVacationBalance } from "@/app/actions/timeOffActions"
-import { Shield, Mail, Edit3, Trash2, Check, X, User, UserPlus, ChevronDown, ChevronUp, FileUp, Send, Calendar, UserCheck, ShieldAlert, ArrowRight } from "lucide-react"
+import { Shield, Mail, Edit3, Trash2, Check, X, User, UserPlus, ChevronDown, ChevronUp, FileUp, Send, Calendar, UserCheck, ShieldAlert, ArrowRight, AlertTriangle } from "lucide-react"
 import Papa from "papaparse"
 
 const ROLES = ["AGENT", "USER", "SUPERVISOR", "MANAGER", "HR", "TECHNOLOGY", "TECHNOLOGY_ADMIN", "IT_MANAGER", "NO_ROLE"]
@@ -256,11 +256,17 @@ function UserRow({
   user, 
   currentUserRole,
   currentUserId,
+  isSelected = false,
+  onToggleSelect,
+  onDeleteRequest,
   onRequestRole 
 }: { 
   user: any
   currentUserRole: string
   currentUserId: string
+  isSelected?: boolean
+  onToggleSelect?: () => void
+  onDeleteRequest: (user: any) => void
   onRequestRole: (user: any) => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -272,6 +278,7 @@ function UserRow({
   const [message, setMessage] = useState<{ type: "success" | "error", text: string } | null>(null)
 
   const isTech = currentUserRole === "TECHNOLOGY" || currentUserRole === "TECHNOLOGY_ADMIN" || currentUserRole === "IT_MANAGER"
+  const isSelf = user.id === currentUserId
 
   const handleSave = () => {
     const fd = new FormData()
@@ -293,14 +300,6 @@ function UserRow({
     })
   }
 
-  const handleDelete = () => {
-    if (!confirm(`¿Eliminar permanentemente a ${user.name}? Esta acción es irreversible.`)) return
-    startTransition(async () => {
-      const result = await deleteUser(user.id)
-      if (!result.success) setMessage({ type: "error", text: result.error || "Error" })
-    })
-  }
-
   const handleInvite = () => {
     startTransition(async () => {
       const result = await inviteUser(user.id)
@@ -315,7 +314,29 @@ function UserRow({
   }
 
   return (
-    <tr style={{ borderBottom: "1px solid hsl(var(--border) / 0.5)" }}>
+    <tr style={{
+      borderBottom: "1px solid hsl(var(--border) / 0.5)",
+      backgroundColor: isSelected ? "hsl(var(--primary) / 0.08)" : undefined,
+      transition: "background-color 0.15s ease"
+    }}>
+      {isTech && (
+        <td style={{ padding: "1rem", width: "40px", textAlign: "center" }}>
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={onToggleSelect}
+            disabled={isSelf}
+            style={{
+              width: "16px",
+              height: "16px",
+              cursor: isSelf ? "not-allowed" : "pointer",
+              accentColor: "hsl(var(--primary))"
+            }}
+            title={isSelf ? "No puedes seleccionarte a ti mismo" : `Seleccionar a ${user.name}`}
+          />
+        </td>
+      )}
+
       <td style={{ padding: "1rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <div style={{
@@ -398,14 +419,24 @@ function UserRow({
                 <button onClick={handleInvite} disabled={isPending} className="btn btn-surface hover-scale" style={{ padding: "0.35rem 0.65rem", fontSize: "0.75rem" }}>
                   <Send size={12} /> Invitar
                 </button>
-                <button onClick={handleDelete} disabled={isPending} className="btn btn-ghost" style={{ padding: "0.35rem", color: "hsl(var(--destructive))" }}>
+                <button 
+                  onClick={() => onDeleteRequest(user)} 
+                  disabled={isPending || isSelf} 
+                  className="btn btn-ghost" 
+                  style={{ 
+                    padding: "0.35rem", 
+                    color: isSelf ? "hsl(var(--muted-foreground) / 0.3)" : "hsl(var(--destructive))",
+                    cursor: isSelf ? "not-allowed" : "pointer"
+                  }}
+                  title={isSelf ? "No puedes eliminar tu propia cuenta" : `Eliminar a ${user.name}`}
+                >
                   <Trash2 size={13} />
                 </button>
               </>
             )
           ) : (
             /* Si es Supervisor/Manager: botón para solicitar cambio de rol */
-            user.id !== currentUserId && (
+            !isSelf && (
               <button
                 type="button"
                 onClick={() => onRequestRole(user)}
@@ -439,6 +470,12 @@ export function UserManager({
   const [isPending, startTransition] = useTransition()
   const [modalMessage, setModalMessage] = useState<{ type: "success" | "error", text: string } | null>(null)
 
+  // Selección múltiple y modal moderno de confirmación de eliminación
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
+  const [deleteModalUsers, setDeleteModalUsers] = useState<any[] | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteModalError, setDeleteModalError] = useState<string | null>(null)
+
   const isTech = currentUserRole === "TECHNOLOGY" || currentUserRole === "TECHNOLOGY_ADMIN" || currentUserRole === "IT_MANAGER"
 
   const filtered = users.filter(u => {
@@ -446,6 +483,47 @@ export function UserManager({
     const matchesRole = roleFilter === "ALL" || u.role === roleFilter
     return matchesSearch && matchesRole
   })
+
+  // Usuarios seleccionables en la vista actual (excluyendo la cuenta propia)
+  const selectableVisibleUsers = filtered.filter(u => u.id !== currentUserId)
+  const isAllSelected = selectableVisibleUsers.length > 0 && selectableVisibleUsers.every(u => selectedUserIds.includes(u.id))
+  const isSomeSelected = selectableVisibleUsers.some(u => selectedUserIds.includes(u.id)) && !isAllSelected
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedUserIds(prev => prev.filter(id => !selectableVisibleUsers.some(u => u.id === id)))
+    } else {
+      const visibleIds = selectableVisibleUsers.map(u => u.id)
+      setSelectedUserIds(prev => Array.from(new Set([...prev, ...visibleIds])))
+    }
+  }
+
+  const handleToggleSelectUser = (id: string) => {
+    setSelectedUserIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    )
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteModalUsers || deleteModalUsers.length === 0) return
+    setIsDeleting(true)
+    setDeleteModalError(null)
+
+    try {
+      const idsToDelete = deleteModalUsers.map(u => u.id)
+      const result = await deleteBulkUsers(idsToDelete)
+      if (result.success) {
+        setSelectedUserIds(prev => prev.filter(id => !idsToDelete.includes(id)))
+        setDeleteModalUsers(null)
+      } else {
+        setDeleteModalError(result.error || "Ocurrió un error al eliminar los usuarios.")
+      }
+    } catch (err: any) {
+      setDeleteModalError(err?.message || "Error inesperado al eliminar.")
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   const handleSendRoleRequest = () => {
     if (!requestModalUser || !reason.trim()) {
@@ -519,11 +597,96 @@ export function UserManager({
         </div>
       </div>
 
+      {/* Barra de Acciones por Lote (cuando hay usuarios seleccionados) */}
+      {isTech && selectedUserIds.length > 0 && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "0.85rem 1.25rem",
+          backgroundColor: "hsl(var(--surface))",
+          border: "1px solid hsl(var(--primary) / 0.35)",
+          borderRadius: "var(--radius-md)",
+          boxShadow: "0 8px 24px -4px rgba(0, 0, 0, 0.25)",
+          gap: "1rem",
+          flexWrap: "wrap",
+          animation: "fadeIn 0.2s ease"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+            <span style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minWidth: "26px",
+              height: "26px",
+              padding: "0 8px",
+              borderRadius: "999px",
+              backgroundColor: "hsl(var(--primary))",
+              color: "hsl(var(--primary-foreground))",
+              fontSize: "0.8rem",
+              fontWeight: 800
+            }}>
+              {selectedUserIds.length}
+            </span>
+            <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+              {selectedUserIds.length === 1 ? "1 usuario seleccionado" : `${selectedUserIds.length} usuarios seleccionados`}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedUserIds([])}
+              className="btn btn-ghost"
+              style={{ fontSize: "0.8rem", padding: "0.25rem 0.5rem", textDecoration: "underline", color: "hsl(var(--muted-foreground))" }}
+            >
+              Deseleccionar todo
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              const targets = users.filter(u => selectedUserIds.includes(u.id))
+              setDeleteModalUsers(targets)
+              setDeleteModalError(null)
+            }}
+            style={{
+              background: "linear-gradient(145deg, hsl(0 84% 55%), hsl(0 84% 45%))",
+              color: "#fff",
+              border: "1px solid hsl(0 84% 60% / 0.5)",
+              padding: "0.55rem 1.15rem",
+              borderRadius: "var(--radius-md)",
+              fontWeight: 700,
+              fontSize: "0.85rem",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              cursor: "pointer",
+              boxShadow: "0 4px 14px hsl(0 84% 50% / 0.3)"
+            }}
+          >
+            <Trash2 size={15} /> Eliminar {selectedUserIds.length} {selectedUserIds.length === 1 ? "usuario" : "usuarios"}
+          </button>
+        </div>
+      )}
+
       {/* Tabla de Usuarios */}
       <div className="table-container-modern animate-in">
         <table className="table-modern">
           <thead>
             <tr>
+              {isTech && (
+                <th style={{ width: "40px", padding: "1rem", textAlign: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={isAllSelected}
+                    ref={el => {
+                      if (el) el.indeterminate = isSomeSelected
+                    }}
+                    onChange={handleToggleSelectAll}
+                    style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "hsl(var(--primary))" }}
+                    title="Seleccionar todos los usuarios visibles"
+                  />
+                </th>
+              )}
               <th>Usuario</th>
               <th>Correo</th>
               <th>Rol</th>
@@ -534,7 +697,7 @@ export function UserManager({
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ padding: "3rem", textAlign: "center", color: "hsl(var(--muted-foreground))" }}>
+                <td colSpan={isTech ? 6 : 5} style={{ padding: "3rem", textAlign: "center", color: "hsl(var(--muted-foreground))" }}>
                   No se encontraron usuarios coincidentes.
                 </td>
               </tr>
@@ -545,6 +708,12 @@ export function UserManager({
                   user={user} 
                   currentUserRole={currentUserRole}
                   currentUserId={currentUserId}
+                  isSelected={selectedUserIds.includes(user.id)}
+                  onToggleSelect={() => handleToggleSelectUser(user.id)}
+                  onDeleteRequest={(u) => {
+                    setDeleteModalUsers([u])
+                    setDeleteModalError(null)
+                  }}
                   onRequestRole={(u) => {
                     setRequestModalUser(u)
                     setTargetRole("SUPERVISOR")
@@ -557,6 +726,161 @@ export function UserManager({
           </tbody>
         </table>
       </div>
+
+      {/* Modal Moderno de Confirmación de Eliminación (Individual y Masivo) */}
+      {deleteModalUsers && deleteModalUsers.length > 0 && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.72)",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 120,
+          padding: "1rem"
+        }}>
+          <div className="card glass animate-in" style={{
+            width: "100%",
+            maxWidth: "520px",
+            padding: "2rem",
+            borderRadius: "1.25rem",
+            border: "1px solid hsl(0 84% 60% / 0.35)",
+            boxShadow: "0 24px 48px -12px rgba(0, 0, 0, 0.6)"
+          }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "1rem", marginBottom: "1.25rem" }}>
+              <div style={{
+                width: "48px",
+                height: "48px",
+                borderRadius: "14px",
+                backgroundColor: "hsl(0 84% 60% / 0.12)",
+                color: "hsl(0 84% 60%)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0
+              }}>
+                <AlertTriangle size={26} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ margin: "0 0 0.4rem", fontSize: "1.2rem", fontWeight: 700, color: "hsl(var(--foreground))" }}>
+                  {deleteModalUsers.length === 1 
+                    ? `¿Eliminar a ${deleteModalUsers[0].name}?`
+                    : `¿Eliminar ${deleteModalUsers.length} usuarios?`
+                  }
+                </h3>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "hsl(var(--muted-foreground))", lineHeight: 1.45 }}>
+                  Esta acción es <b>irreversible</b>. Se eliminarán permanentemente las cuentas, accesos, sesiones y datos vinculados en la intranet.
+                </p>
+              </div>
+            </div>
+
+            {/* Lista previa de usuarios a eliminar */}
+            <div style={{
+              maxHeight: "170px",
+              overflowY: "auto",
+              border: "1px solid hsl(var(--border) / 0.6)",
+              borderRadius: "var(--radius-md)",
+              backgroundColor: "hsl(var(--surface) / 0.6)",
+              padding: "0.5rem",
+              marginBottom: "1.25rem",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.35rem"
+            }}>
+              {deleteModalUsers.map(u => (
+                <div key={u.id} style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: "var(--radius-sm)",
+                  backgroundColor: "hsl(var(--surface-hover) / 0.4)",
+                  fontSize: "0.825rem",
+                  gap: "0.75rem"
+                }}>
+                  <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                    <span style={{ fontWeight: 600, color: "hsl(var(--foreground))", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {u.name}
+                    </span>
+                    <span style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {u.email}
+                    </span>
+                  </div>
+                  <span style={{
+                    padding: "0.15rem 0.5rem",
+                    borderRadius: "999px",
+                    fontSize: "0.7rem",
+                    fontWeight: 700,
+                    backgroundColor: `${ROLE_COLORS[u.role] || "hsl(var(--primary))"}22`,
+                    color: ROLE_COLORS[u.role] || "hsl(var(--primary))",
+                    flexShrink: 0
+                  }}>
+                    {u.role}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {deleteModalError && (
+              <div style={{
+                marginBottom: "1.25rem",
+                padding: "0.75rem 1rem",
+                borderRadius: "var(--radius-sm)",
+                backgroundColor: "rgba(239, 68, 68, 0.1)",
+                border: "1px solid rgba(239, 68, 68, 0.25)",
+                color: "#ef4444",
+                fontSize: "0.825rem",
+                fontWeight: 600
+              }}>
+                {deleteModalError}
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteModalUsers(null)
+                  setDeleteModalError(null)
+                }}
+                disabled={isDeleting}
+                className="btn btn-surface"
+                style={{ padding: "0.55rem 1.25rem", borderRadius: "0.6rem", fontSize: "0.85rem", cursor: isDeleting ? "not-allowed" : "pointer" }}
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                style={{
+                  background: "linear-gradient(145deg, hsl(0 84% 55%), hsl(0 84% 45%))",
+                  color: "#fff",
+                  border: "1px solid hsl(0 84% 60% / 0.5)",
+                  padding: "0.55rem 1.25rem",
+                  borderRadius: "0.6rem",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  cursor: isDeleting ? "not-allowed" : "pointer",
+                  boxShadow: "0 4px 14px hsl(0 84% 50% / 0.3)"
+                }}
+              >
+                <Trash2 size={15} />
+                {isDeleting ? "Eliminando..." : "Sí, eliminar definitivamente"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal para Solicitar Cambio de Rol (Supervisor / Manager) */}
       {requestModalUser && (
