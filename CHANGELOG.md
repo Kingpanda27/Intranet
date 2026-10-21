@@ -22,6 +22,8 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1
   - **Nuevos Documentos:** Se vinculó el contador de la tarjeta a documentos creados durante el mes en curso (`newDocsThisMonth`), eliminando la muestra engañosa de documentos antiguos y habilitando el desglose entre documentos nuevos del mes y repositorio global con enlaces de descarga operativos.
 - **Visualización de Próximo Feriado (`UpcomingHolidaysWidget.tsx`):**
   - Se corrigió el formateo de fecha UTC en la tarjeta principal de feriados evitando el desfasaje horario que mostraba erróneamente "8 nov" en lugar del "9 nov" (Día de la Constitución trasladado a lunes 9 de noviembre).
+- **Permisos de Gestión de Usuarios (`permissions.ts`):**
+  - Se otorgó el permiso `users:delete` al rol `TECHNOLOGY`, permitiendo la eliminación de usuarios del sistema con la salvaguarda de que solo un `IT_MANAGER` puede eliminar a otro usuario de Tecnología.
 
 ---
 
