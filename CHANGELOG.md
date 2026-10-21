@@ -11,11 +11,15 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1
 ### Added
 - Monitoreo en tiempo real de telemetría y tiempos de inferencia de la API de NVIDIA NIM.
 - **Importación Masiva Nativa desde Microsoft 365 Admin Center (`UserManager.tsx` y `userActions.ts`):** Compatibilidad directa con archivos CSV de Microsoft Entra / M365 (`Display name`, `User principal name`, `Block credential`, `Title`, `Department`, `Object Id`), filtrando de manera automática únicamente usuarios activos (`Block credential = False`) y actualizando perfiles existentes sin duplicidad ni caídas de servidor.
+- **Modal Moderno de Confirmación y Eliminación Masiva de Usuarios (`UserManager.tsx` y `userActions.ts`):** Reemplazo definitivo del diálogo nativo del navegador (`confirm()`) por un pop-up moderno centrado en la pantalla con estética glassmorphism, desenfoque de fondo (`backdrop-filter: blur(8px)`), lista previa desplazable de usuarios seleccionados, roles y advertencia de seguridad.
+- **Selección Múltiple y Barra Flotante de Acciones en Lote:** Checkboxes individuales por fila y selector global en cabecera con estado indeterminado, barra flotante con conteo en tiempo real y botón de eliminación masiva en un solo clic.
 
 ### Changed
 - Refactorización progresiva de estilos para soporte de temas personalizados por departamento.
 
 ### Fixed
+- **Eliminación Segura en Cascada de Usuarios (`cleanupUserRelations` en `userActions.ts`):** Limpieza preventiva y transaccional de dependencias de claves foráneas (`account`, `session`, `chatMessage`, `conversation`, `document`, `friendship`, `timeOffRequest`, `notification`, `like`, `comment`, `post`, `recognition`, `supportTicket`, etc.) impidiendo fallos de integridad referencial SQL al eliminar usuarios.
+- **Protección de Autocuenta y Jerarquía IT:** Bloqueo de autoeliminación de la cuenta en uso e imposibilidad de que cuentas estándar o de Tecnología eliminen a otros miembros de Tecnología salvo que se cuente con rol `IT_MANAGER`.
 - **Métricas Reales del Dashboard (`MetricsInteractiveCards` y `homeActions.ts`):**
   - **Eventos Semana:** Se corrigió el rango semanal (Lunes 00:00:00 a Domingo 23:59:59 con delimitador `endOfWeek`) eliminando el conteo inflado de feriados y eventos de meses futuros.
   - **Activos Hoy:** Se eliminó la función de redondeo artificial (`Math.max(activeUsersCount, 1)`), mostrando la cantidad fidedigna de empleados con actividad en el día.

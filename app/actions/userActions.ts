@@ -183,41 +183,82 @@ export async function updateUserAdmin(userId: string, formData: FormData) {
   }
 }
 
-export async function deleteUser(userId: string) {
-  let currentUser
+async function cleanupUserRelations(userIds: string[]) {
+  if (!userIds || userIds.length === 0) return
+  await prisma.account.deleteMany({ where: { userId: { in: userIds } } }).catch(() => {})
+  await prisma.session.deleteMany({ where: { userId: { in: userIds } } }).catch(() => {})
+  await prisma.document.deleteMany({ where: { authorId: { in: userIds } } }).catch(() => {})
+  await prisma.chatMessage.deleteMany({ where: { authorId: { in: userIds } } }).catch(() => {})
+  await prisma.conversation.deleteMany({
+    where: { OR: [{ user1Id: { in: userIds } }, { user2Id: { in: userIds } }] }
+  }).catch(() => {})
+  await prisma.friendship.deleteMany({
+    where: { OR: [{ senderId: { in: userIds } }, { receiverId: { in: userIds } }] }
+  }).catch(() => {})
+  await prisma.timeOffRequest.deleteMany({ where: { userId: { in: userIds } } }).catch(() => {})
+  await prisma.notification.deleteMany({ where: { userId: { in: userIds } } }).catch(() => {})
+  await prisma.like.deleteMany({ where: { authorId: { in: userIds } } }).catch(() => {})
+  await prisma.comment.deleteMany({ where: { authorId: { in: userIds } } }).catch(() => {})
+  await prisma.post.deleteMany({ where: { authorId: { in: userIds } } }).catch(() => {})
+  await prisma.recognition.deleteMany({
+    where: { OR: [{ senderId: { in: userIds } }, { receiverId: { in: userIds } }] }
+  }).catch(() => {})
+  await prisma.roleChangeRequest.deleteMany({
+    where: { OR: [{ userId: { in: userIds } }, { requestedById: { in: userIds } }, { reviewedById: { in: userIds } }] }
+  }).catch(() => {})
+  await prisma.eventAttendance.deleteMany({ where: { userId: { in: userIds } } }).catch(() => {})
+  await prisma.eventComment.deleteMany({ where: { userId: { in: userIds } } }).catch(() => {})
+  await prisma.calendarEvent.deleteMany({ where: { createdById: { in: userIds } } }).catch(() => {})
+  await (prisma as any).supportTicket?.deleteMany({ where: { userId: { in: userIds } } }).catch(() => {})
+}
+
+export async function deleteBulkUsers(userIds: string[]) {
+  let currentUser: any
   try {
     currentUser = await requirePermission("users:delete")
   } catch (err: any) {
     return { error: err.message || "Acceso denegado." }
   }
 
-  // Prevent self-deletion
-  if (userId === currentUser.id) {
+  if (!Array.isArray(userIds) || userIds.length === 0) {
+    return { error: "No se proporcionaron usuarios para eliminar." }
+  }
+
+  // Prevenir auto-eliminación
+  const targetIds = userIds.filter(id => id !== currentUser.id)
+  if (targetIds.length === 0) {
     return { error: "No puedes eliminar tu propia cuenta." }
   }
 
   try {
-    const targetUser = await prisma.user.findUnique({ where: { id: userId } })
-    if (!targetUser) return { error: "Usuario no encontrado." }
-    
-    if (targetUser.role === "TECHNOLOGY" && currentUser.role !== "IT_MANAGER") {
-      return { error: "Solo un IT_MANAGER puede eliminar a un usuario de Tecnología." }
+    // Si no es IT_MANAGER, no puede eliminar usuarios con rol TECHNOLOGY
+    if (currentUser.role !== "IT_MANAGER") {
+      const techUsers = await prisma.user.findMany({
+        where: { id: { in: targetIds }, role: "TECHNOLOGY" },
+        select: { id: true, name: true, email: true }
+      })
+      if (techUsers.length > 0) {
+        return { error: `Solo un IT_MANAGER puede eliminar a usuarios con rol Tecnología (${techUsers.map(u => u.name || u.email).join(", ")}).` }
+      }
     }
 
-    // Borrado manual en cascada para evitar el error de Foreign Key Constraint
-    await prisma.document.deleteMany({ where: { authorId: userId } })
-    await prisma.chatMessage.deleteMany({ where: { authorId: userId } })
-    await prisma.conversation.deleteMany({
-      where: { OR: [{ user1Id: userId }, { user2Id: userId }] }
+    await cleanupUserRelations(targetIds)
+    const result = await prisma.user.deleteMany({
+      where: { id: { in: targetIds } }
     })
 
-    await prisma.user.delete({ where: { id: userId } })
     revalidatePath("/admin/users")
-    return { success: true }
-  } catch (error) {
-    console.error("Error deleting user:", error)
-    return { error: "Error al eliminar el usuario." }
+    return { success: true, count: result.count }
+  } catch (error: any) {
+    console.error("Error deleting bulk users:", error)
+    return { error: error.message || "Error al eliminar usuarios." }
   }
+}
+
+export async function deleteUser(userId: string) {
+  const res = await deleteBulkUsers([userId])
+  if (!res.success) return res
+  return { success: true }
 }
 
 export async function inviteUser(userId: string) {
