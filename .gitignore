@@ -59,6 +59,7 @@ database_live_backup.sql
 _historical_sql_backups/
 _legacy_intranet/
 prisma/*.db*
+SERVER_MIGRATION_PACKAGE/
 
 # Ad-hoc server maintenance, deployment & debug scripts (prevent leaking secrets to GitHub)
 /*.mjs

@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { saveFile } from "./fileActions"
 import { extractTextFromDocument } from "@/app/lib/documentParser"
+import { generateNvidiaResponse } from "@/lib/supportAiLlamaService"
 
 function isValidOllamaUrl(urlStr: string): boolean {
   try {
@@ -189,6 +190,14 @@ Respuesta:`
     const data = await response.json()
     return { success: true, response: data.response }
   } catch (error: any) {
+    if (process.env.NVIDIA_API_KEY) {
+      try {
+        const nvidiaResp = await generateNvidiaResponse(prompt)
+        return { success: true, response: nvidiaResp }
+      } catch (nErr: any) {
+        console.error("NVIDIA fallback failed:", nErr)
+      }
+    }
     return { error: error.message || "Error de conexión" }
   }
 }
@@ -229,6 +238,14 @@ Devuelve el resultado en formato Markdown corto y conciso.`
     const data = await response.json()
     return { success: true, summary: data.response }
   } catch (e: any) {
+    if (process.env.NVIDIA_API_KEY) {
+      try {
+        const nvidiaResp = await generateNvidiaResponse(prompt)
+        return { success: true, summary: nvidiaResp }
+      } catch (nErr: any) {
+        console.error("NVIDIA fallback failed in summarizeDocument:", nErr)
+      }
+    }
     return { error: e.message || "Error resumiendo" }
   }
 }
@@ -266,6 +283,14 @@ export async function generateTextWithAI(promptType: "POST" | "RECOGNITION", use
     const data = await response.json()
     return { success: true, generatedText: data.response }
   } catch (e: any) {
+    if (process.env.NVIDIA_API_KEY) {
+      try {
+        const nvidiaResp = await generateNvidiaResponse(fullPrompt)
+        return { success: true, generatedText: nvidiaResp }
+      } catch (nErr: any) {
+        console.error("NVIDIA fallback failed in generateTextWithAI:", nErr)
+      }
+    }
     return { error: e.message || "Error generando texto" }
   }
 }
@@ -317,6 +342,14 @@ Escribe un resumen en primera persona del plural (nosotros) de forma natural, si
     const data = await response.json()
     return { success: true, summary: data.response }
   } catch (e: any) {
+    if (process.env.NVIDIA_API_KEY) {
+      try {
+        const nvidiaResp = await generateNvidiaResponse(prompt)
+        return { success: true, summary: nvidiaResp }
+      } catch (nErr: any) {
+        console.error("NVIDIA fallback failed in generateDailySummary:", nErr)
+      }
+    }
     return { error: e.message || "Error generando resumen" }
   }
 }

@@ -128,6 +128,7 @@ export function LoginForm() {
           <p style={{ textAlign: "center", fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", margin: "0.25rem 0" }}>
             Usa tu cuenta corporativa @tnoutsourcing.com
           </p>
+
         </div>
 
         {/* Divider */}
