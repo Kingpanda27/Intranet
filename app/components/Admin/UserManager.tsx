@@ -36,21 +36,82 @@ function BulkUploadPanel() {
       skipEmptyLines: true,
       complete: (results) => {
         const data = results.data as any[]
-        const validUsers = data.map(u => ({
-          name: u.nombre || u.name || "",
-          email: u.correo || u.email || "",
-          role: u.rol || u.role || "AGENT"
-        })).filter(u => u.email)
+        
+        // 1. Filtrar únicamente usuarios activos si el CSV incluye columna de bloqueo (Microsoft 365)
+        const activeRows = data.filter((r: any) => {
+          const block = (
+            r['Block credential'] || 
+            r['Blocked credential'] || 
+            r['Bloquear inicio de sesión'] || 
+            r['Bloqueado'] || 
+            ''
+          ).toString().trim().toLowerCase()
+          if (block === 'true' || block === 'yes' || block === 'sí' || block === 'si') return false
+          return true
+        })
+
+        // 2. Extraer usuarios compatibles con Microsoft 365 y formato estándar
+        const validUsers = activeRows.map((u: any) => {
+          const email = (
+            u['User principal name'] || 
+            u['userPrincipalName'] || 
+            u['User Principal Name'] || 
+            u['Correo electrónico'] || 
+            u['correo'] || 
+            u['Correo'] || 
+            u['email'] || 
+            u['Email'] || 
+            ""
+          ).toString().trim().toLowerCase()
+
+          let name = (
+            u['Display name'] || 
+            u['displayName'] || 
+            u['Display Name'] || 
+            u['Nombre para mostrar'] || 
+            u['nombre'] || 
+            u['Nombre'] || 
+            u['name'] || 
+            ""
+          ).toString().trim()
+
+          const firstName = (u['First name'] || u['firstName'] || u['Nombre de pila'] || "").toString().trim()
+          const lastName = (u['Last name'] || u['lastName'] || u['Apellidos'] || "").toString().trim()
+          if ((!name || name === "." || name === "-") && (firstName || lastName)) {
+            name = `${firstName} ${lastName}`.trim()
+          }
+          if (!name && email) {
+            name = email.split("@")[0]
+          }
+
+          const position = (u['Title'] || u['Job title'] || u['Puesto'] || u['Cargo'] || "").toString().trim()
+          const department = (u['Department'] || u['Departamento'] || "").toString().trim()
+          const entraObjectId = (u['Object Id'] || u['objectId'] || u['ObjectId'] || "").toString().trim()
+          const role = (u['rol'] || u['Rol'] || u['role'] || u['Role'] || "USER").toString().trim()
+
+          return {
+            name,
+            email,
+            role,
+            position,
+            department,
+            entraObjectId
+          }
+        }).filter((u: any) => u.email && u.email.includes("@"))
 
         if (validUsers.length === 0) {
-          setMessage({ type: "error", text: "No se encontraron correos válidos en el CSV." })
+          setMessage({ type: "error", text: "No se encontraron usuarios válidos o activos en el CSV." })
           return
         }
 
         startTransition(async () => {
           const result = await processBulkUsers(validUsers) as any
           if (result.success) {
-            setMessage({ type: "success", text: `¡Éxito! Creados: ${result.created}. Errores: ${result.errors?.length || 0}` })
+            const blockedCount = data.length - activeRows.length
+            setMessage({ 
+              type: "success", 
+              text: `¡Proceso completado! Creados: ${result.created}. Existentes actualizados: ${result.existing || 0}. Omitidos/Bloqueados: ${blockedCount}.` 
+            })
             if (fileInputRef.current) fileInputRef.current.value = ""
           } else {
             setMessage({ type: "error", text: result.error || "Error al procesar el archivo." })
@@ -77,7 +138,7 @@ function BulkUploadPanel() {
       {open && (
         <div style={{ marginTop: "1.25rem" }} className="animate-in">
           <p style={{ fontSize: "0.8rem", color: "hsl(var(--muted-foreground))", marginBottom: "1rem", lineHeight: "1.4" }}>
-            Selecciona un archivo <b>.csv</b> delimitado por comas con cabeceras obligatorias: <code>nombre</code>, <code>correo</code>, <code>rol</code>.
+            Selecciona un archivo <b>.csv</b>. Compatible de forma nativa con la exportación de <b>Microsoft 365 Admin Center</b> (<code>Display name</code>, <code>User principal name</code>, <code>Block credential</code>) o formato estándar (<code>nombre</code>, <code>correo</code>, <code>rol</code>). Solo se importarán usuarios activos.
           </p>
           <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
             <input 

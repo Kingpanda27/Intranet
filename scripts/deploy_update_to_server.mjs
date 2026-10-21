@@ -44,6 +44,8 @@ async function main() {
     { local: 'app/components/Dashboard/MetricsInteractiveCards.tsx', remote: '/var/www/html/app/components/Dashboard/MetricsInteractiveCards.tsx' },
     { local: 'app/components/Vacations/UpcomingHolidaysWidget.tsx', remote: '/var/www/html/app/components/Vacations/UpcomingHolidaysWidget.tsx' },
     { local: 'app/components/Vacations/HolidayManager.tsx', remote: '/var/www/html/app/components/Vacations/HolidayManager.tsx' },
+    { local: 'app/actions/userActions.ts', remote: '/var/www/html/app/actions/userActions.ts' },
+    { local: 'app/components/Admin/UserManager.tsx', remote: '/var/www/html/app/components/Admin/UserManager.tsx' },
     { local: 'middleware.ts', remote: '/var/www/html/middleware.ts' },
   ];
 
