@@ -285,43 +285,84 @@ export async function setInitialPassword(token: string, password: string) {
   }
 }
 
-export async function processBulkUsers(usersData: { name: string, email: string, role: string }[]) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user || ((session.user as any).role !== "TECHNOLOGY" && (session.user as any).role !== "IT_MANAGER")) {
-    return { error: "Acceso denegado." }
+export async function processBulkUsers(usersData: { 
+  name: string
+  email: string
+  role?: string
+  position?: string
+  department?: string
+  entraObjectId?: string 
+}[]) {
+  try {
+    await requirePermission("users:create")
+  } catch (err: any) {
+    const session = await getServerSession(authOptions)
+    const role = (session?.user as any)?.role
+    if (role !== "TECHNOLOGY" && role !== "IT_MANAGER") {
+      return { error: "Acceso denegado. Se requieren permisos de IT_MANAGER o TECHNOLOGY." }
+    }
   }
 
   const validRoles = ["USER", "SUPERVISOR", "MANAGER", "HR", "TECHNOLOGY", "IT_MANAGER", "NO_ROLE"]
   const results = {
     created: 0,
+    existing: 0,
     errors: [] as string[]
   }
 
+  // Pre-obtener proyectos para mapear departamento a proyecto si coincide el nombre
+  const projects = await prisma.project.findMany({ select: { id: true, name: true } })
+  const projectMap = new Map<string, string>()
+  projects.forEach(p => projectMap.set(p.name.toLowerCase().trim(), p.id))
+
   for (const data of usersData) {
-    const { name, email, role } = data
-    if (!email || !email.endsWith("@tnoutsourcing.com")) {
-      results.errors.push(`Correo inválido skipeado: ${email}`)
+    const { name, email, role, position, department, entraObjectId } = data
+    if (!email || !email.includes("@")) {
+      results.errors.push(`Correo inválido omitido: ${email}`)
       continue
     }
 
+    const cleanEmail = email.toLowerCase().trim()
+
     try {
-      const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } })
+      const existing = await prisma.user.findUnique({ where: { email: cleanEmail } })
       if (existing) {
-        results.errors.push(`Usuario ya existe: ${email}`)
+        const updateData: any = {}
+        if (!existing.position && position) updateData.position = position
+        if (!existing.entraObjectId && entraObjectId) updateData.entraObjectId = entraObjectId
+        if ((!existing.name || existing.name === cleanEmail.split('@')[0]) && name) updateData.name = name
+
+        if (Object.keys(updateData).length > 0) {
+          await prisma.user.update({
+            where: { id: existing.id },
+            data: updateData
+          })
+        }
+        results.existing++
         continue
       }
 
-      const newUser = await prisma.user.create({
+      const matchedProjectId = department ? projectMap.get(department.toLowerCase().trim()) : undefined
+      const token = Math.random().toString(36).substring(2) + Date.now().toString(36)
+      const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+
+      await prisma.user.create({
         data: {
-          name: name || email.split('@')[0],
-          email: email.toLowerCase(),
-          role: validRoles.includes(role?.toUpperCase()) ? role.toUpperCase() : "USER"
+          name: name || cleanEmail.split('@')[0],
+          email: cleanEmail,
+          role: role && validRoles.includes(role.toUpperCase()) ? role.toUpperCase() : "USER",
+          position: position || undefined,
+          entraObjectId: entraObjectId || undefined,
+          projectId: matchedProjectId || undefined,
+          invitationToken: token,
+          invitationExpires: expires,
+          status: "ACTIVE",
+          vacationBalance: 14.0
         }
       })
-      await inviteUser(newUser.id)
       results.created++
-    } catch (e) {
-      results.errors.push(`Error con ${email}: ${String(e)}`)
+    } catch (e: any) {
+      results.errors.push(`Error con ${cleanEmail}: ${e.message || String(e)}`)
     }
   }
 
