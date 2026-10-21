@@ -56,7 +56,7 @@ export function HolidayManager({ initialHolidays }: { initialHolidays: any[] }) 
               {holidays.map((h, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.85rem", padding: "0.5rem", background: "hsl(var(--muted)/0.3)", borderRadius: "0.25rem" }}>
                   <span>{h.name}</span>
-                  <span style={{ fontWeight: 600 }}>{new Date(h.date).toLocaleDateString()}</span>
+                  <span style={{ fontWeight: 600 }}>{new Date(h.date).toLocaleDateString('es-ES', { timeZone: 'UTC' })}</span>
                 </div>
               ))}
             </div>
