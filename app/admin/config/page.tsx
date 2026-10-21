@@ -2,9 +2,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
-import WhatsappManager from "@/app/components/Admin/Config/WhatsappManager"
-import OllamaManager from "@/app/components/Admin/Config/OllamaManager"
-import ApiKeysManager from "@/app/components/Admin/Config/ApiKeysManager"
+import ConfigTabsWrapper from "./ConfigTabsWrapper"
 
 async function isTechRole(role: string) {
   return role === "TECHNOLOGY" || role === "IT_MANAGER" || role === "TECHNOLOGY_ADMIN" || role === "ADMIN"
@@ -44,14 +42,14 @@ export default async function AdminConfigPage() {
   ])
 
   return (
-    <div className="container" style={{ padding: "2rem 1.5rem" }}>
-      <h1 style={{ marginBottom: "2rem" }}>Configuración TI</h1>
-      
-      <div style={{ display: "grid", gap: "2rem" }}>
-        <ApiKeysManager initialConfigs={apiConfigs} />
-        <WhatsappManager initialConfigs={whatsappConfigs} projects={projects} documents={documents} />
-        <OllamaManager initialConfigs={ollamaConfigs} documents={documents} whatsappConfigs={whatsappConfigs} />
-      </div>
+    <div className="container" style={{ padding: "1.5rem 1rem", maxWidth: "1600px", margin: "0 auto" }}>
+      <ConfigTabsWrapper
+        apiConfigs={apiConfigs}
+        whatsappConfigs={whatsappConfigs}
+        projects={projects}
+        documents={documents}
+        ollamaConfigs={ollamaConfigs}
+      />
     </div>
   )
 }

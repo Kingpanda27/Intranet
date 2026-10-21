@@ -3,11 +3,12 @@
 import styles from './Sidebar.module.css'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Users, Calendar, LogOut, UserCircle, LayoutDashboard, Book, Settings, FolderOpen, Sun, Moon, Umbrella, ShieldCheck, Activity } from 'lucide-react'
+import { Home, Users, Calendar, LogOut, UserCircle, LayoutDashboard, Book, Settings, FolderOpen, Sun, Moon, Umbrella, ShieldCheck, Activity, Headset } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { useTheme } from '@/app/Providers'
 import React, { useState, useEffect } from 'react'
 import { getMyGroups } from '@/app/actions/teamActions'
+import { useSupportChat } from '@/app/components/SupportAILlama/SupportContext'
 
 export function Sidebar() {
   const { data: session } = useSession()
@@ -15,6 +16,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const user = session?.user as any
   const [myGroups, setMyGroups] = useState<any[]>([])
+  const { isSupportOpen, openSupportChat, closeSupportChat, activeView, canAccessAdmin } = useSupportChat()
 
   const hasDashboardAccess = user?.role === "SUPERVISOR" || user?.role === "MANAGER" || user?.role === "IT_MANAGER" || user?.role === "TECHNOLOGY_ADMIN" || user?.role === "HR"
   const isTechnology = user?.role === "TECHNOLOGY" || user?.role === "IT_MANAGER" || user?.role === "TECHNOLOGY_ADMIN" || user?.role === "HR"
@@ -34,6 +36,7 @@ export function Sidebar() {
   }
 
   const getLinkClass = (path: string) => {
+    if (isSupportOpen) return styles.navItem
     return `${styles.navItem} ${isActive(path) ? styles.navItemActive : ''}`
   }
 
@@ -49,39 +52,41 @@ export function Sidebar() {
   return (
     <aside className={styles.sidebar}>
       <div className={styles.logo}>
-        <img 
-          src={theme === "light" ? "/logo_tn.png" : "/logo_tn_dark.png"} 
-          alt="Telecom Networks" 
-          style={{ height: "46px", width: "auto", margin: "0 auto", display: "block" }} 
-        />
+        <Link href="/" onClick={() => closeSupportChat()} style={{ display: "block" }}>
+          <img 
+            src={theme === "light" ? "/logo_tn.png" : "/logo_tn_dark.png"} 
+            alt="Telecom Networks" 
+            style={{ height: "46px", width: "auto", margin: "0 auto", display: "block" }} 
+          />
+        </Link>
       </div>
       
       <nav className={styles.nav}>
-        <Link href="/" className={getLinkClass("/")}>
+        <Link href="/" onClick={() => closeSupportChat()} className={getLinkClass("/")}>
           <Home size={18} />
           <span>Inicio</span>
         </Link>
-        <Link href="/social" className={getLinkClass("/social")}>
+        <Link href="/social" onClick={() => closeSupportChat()} className={getLinkClass("/social")}>
           <Users size={18} />
           <span>Centro Social</span>
         </Link>
 
-        <Link href="/knowledge-base" className={getLinkClass("/knowledge-base")}>
+        <Link href="/knowledge-base" onClick={() => closeSupportChat()} className={getLinkClass("/knowledge-base")}>
           <Book size={18} />
           <span>Documentos</span>
         </Link>
-        <Link href="/calendar" className={getLinkClass("/calendar")}>
+        <Link href="/calendar" onClick={() => closeSupportChat()} className={getLinkClass("/calendar")}>
           <Calendar size={18} />
           <span>Calendario</span>
         </Link>
-        <Link href="/vacations" className={getLinkClass("/vacations")}>
+        <Link href="/vacations" onClick={() => closeSupportChat()} className={getLinkClass("/vacations")}>
           <Umbrella size={18} />
           <span>Vacaciones / Permisos</span>
         </Link>
 
         {/* Grupos del Usuario */}
         {visibleGroups.map(g => (
-          <Link key={g.id} href={`/groups/${g.id}`} className={getLinkClass(`/groups/${g.id}`)}>
+          <Link key={g.id} href={`/groups/${g.id}`} onClick={() => closeSupportChat()} className={getLinkClass(`/groups/${g.id}`)}>
             <Users size={18} style={{ color: g.color || "hsl(var(--primary))" }} />
             <span>
               {g.name} {g.isLeader ? "👑" : g.isSupervisor ? "🛡️" : ""}
@@ -90,44 +95,83 @@ export function Sidebar() {
         ))}
 
         {hasDashboardAccess && !isEmployeeOnly && (
-          <Link href="/dashboard" className={getLinkClass("/dashboard")}>
+          <Link href="/dashboard" onClick={() => closeSupportChat()} className={getLinkClass("/dashboard")}>
             <LayoutDashboard size={18} />
             <span>Panel Control</span>
           </Link>
         )}
 
         {(hasDashboardAccess || isTechnology) && !isEmployeeOnly && (
-          <Link href="/admin/role-requests" className={getLinkClass("/admin/role-requests")}>
+          <Link href="/admin/role-requests" onClick={() => closeSupportChat()} className={getLinkClass("/admin/role-requests")}>
             <ShieldCheck size={18} />
             <span>Solicitudes de Rol</span>
           </Link>
         )}
 
         {isTechnology && (
-          <Link href="/admin/users" className={getLinkClass("/admin/users")}>
+          <Link href="/admin/users" onClick={() => closeSupportChat()} className={getLinkClass("/admin/users")}>
             <Settings size={18} />
             <span>Gestión de Usuarios</span>
           </Link>
         )}
         {isTechnology && (
-          <Link href="/admin/groups" className={getLinkClass("/admin/groups")}>
+          <Link href="/admin/groups" onClick={() => closeSupportChat()} className={getLinkClass("/admin/groups")}>
             <FolderOpen size={18} />
             <span>Gestión de Grupos</span>
           </Link>
         )}
         {isTechnology && (
-          <Link href="/admin/config" className={getLinkClass("/admin/config")}>
+          <Link href="/admin/config" onClick={() => closeSupportChat()} className={getLinkClass("/admin/config")}>
             <Settings size={18} />
             <span>Configuración TI</span>
           </Link>
         )}
         {isTechnology && (
-          <Link href="/admin/audit-logs" className={getLinkClass("/admin/audit-logs")}>
+          <Link href="/admin/audit-logs" onClick={() => closeSupportChat()} className={getLinkClass("/admin/audit-logs")}>
             <Activity size={18} />
             <span>Logs de Auditoría</span>
           </Link>
         )}
-        <Link href="/profile" className={getLinkClass("/profile")}>
+
+        {/* Support AILlama Chat - Botón Destacado e Interactivo */}
+        <button
+          type="button"
+          onClick={() => openSupportChat('chat')}
+          className={`${styles.supportChatBtn} ${isSupportOpen ? styles.supportChatBtnActive : ''}`}
+          title="Abrir chat de soporte técnico asistido por IA"
+        >
+          <Headset size={19} style={{ color: "#ff6a00", flexShrink: 0 }} />
+          <span style={{ fontWeight: 650, letterSpacing: '-0.01em' }}>IT Support Chat</span>
+          <span
+            style={{
+              marginLeft: 'auto',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              fontSize: '0.64rem',
+              fontWeight: 800,
+              padding: '2px 7px',
+              borderRadius: '9999px',
+              background: 'rgba(255, 106, 0, 0.16)',
+              color: '#ff6a00',
+              border: '1px solid rgba(255, 106, 0, 0.3)',
+              letterSpacing: '0.04em',
+            }}
+          >
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: '#10b981',
+                boxShadow: '0 0 6px #10b981',
+              }}
+            />
+            AI BOT
+          </span>
+        </button>
+
+        <Link href="/profile" onClick={() => closeSupportChat()} className={getLinkClass("/profile")}>
           <UserCircle size={18} />
           <span>Mi Perfil</span>
         </Link>

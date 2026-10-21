@@ -11,8 +11,13 @@ export async function middleware(request: NextRequest) {
   })
   const { pathname } = request.nextUrl
 
-  // Proteger endpoints de API que no sean /api/auth
-  if (pathname.startsWith('/api') && !pathname.startsWith('/api/auth')) {
+  // Proteger endpoints de API que no sean /api/auth o motores de IA de soporte
+  if (
+    pathname.startsWith('/api') &&
+    !pathname.startsWith('/api/auth') &&
+    !pathname.startsWith('/api/ollama') &&
+    !pathname.startsWith('/api/nvidia')
+  ) {
     if (!token) {
       return new NextResponse(JSON.stringify({ error: "No autenticado" }), {
         status: 401,

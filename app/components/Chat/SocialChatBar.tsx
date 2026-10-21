@@ -4,9 +4,11 @@ import { useState, useEffect } from "react"
 import { MessageSquare, X, Minus, Search, Send, Image as ImageIcon, Circle } from "lucide-react"
 import { getFriends } from "@/app/actions/friendActions"
 import { getConversation, sendMessageToUser, getMessages } from "@/app/actions/chatActions"
+import { useSupportChat } from "@/app/components/SupportAILlama/SupportContext"
 import styles from "./SocialChatBar.module.css"
 
 export function SocialChatBar() {
+  const { isSupportOpen } = useSupportChat()
   const [isOpen, setIsOpen] = useState(false)
   const [friends, setFriends] = useState<any[]>([])
   const [activeChats, setActiveChats] = useState<any[]>([])
@@ -31,6 +33,11 @@ export function SocialChatBar() {
 
   const closeChat = (friendId: string) => {
     setActiveChats(activeChats.filter(c => c.id !== friendId))
+  }
+
+  // Ocultar barra de contactos y chats activos cuando IT Support Chat está abierto
+  if (isSupportOpen) {
+    return null
   }
 
   return (
