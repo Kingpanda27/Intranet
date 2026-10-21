@@ -101,11 +101,11 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
     <>
       <div className="animate-in slide-in-bottom-sm" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
         {[
-          { id: "ACTIVE", label: "Activos Hoy", value: currentMetrics.activeEmployees, icon: Users, color: "#10b981", bg: "rgba(16, 185, 129, 0.1)" },
-          { id: "ABSENT", label: "Ausentes", value: currentMetrics.absentEmployees, icon: UserX, color: "#ef4444", bg: "rgba(239, 68, 68, 0.1)" },
-          { id: "EVENTS", label: "Eventos Semana", value: currentMetrics.eventsThisWeek, icon: Calendar, color: "hsl(340 80% 60%)", bg: "hsla(340, 80%, 60%, 0.1)" },
-          { id: "RECOGNITIONS", label: "Reconocimientos del Mes", value: currentMetrics.recognitionsThisMonth, icon: Award, color: "#f59e0b", bg: "rgba(245, 158, 11, 0.1)" },
-          { id: "DOCS", label: "Nuevos Docs", value: currentMetrics.recentDocs?.length || 0, icon: FileText, color: "hsl(var(--primary))", bg: "hsl(var(--primary)/0.1)" }
+          { id: "ACTIVE", label: "Activos Hoy", value: currentMetrics?.activeEmployees ?? 0, icon: Users, color: "#10b981", bg: "rgba(16, 185, 129, 0.1)" },
+          { id: "ABSENT", label: "Ausentes", value: currentMetrics?.absentEmployees ?? 0, icon: UserX, color: "#ef4444", bg: "rgba(239, 68, 68, 0.1)" },
+          { id: "EVENTS", label: "Eventos Semana", value: currentMetrics?.eventsThisWeek ?? 0, icon: Calendar, color: "hsl(340 80% 60%)", bg: "hsla(340, 80%, 60%, 0.1)" },
+          { id: "RECOGNITIONS", label: "Reconocimientos del Mes", value: currentMetrics?.recognitionsThisMonth ?? 0, icon: Award, color: "#f59e0b", bg: "rgba(245, 158, 11, 0.1)" },
+          { id: "DOCS", label: "Nuevos Docs", value: currentMetrics?.newDocsThisMonth ?? 0, icon: FileText, color: "hsl(var(--primary))", bg: "hsl(var(--primary)/0.1)" }
         ].map((stat, i) => (
           <div 
             key={i} 
@@ -358,46 +358,92 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
                   )}
 
                   {/* NUEVOS DOCS */}
-                  {activeModal === "DOCS" && data && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                      {data.length > 0 ? (
-                        <>
-                          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                            {data.map((doc: any) => (
-                              <div key={doc.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", padding: "1rem", backgroundColor: "hsl(var(--surface))", borderRadius: "16px", border: "1px solid hsl(var(--border)/0.5)" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", minWidth: 0 }}>
-                                  <div style={{ width: 42, height: 42, borderRadius: "10px", backgroundColor: "hsl(var(--primary)/0.1)", color: "hsl(var(--primary))", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                    <FileText size={20} />
-                                  </div>
-                                  <div style={{ minWidth: 0 }}>
-                                    <div style={{ fontWeight: 700, fontSize: "0.95rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.title}</div>
-                                    <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
-                                      {doc.category || "General"} • {new Date(doc.createdAt).toLocaleDateString("es-ES")}
+                  {activeModal === "DOCS" && data && (() => {
+                    const newDocs = Array.isArray(data) ? [] : (data.newDocs || [])
+                    const allDocs = Array.isArray(data) ? data : (data.allDocs || [])
+                    const hasNewDocs = newDocs.length > 0
+                    const hasAnyDocs = allDocs.length > 0
+
+                    return (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                        {hasNewDocs ? (
+                          <div>
+                            <div style={{ fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "hsl(var(--primary))", marginBottom: "0.75rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              <FileText size={16} /> Nuevos este mes ({newDocs.length})
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                              {newDocs.map((doc: any) => (
+                                <div key={doc.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", padding: "1rem", backgroundColor: "hsl(var(--surface))", borderRadius: "16px", border: "1px solid hsl(var(--border)/0.5)" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", minWidth: 0 }}>
+                                    <div style={{ width: 42, height: 42, borderRadius: "10px", backgroundColor: "hsl(var(--primary)/0.1)", color: "hsl(var(--primary))", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                      <FileText size={20} />
+                                    </div>
+                                    <div style={{ minWidth: 0 }}>
+                                      <div style={{ fontWeight: 700, fontSize: "0.95rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.title}</div>
+                                      <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
+                                        {doc.category || "General"} • {new Date(doc.createdAt).toLocaleDateString("es-ES")}
+                                      </div>
                                     </div>
                                   </div>
+                                  {(doc.url || doc.fileUrl) && (
+                                    <a href={doc.url || doc.fileUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: "0.4rem 0.85rem", borderRadius: "8px", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.35rem", flexShrink: 0 }}>
+                                      <Download size={14} /> Abrir
+                                    </a>
+                                  )}
                                 </div>
-                                {doc.fileUrl && (
-                                  <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: "0.4rem 0.85rem", borderRadius: "8px", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.35rem", flexShrink: 0 }}>
-                                    <Download size={14} /> Abrir
-                                  </a>
-                                )}
-                              </div>
-                            ))}
+                              ))}
+                            </div>
                           </div>
-                          <button onClick={() => router.push("/knowledge-base")} className="btn btn-primary" style={{ width: "100%", padding: "1rem", borderRadius: "16px", marginTop: "0.5rem" }}>
-                            Ver Todos los Documentos
-                          </button>
-                        </>
-                      ) : (
-                        <div style={{ textAlign: "center", padding: "3rem" }}>
-                          <FileText size={48} color="hsl(var(--muted-foreground)/0.3)" style={{ margin: "0 auto 1rem auto" }} />
-                          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "hsl(var(--foreground))" }}>No hay documentos recientes</h3>
-                          <p style={{ color: "hsl(var(--muted-foreground))", marginBottom: "1.5rem" }}>Aún no se han compartido archivos.</p>
-                          <button onClick={() => router.push("/knowledge-base")} className="btn btn-surface">Ir al Centro de Documentos</button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                        ) : (
+                          <div style={{ textAlign: "center", padding: "1.25rem 1rem", backgroundColor: "hsl(var(--surface))", borderRadius: "16px", border: "1px dashed hsl(var(--border))" }}>
+                            <p style={{ margin: 0, fontWeight: 600, color: "hsl(var(--muted-foreground))", fontSize: "0.9rem" }}>
+                              No se han subido nuevos documentos este mes.
+                            </p>
+                          </div>
+                        )}
+
+                        {hasAnyDocs ? (
+                          <div>
+                            <div style={{ fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "hsl(var(--muted-foreground))", marginBottom: "0.75rem", fontWeight: 800 }}>
+                              Documentos en Repositorio ({allDocs.length})
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                              {allDocs.map((doc: any) => (
+                                <div key={doc.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", padding: "1rem", backgroundColor: "hsl(var(--surface))", borderRadius: "16px", border: "1px solid hsl(var(--border)/0.5)" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", minWidth: 0 }}>
+                                    <div style={{ width: 42, height: 42, borderRadius: "10px", backgroundColor: "hsl(var(--primary)/0.1)", color: "hsl(var(--primary))", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                      <FileText size={20} />
+                                    </div>
+                                    <div style={{ minWidth: 0 }}>
+                                      <div style={{ fontWeight: 700, fontSize: "0.95rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.title}</div>
+                                      <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
+                                        {doc.category || "General"} • {new Date(doc.createdAt).toLocaleDateString("es-ES")}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {(doc.url || doc.fileUrl) && (
+                                    <a href={doc.url || doc.fileUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: "0.4rem 0.85rem", borderRadius: "8px", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.35rem", flexShrink: 0 }}>
+                                      <Download size={14} /> Abrir
+                                    </a>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ textAlign: "center", padding: "2.5rem 1rem" }}>
+                            <FileText size={48} color="hsl(var(--muted-foreground)/0.3)" style={{ margin: "0 auto 1rem auto" }} />
+                            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "hsl(var(--foreground))" }}>No hay documentos disponibles</h3>
+                            <p style={{ color: "hsl(var(--muted-foreground))", marginBottom: "1rem" }}>Aún no se han compartido archivos en el repositorio.</p>
+                          </div>
+                        )}
+
+                        <button onClick={() => router.push("/knowledge-base")} className="btn btn-primary" style={{ width: "100%", padding: "1rem", borderRadius: "16px", marginTop: "0.25rem" }}>
+                          Ir al Centro de Documentos
+                        </button>
+                      </div>
+                    )
+                  })()}
 
                 </>
               )}
