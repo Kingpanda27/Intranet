@@ -15,6 +15,25 @@ export interface HolidayItem {
   location?: string | null
 }
 
+function formatHolidayShortDate(dateInput?: string | Date | null): string {
+  if (!dateInput) return ""
+  if (typeof dateInput === "string") {
+    const match = dateInput.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (match) {
+      const day = parseInt(match[3], 10)
+      const monthIndex = parseInt(match[2], 10) - 1
+      const months = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+      return `${day} ${months[monthIndex]}`
+    }
+  }
+  const d = new Date(dateInput)
+  if (isNaN(d.getTime())) return ""
+  const day = d.getUTCDate()
+  const monthIndex = d.getUTCMonth()
+  const months = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+  return `${day} ${months[monthIndex]}`
+}
+
 export function UpcomingHolidayCard({ upcomingHolidays = [] }: { upcomingHolidays: HolidayItem[] }) {
   const [selectedHoliday, setSelectedHoliday] = useState<HolidayItem | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -59,7 +78,7 @@ export function UpcomingHolidayCard({ upcomingHolidays = [] }: { upcomingHoliday
         {nextHoliday ? (
           <div style={{ marginTop: "0.5rem" }}>
             <div style={{ fontSize: "1.8rem", fontWeight: 800, color: "hsl(var(--primary))", lineHeight: 1.1 }}>
-              {new Date(nextHoliday.startDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+              {formatHolidayShortDate(nextHoliday.startDate)}
             </div>
             <div style={{ 
               fontSize: "0.85rem", 
