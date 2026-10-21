@@ -62,7 +62,7 @@ const ROLE_PERMISSIONS: Record<Role, Set<Permission>> = {
     "hr:manage", "it:manage", "admin:full", "config:manage"
   ]),
   TECHNOLOGY: new Set([
-    "users:create", "users:edit", "users:view_all",
+    "users:create", "users:edit", "users:delete", "users:view_all",
     "users:role:request", "users:role:approve", "users:role:reject",
     "documents:create", "documents:read", "documents:delete",
     "posts:delete", "posts:feature",
