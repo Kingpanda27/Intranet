@@ -53,7 +53,7 @@ export async function getEligibleEmployeesForTimeOff() {
   const userId = user.id
 
   const isManager = ["HR", "MANAGER", "IT_MANAGER", "TECHNOLOGY"].includes(role)
-  const isSupervisor = role === "SUPERVISOR"
+  const isSupervisor = role === "SUPERVISOR" || role === "TEAM_LEAD"
 
   if (!isManager && !isSupervisor) return []
 
@@ -113,7 +113,7 @@ export async function createTimeOffRequest(formData: FormData) {
   const targetUserId = formData.get("targetUserId") as string | null
   const autoApprove = formData.get("autoApprove") === "true"
 
-  const canManage = ["SUPERVISOR", "MANAGER", "IT_MANAGER", "HR", "TECHNOLOGY"].includes(loggedInRole)
+  const canManage = ["SUPERVISOR", "TEAM_LEAD", "MANAGER", "IT_MANAGER", "HR", "TECHNOLOGY"].includes(loggedInRole)
 
   let userId = loggedInUserId
   let isCreatedOnBehalf = false
@@ -510,7 +510,7 @@ export async function getPendingRequests() {
   }
 
   // Supervisores ven solo su proyecto
-  if (role === "SUPERVISOR") {
+  if (role === "SUPERVISOR" || role === "TEAM_LEAD") {
     const supervisedProjects = await (prisma.project as any).findMany({
       where: { supervisors: { some: { id: user.id } } },
       select: { id: true }
@@ -608,7 +608,7 @@ export async function getAllSupervisedRequests() {
   }
 
   // Supervisores ven solo su proyecto
-  if (role === "SUPERVISOR") {
+  if (role === "SUPERVISOR" || role === "TEAM_LEAD") {
     const supervisedProjects = await (prisma.project as any).findMany({
       where: { supervisors: { some: { id: user.id } } },
       select: { id: true }

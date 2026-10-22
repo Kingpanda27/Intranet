@@ -7,12 +7,13 @@ import { updateUserVacationBalance } from "@/app/actions/timeOffActions"
 import { Shield, Mail, Edit3, Trash2, Check, X, User, UserPlus, ChevronDown, ChevronUp, FileUp, Send, Calendar, UserCheck, ShieldAlert, ArrowRight, AlertTriangle } from "lucide-react"
 import Papa from "papaparse"
 
-const ROLES = ["AGENT", "USER", "SUPERVISOR", "MANAGER", "HR", "TECHNOLOGY", "TECHNOLOGY_ADMIN", "IT_MANAGER", "NO_ROLE"]
+const ROLES = ["AGENT", "USER", "SUPERVISOR", "TEAM_LEAD", "MANAGER", "HR", "TECHNOLOGY", "TECHNOLOGY_ADMIN", "IT_MANAGER", "NO_ROLE"]
 
 const ROLE_COLORS: Record<string, string> = {
   AGENT: "hsl(220 10% 50%)",
   USER: "hsl(220 10% 50%)",
   SUPERVISOR: "hsl(var(--primary))",
+  TEAM_LEAD: "hsl(var(--primary))",
   MANAGER: "hsl(262 60% 55%)",
   HR: "hsl(165 60% 40%)",
   TECHNOLOGY: "hsl(25 90% 55%)",

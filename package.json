@@ -21,6 +21,7 @@
     "cosine-similarity": "^1.0.1",
     "ioredis": "^5.10.1",
     "lucide-react": "^0.577.0",
+    "mysql2": "^3.24.6",
     "next": "^15.1.0",
     "next-auth": "^4.24.13",
     "node-cron": "^4.6.0",
