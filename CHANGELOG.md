@@ -24,6 +24,7 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1
 - **Selección Múltiple y Barra Flotante de Acciones en Lote:** Checkboxes individuales por fila y selector global en cabecera con estado indeterminado, barra flotante con conteo en tiempo real y botón de eliminación masiva en un solo clic.
 
 ### Changed
+- **Configuración de Rol IT y Privilegios Maestros de Desarrollador para Iván Reyes:** Se estableció su rol en la plataforma como `TECHNOLOGY` (identificado como equipo de TI, no como Manager de TI), manteniendo a la vez privilegios maestros irrestrictos (`isSuperAdmin`) en todos los módulos (gestión de grupos, usuarios de TI, solicitudes de tiempo libre, feriados, configuración global de TI, IA Ollama, logs de auditoría, panel ejecutivo y API) reconociendo su labor de creador/desarrollador de la intranet.
 - Refactorización progresiva de estilos para soporte de temas personalizados por departamento.
 
 ### Fixed

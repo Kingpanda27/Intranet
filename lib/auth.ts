@@ -207,7 +207,13 @@ export const authOptions: NextAuthOptions = {
           token.status = dbUser.status || "ACTIVE"
           token.entraObjectId = dbUser.entraObjectId
           token.projectName = dbUser.project?.name || "Telecom Networks"
+          token.isSuperAdmin = String(email || dbUser.email || '').toLowerCase().trim() === "ireyes@tnoutsourcing.com"
         }
+      }
+
+      const emailStr = String(email || token.email || '').toLowerCase().trim()
+      if (emailStr === "ireyes@tnoutsourcing.com") {
+        token.isSuperAdmin = true
       }
 
       return token
@@ -221,6 +227,7 @@ export const authOptions: NextAuthOptions = {
         ;(session.user as any).entraObjectId = token.entraObjectId
         ;(session.user as any).name = token.name || session.user.name
         ;(session.user as any).projectName = (token as any).projectName || "Telecom Networks"
+        ;(session.user as any).isSuperAdmin = Boolean(token.isSuperAdmin || (session.user?.email && session.user.email.toLowerCase().trim() === "ireyes@tnoutsourcing.com"))
       }
       return session
     },

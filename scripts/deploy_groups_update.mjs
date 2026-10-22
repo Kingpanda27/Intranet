@@ -20,15 +20,27 @@ async function main() {
   console.log("\n[2/4] Subiendo archivos modificados al servidor...");
   const filesToTransfer = [
     { local: 'lib/permissions.ts', remote: '/var/www/html/lib/permissions.ts' },
+    { local: 'lib/auth.ts', remote: '/var/www/html/lib/auth.ts' },
+    { local: 'middleware.ts', remote: '/var/www/html/middleware.ts' },
+    { local: 'lib/validations/index.ts', remote: '/var/www/html/lib/validations/index.ts' },
+    { local: 'app/dashboard/page.tsx', remote: '/var/www/html/app/dashboard/page.tsx' },
     { local: 'app/actions/groupActions.ts', remote: '/var/www/html/app/actions/groupActions.ts' },
     { local: 'app/actions/timeOffActions.ts', remote: '/var/www/html/app/actions/timeOffActions.ts' },
     { local: 'app/actions/userActions.ts', remote: '/var/www/html/app/actions/userActions.ts' },
+    { local: 'app/actions/calendarActions.ts', remote: '/var/www/html/app/actions/calendarActions.ts' },
+    { local: 'app/actions/roleRequestActions.ts', remote: '/var/www/html/app/actions/roleRequestActions.ts' },
+    { local: 'app/actions/auditActions.ts', remote: '/var/www/html/app/actions/auditActions.ts' },
+    { local: 'app/actions/apiConfigurationActions.ts', remote: '/var/www/html/app/actions/apiConfigurationActions.ts' },
+    { local: 'app/actions/postActions.ts', remote: '/var/www/html/app/actions/postActions.ts' },
     { local: 'app/actions/teamActions.ts', remote: '/var/www/html/app/actions/teamActions.ts' },
     { local: 'app/admin/groups/page.tsx', remote: '/var/www/html/app/admin/groups/page.tsx' },
+    { local: 'app/admin/config/page.tsx', remote: '/var/www/html/app/admin/config/page.tsx' },
+    { local: 'app/admin/audit-logs/page.tsx', remote: '/var/www/html/app/admin/audit-logs/page.tsx' },
+    { local: 'app/admin/role-requests/page.tsx', remote: '/var/www/html/app/admin/role-requests/page.tsx' },
     { local: 'app/components/Admin/GroupManager.tsx', remote: '/var/www/html/app/components/Admin/GroupManager.tsx' },
     { local: 'app/components/Admin/UserManager.tsx', remote: '/var/www/html/app/components/Admin/UserManager.tsx' },
+    { local: 'app/components/Layout/Sidebar.tsx', remote: '/var/www/html/app/components/Layout/Sidebar.tsx' },
     { local: 'app/api/admin/groups/members/route.ts', remote: '/var/www/html/app/api/admin/groups/members/route.ts' },
-    { local: 'app/layout.tsx', remote: '/var/www/html/app/layout.tsx' },
   ];
 
   for (const item of filesToTransfer) {

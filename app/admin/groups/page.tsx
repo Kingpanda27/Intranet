@@ -10,7 +10,8 @@ export default async function AdminGroupsPage() {
   if (!session?.user) redirect("/")
 
   const user = session.user as any
-  if (user.role !== "TECHNOLOGY" && user.role !== "IT_MANAGER" && user.role !== "TECHNOLOGY_ADMIN") redirect("/")
+  const isMaster = user.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || user.isSuperAdmin
+  if (user.role !== "TECHNOLOGY" && user.role !== "IT_MANAGER" && user.role !== "TECHNOLOGY_ADMIN" && !isMaster) redirect("/")
 
   const [groups, allUsers] = await Promise.all([getGroups(), getAllUsersForGroups()])
 

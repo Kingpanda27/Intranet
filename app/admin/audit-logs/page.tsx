@@ -10,8 +10,9 @@ export default async function AdminAuditLogsPage() {
   if (!session?.user) redirect("/")
 
   const user = session.user as any
+  const isMaster = user.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || user.isSuperAdmin
   const allowedRoles = ["TECHNOLOGY", "TECHNOLOGY_ADMIN", "IT_MANAGER"]
-  if (!allowedRoles.includes(user.role)) redirect("/")
+  if (!allowedRoles.includes(user.role) && !isMaster) redirect("/")
 
   const logs = await getAuditLogs({ limit: 150 })
 

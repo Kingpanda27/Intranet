@@ -7,8 +7,9 @@ import { revalidatePath } from "next/cache"
 
 async function assertTechnology() {
   const session = await getServerSession(authOptions)
+  const isMasterAdmin = (session?.user as any)?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (session?.user as any)?.isSuperAdmin
   const role = (session?.user as any)?.role
-  if (!session?.user || (role !== "TECHNOLOGY" && role !== "IT_MANAGER" && role !== "TECHNOLOGY_ADMIN")) {
+  if (!session?.user || (role !== "TECHNOLOGY" && role !== "IT_MANAGER" && role !== "TECHNOLOGY_ADMIN" && !isMasterAdmin)) {
     throw new Error("Acceso denegado. Solo Tecnología o IT Manager pueden gestionar grupos.")
   }
   return session

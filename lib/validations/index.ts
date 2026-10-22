@@ -8,7 +8,7 @@ export const loginSchema = z.object({
 export const userCreateSchema = z.object({
   name: z.string().min(2, "El nombre debe tener al menos 2 caracteres").max(100).trim(),
   email: z.string().email("Correo inválido").endsWith("@tnoutsourcing.com", "El correo debe pertenecer al dominio @tnoutsourcing.com").toLowerCase().trim(),
-  role: z.enum(["USER", "SUPERVISOR", "MANAGER", "HR", "TECHNOLOGY", "IT_MANAGER", "NO_ROLE"])
+  role: z.enum(["AGENT", "USER", "SUPERVISOR", "TEAM_LEAD", "MANAGER", "HR", "TECHNOLOGY", "TECHNOLOGY_ADMIN", "IT_MANAGER", "NO_ROLE"])
 })
 
 export const userProfileUpdateSchema = z.object({

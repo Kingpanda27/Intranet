@@ -6,6 +6,8 @@ import { revalidatePath } from "next/cache"
 
 async function assertAuth() {
   const session = await getServerSession(authOptions)
+  const isMasterAdmin = (session?.user as any)?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (session?.user as any)?.isSuperAdmin
+  if (isMasterAdmin) return session
   const role = (session?.user as any)?.role
   if (!session?.user || (role !== "TECHNOLOGY" && role !== "IT_MANAGER" && role !== "TECHNOLOGY_ADMIN" && role !== "ADMIN")) {
     return null

@@ -11,8 +11,9 @@ export default async function DashboardPage() {
   }
 
   const user = session.user as any
-  const allowedRoles = ["SUPERVISOR", "MANAGER", "IT_MANAGER"]
-  if (!allowedRoles.includes(user.role)) {
+  const allowedRoles = ["SUPERVISOR", "MANAGER", "IT_MANAGER", "TECHNOLOGY", "TECHNOLOGY_ADMIN", "HR"]
+  const isMaster = user.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || user.isSuperAdmin
+  if (!allowedRoles.includes(user.role) && !isMaster) {
     redirect("/")
   }
 

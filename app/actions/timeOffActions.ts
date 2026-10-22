@@ -498,8 +498,9 @@ export async function getPendingRequests() {
     makeupDate: r.makeupDate ? r.makeupDate.toISOString() : null,
   })
 
-  // RRHH, MANAGER, y IT_MANAGER ven todo
-  if (role === "HR" || role === "MANAGER" || role === "IT_MANAGER") {
+  // RRHH, MANAGER, IT_MANAGER y Administrador Maestro ven todo
+  const isMasterAdmin = user.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (user as any).isSuperAdmin
+  if (role === "HR" || role === "MANAGER" || role === "IT_MANAGER" || isMasterAdmin) {
     const requests = await prisma.timeOffRequest.findMany({
       where: { status: "PENDING" },
       select: selectFields,
@@ -597,8 +598,9 @@ export async function getAllSupervisedRequests() {
     makeupDate: r.makeupDate ? r.makeupDate.toISOString() : null,
   })
 
-  // RRHH, MANAGER, y IT_MANAGER ven todo
-  if (role === "HR" || role === "MANAGER" || role === "IT_MANAGER") {
+  // RRHH, MANAGER, IT_MANAGER y Administrador Maestro ven todo
+  const isMasterAdmin = user.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (user as any).isSuperAdmin
+  if (role === "HR" || role === "MANAGER" || role === "IT_MANAGER" || isMasterAdmin) {
     const requests = await prisma.timeOffRequest.findMany({
       select: selectFields,
       orderBy: { createdAt: "desc" },
@@ -968,7 +970,8 @@ export async function getHolidays() {
 export async function addHoliday(name: string, dateStr: string) {
   const session = await getServerSession(authOptions)
   const role = (session?.user as any)?.role
-  if (role !== "IT_MANAGER" && role !== "HR") throw new Error("No autorizado")
+  const isMasterAdmin = (session?.user as any)?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (session?.user as any)?.isSuperAdmin
+  if (role !== "IT_MANAGER" && role !== "HR" && role !== "TECHNOLOGY" && !isMasterAdmin) throw new Error("No autorizado")
 
   try {
     await prisma.holiday.create({

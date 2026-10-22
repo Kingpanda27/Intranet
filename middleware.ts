@@ -44,6 +44,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  const userEmail = ((token as any)?.email || '').toLowerCase().trim()
+  if (userEmail === 'ireyes@tnoutsourcing.com' || (token as any)?.isSuperAdmin) {
+    return NextResponse.next()
+  }
+
   const rawRole = (token as any)?.role || 'USER'
   const role = String(rawRole).trim()
 
@@ -57,9 +62,9 @@ export async function middleware(request: NextRequest) {
   }
 
   // 2. Control de accesos de Dashboard (ruta /dashboard)
-  // Solo accesible por SUPERVISOR, MANAGER, IT_MANAGER, TECHNOLOGY_ADMIN, HR
+  // Solo accesible por SUPERVISOR, MANAGER, IT_MANAGER, TECHNOLOGY_ADMIN, HR, TECHNOLOGY
   if (pathname.startsWith('/dashboard')) {
-    const allowedDashboardRoles = ['SUPERVISOR', 'MANAGER', 'IT_MANAGER', 'TECHNOLOGY_ADMIN', 'HR']
+    const allowedDashboardRoles = ['SUPERVISOR', 'MANAGER', 'IT_MANAGER', 'TECHNOLOGY_ADMIN', 'HR', 'TECHNOLOGY']
     if (!allowedDashboardRoles.includes(role)) {
       return NextResponse.redirect(new URL('/', request.url))
     }
