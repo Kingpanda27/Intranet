@@ -48,7 +48,8 @@ export async function getAuditLogs({
 } = {}) {
   const caller = await requireAuth()
 
-  const isTech = caller.role === "TECHNOLOGY" || caller.role === "TECHNOLOGY_ADMIN" || caller.role === "IT_MANAGER"
+  const isMasterAdmin = caller.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (caller as any).isSuperAdmin
+  const isTech = caller.role === "TECHNOLOGY" || caller.role === "TECHNOLOGY_ADMIN" || caller.role === "IT_MANAGER" || isMasterAdmin
   if (!isTech) {
     throw new Error("Acceso denegado: Se requieren permisos de Tecnología para consultar los logs de auditoría.")
   }

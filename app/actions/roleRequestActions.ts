@@ -152,7 +152,8 @@ export async function createRoleChangeRequest({
 export async function getRoleChangeRequests(statusFilter?: string) {
   const caller = await requireAuth()
 
-  const isTech = caller.role === "TECHNOLOGY" || caller.role === "TECHNOLOGY_ADMIN" || caller.role === "IT_MANAGER"
+  const isMasterAdmin = caller.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (caller as any).isSuperAdmin
+  const isTech = caller.role === "TECHNOLOGY" || caller.role === "TECHNOLOGY_ADMIN" || caller.role === "IT_MANAGER" || isMasterAdmin
 
   const whereClause: any = {}
   if (statusFilter && statusFilter !== "ALL") {
@@ -189,7 +190,8 @@ export async function getRoleChangeRequests(statusFilter?: string) {
 export async function approveRoleChangeRequest(requestId: string) {
   const caller = await requireAuth()
 
-  const isTech = caller.role === "TECHNOLOGY" || caller.role === "TECHNOLOGY_ADMIN" || caller.role === "IT_MANAGER"
+  const isMasterAdmin = caller.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (caller as any).isSuperAdmin
+  const isTech = caller.role === "TECHNOLOGY" || caller.role === "TECHNOLOGY_ADMIN" || caller.role === "IT_MANAGER" || isMasterAdmin
   if (!isTech) {
     return { success: false, error: "Acceso denegado: Se requieren permisos de Tecnología para aprobar solicitudes." }
   }
@@ -212,8 +214,8 @@ export async function approveRoleChangeRequest(requestId: string) {
     return { success: false, error: "No puedes aprobar un cambio de rol para ti mismo." }
   }
 
-  // Si se promueve a TECHNOLOGY_ADMIN, el aprobador debe ser TECHNOLOGY_ADMIN o IT_MANAGER
-  if (request.requestedRole === "TECHNOLOGY_ADMIN" && caller.role !== "TECHNOLOGY_ADMIN" && caller.role !== "IT_MANAGER") {
+  // Si se promueve a TECHNOLOGY_ADMIN, el aprobador debe ser TECHNOLOGY_ADMIN o IT_MANAGER o Administrador Maestro
+  if (request.requestedRole === "TECHNOLOGY_ADMIN" && caller.role !== "TECHNOLOGY_ADMIN" && caller.role !== "IT_MANAGER" && !isMasterAdmin) {
     return { success: false, error: "Solo un Technology Admin puede otorgar el rol TECHNOLOGY_ADMIN." }
   }
 
@@ -304,7 +306,8 @@ export async function rejectRoleChangeRequest({
 }) {
   const caller = await requireAuth()
 
-  const isTech = caller.role === "TECHNOLOGY" || caller.role === "TECHNOLOGY_ADMIN" || caller.role === "IT_MANAGER"
+  const isMasterAdmin = caller.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (caller as any).isSuperAdmin
+  const isTech = caller.role === "TECHNOLOGY" || caller.role === "TECHNOLOGY_ADMIN" || caller.role === "IT_MANAGER" || isMasterAdmin
   if (!isTech) {
     return { success: false, error: "Acceso denegado: Se requieren permisos de Tecnología para rechazar solicitudes." }
   }

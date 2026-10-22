@@ -18,9 +18,10 @@ export function Sidebar() {
   const [myGroups, setMyGroups] = useState<any[]>([])
   const { isSupportOpen, openSupportChat, closeSupportChat, activeView, canAccessAdmin } = useSupportChat()
 
-  const hasDashboardAccess = user?.role === "SUPERVISOR" || user?.role === "MANAGER" || user?.role === "IT_MANAGER" || user?.role === "TECHNOLOGY_ADMIN" || user?.role === "HR"
-  const isTechnology = user?.role === "TECHNOLOGY" || user?.role === "IT_MANAGER" || user?.role === "TECHNOLOGY_ADMIN" || user?.role === "HR"
-  const isEmployeeOnly = user?.role === "USER" || user?.role === "AGENT"
+  const isMasterAdmin = user?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || user?.isSuperAdmin
+  const hasDashboardAccess = isMasterAdmin || user?.role === "SUPERVISOR" || user?.role === "MANAGER" || user?.role === "IT_MANAGER" || user?.role === "TECHNOLOGY_ADMIN" || user?.role === "HR" || user?.role === "TECHNOLOGY"
+  const isTechnology = isMasterAdmin || user?.role === "TECHNOLOGY" || user?.role === "IT_MANAGER" || user?.role === "TECHNOLOGY_ADMIN" || user?.role === "HR"
+  const isEmployeeOnly = !isMasterAdmin && (user?.role === "USER" || user?.role === "AGENT")
 
   useEffect(() => {
     if (session?.user) {

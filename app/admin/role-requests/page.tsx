@@ -10,8 +10,9 @@ export default async function AdminRoleRequestsPage() {
   if (!session?.user) redirect("/")
 
   const user = session.user as any
+  const isMaster = user.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || user.isSuperAdmin
   const allowedRoles = ["TECHNOLOGY", "TECHNOLOGY_ADMIN", "IT_MANAGER", "SUPERVISOR", "MANAGER", "HR"]
-  if (!allowedRoles.includes(user.role)) redirect("/")
+  if (!allowedRoles.includes(user.role) && !isMaster) redirect("/")
 
   const requests = await getRoleChangeRequests()
 

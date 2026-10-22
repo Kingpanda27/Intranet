@@ -153,7 +153,8 @@ export async function updateUserAdmin(userId: string, formData: FormData) {
     const targetUser = await prisma.user.findUnique({ where: { id: userId } })
     if (!targetUser) return { error: "Usuario no encontrado." }
     
-    if (targetUser.role === "TECHNOLOGY" && currentUser.role !== "IT_MANAGER") {
+    const isMasterAdmin = currentUser.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || currentUser.isSuperAdmin
+    if (targetUser.role === "TECHNOLOGY" && currentUser.role !== "IT_MANAGER" && !isMasterAdmin) {
       return { error: "Solo un IT_MANAGER puede modificar o degradar a un usuario de Tecnología." }
     }
 
@@ -231,8 +232,9 @@ export async function deleteBulkUsers(userIds: string[]) {
   }
 
   try {
-    // Si no es IT_MANAGER, no puede eliminar usuarios con rol TECHNOLOGY
-    if (currentUser.role !== "IT_MANAGER") {
+    // Si no es IT_MANAGER ni el administrador maestro, no puede eliminar usuarios con rol TECHNOLOGY
+    const isMasterAdmin = currentUser.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || currentUser.isSuperAdmin
+    if (currentUser.role !== "IT_MANAGER" && !isMasterAdmin) {
       const techUsers = await prisma.user.findMany({
         where: { id: { in: targetIds }, role: "TECHNOLOGY" },
         select: { id: true, name: true, email: true }
@@ -413,8 +415,10 @@ export async function processBulkUsers(usersData: {
 
 export async function testSmtp(targetEmail: string) {
   const session = await getServerSession(authOptions)
-  if (!session?.user || (session.user as any).role !== "IT_MANAGER") {
-    return { error: "Solo IT_MANAGER puede probar el SMTP" }
+  const isMasterAdmin = (session?.user as any)?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (session?.user as any)?.isSuperAdmin
+  const role = (session?.user as any)?.role
+  if (!session?.user || (role !== "IT_MANAGER" && role !== "TECHNOLOGY" && !isMasterAdmin)) {
+    return { error: "Solo IT_MANAGER o TI puede probar el SMTP" }
   }
 
   try {

@@ -7,6 +7,8 @@ import { authOptions } from "@/lib/auth"
 
 async function isAdmin() {
   const session = await getServerSession(authOptions)
+  const isMasterAdmin = (session?.user as any)?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (session?.user as any)?.isSuperAdmin
+  if (isMasterAdmin) return true
   const role = (session?.user as any)?.role
   return role === "TECHNOLOGY" || role === "IT_MANAGER" || role === "TECHNOLOGY_ADMIN" || role === "ADMIN"
 }

@@ -51,7 +51,8 @@ export async function getCalendarData(month: number, year: number) {
     ]
   }
 
-  if (role === "IT_MANAGER" || role === "HR" || role === "MANAGER") {
+  const isMasterAdmin = (session.user as any)?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (session.user as any)?.isSuperAdmin
+  if (role === "IT_MANAGER" || role === "TECHNOLOGY_ADMIN" || role === "TECHNOLOGY" || role === "HR" || role === "MANAGER" || isMasterAdmin) {
     // RRHH y TI: Visualización completa de toda la empresa
   } else if (isSupervisor || role === "SUPERVISOR") {
     // Supervisor: Ve a todo su equipo supervisado y a sí mismo
@@ -96,7 +97,7 @@ export async function getCalendarData(month: number, year: number) {
     ]
   }
 
-  if (role === "IT_MANAGER" || role === "HR" || role === "MANAGER") {
+  if (role === "IT_MANAGER" || role === "TECHNOLOGY_ADMIN" || role === "TECHNOLOGY" || role === "HR" || role === "MANAGER" || isMasterAdmin) {
     // Ver todos los eventos
   } else if (isSupervisor || role === "SUPERVISOR") {
     // Supervisor: Públicos, dirigidos a Supervisores, creados por él o de proyectos supervisados

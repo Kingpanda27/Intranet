@@ -100,7 +100,7 @@ export async function deletePost(postId: string) {
   const post = await prisma.post.findUnique({ where: { id: postId } })
   if (!post) return { error: "Publicación no encontrada" }
 
-  const canDeleteAnyPost = hasPermission(user.role, "posts:delete")
+  const canDeleteAnyPost = hasPermission(user.role, "posts:delete", user.email)
   const isAuthor = post.authorId === user.id
 
   if (!canDeleteAnyPost && !isAuthor) {

