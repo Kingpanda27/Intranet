@@ -1181,6 +1181,14 @@ function GroupCard({
   const [multiSelectMode, setMultiSelectMode] = useState(false)
   const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set())
 
+  // Leadership tab state (Full-width adaptive switcher to prevent cutoff)
+  const supervisorsCount = group.supervisors?.length || 0
+  const subLeadersCount = group.subLeaders?.length || 0
+  const [activeLeaderTab, setActiveLeaderTab] = useState<"supervisors" | "subLeaders">(
+    supervisorsCount > 0 ? "supervisors" : subLeadersCount > 0 ? "subLeaders" : "supervisors"
+  )
+  const [viewBothLeaders, setViewBothLeaders] = useState(false)
+
   // Edit form state
   const [name, setName] = useState(group.name)
   const [description, setDescription] = useState(group.description || "")
@@ -1413,33 +1421,142 @@ function GroupCard({
             </div>
           )}
 
-          {/* Leaders & Sub-Leaders Section */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-            {/* Leaders */}
-            <div 
-              style={{ 
-                padding: "0.85rem", 
-                borderRadius: "0.85rem", 
-                backgroundColor: "rgba(59, 130, 246, 0.06)", 
-                border: "1px solid rgba(59, 130, 246, 0.18)" 
-              }}
-            >
-              <div style={{ fontSize: "0.65rem", fontWeight: 800, color: "hsl(var(--primary))", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                <Crown size={12} /> Líderes ({group.supervisors?.length || 0})
+          {/* Full-Width Adaptive Leadership Section (No truncated text or clipped cards) */}
+          <div 
+            style={{ 
+              borderRadius: "0.95rem", 
+              backgroundColor: "rgba(10, 17, 38, 0.65)", 
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              padding: "0.85rem",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.65rem"
+            }}
+          >
+            {/* Header: Segmented Control when both roles exist, or dedicated badge */}
+            {supervisorsCount > 0 && subLeadersCount > 0 ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+                <div 
+                  style={{ 
+                    display: "flex", 
+                    flex: 1,
+                    borderRadius: "0.65rem", 
+                    backgroundColor: "rgba(255, 255, 255, 0.04)", 
+                    padding: "0.2rem",
+                    gap: "0.25rem",
+                    border: "1px solid rgba(255, 255, 255, 0.06)"
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => { setActiveLeaderTab("supervisors"); setViewBothLeaders(false); }}
+                    style={{
+                      flex: 1,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "0.4rem",
+                      padding: "0.4rem 0.6rem",
+                      borderRadius: "0.5rem",
+                      border: "none",
+                      backgroundColor: !viewBothLeaders && activeLeaderTab === "supervisors" ? "hsl(var(--primary))" : "transparent",
+                      color: !viewBothLeaders && activeLeaderTab === "supervisors" ? "#ffffff" : "#94a3b8",
+                      fontSize: "0.75rem",
+                      fontWeight: 800,
+                      cursor: "pointer",
+                      transition: "all 0.2s"
+                    }}
+                  >
+                    <Crown size={13} />
+                    <span>Líderes ({supervisorsCount})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveLeaderTab("subLeaders"); setViewBothLeaders(false); }}
+                    style={{
+                      flex: 1,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "0.4rem",
+                      padding: "0.4rem 0.6rem",
+                      borderRadius: "0.5rem",
+                      border: "none",
+                      backgroundColor: !viewBothLeaders && activeLeaderTab === "subLeaders" ? "#8b5cf6" : "transparent",
+                      color: !viewBothLeaders && activeLeaderTab === "subLeaders" ? "#ffffff" : "#94a3b8",
+                      fontSize: "0.75rem",
+                      fontWeight: 800,
+                      cursor: "pointer",
+                      transition: "all 0.2s"
+                    }}
+                  >
+                    <Shield size={13} />
+                    <span>Sub-Líderes ({subLeadersCount})</span>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewBothLeaders(!viewBothLeaders)}
+                  title={viewBothLeaders ? "Ver en pestañas" : "Ver ambos a la vez"}
+                  style={{
+                    padding: "0.35rem 0.55rem",
+                    borderRadius: "0.5rem",
+                    fontSize: "0.68rem",
+                    fontWeight: 700,
+                    border: viewBothLeaders ? "1px solid hsl(var(--primary) / 0.4)" : "1px solid rgba(255, 255, 255, 0.08)",
+                    backgroundColor: viewBothLeaders ? "hsl(var(--primary) / 0.15)" : "transparent",
+                    color: viewBothLeaders ? "#ffffff" : "#94a3b8",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap"
+                  }}
+                >
+                  {viewBothLeaders ? "Pestañas" : "Ver ambos"}
+                </button>
               </div>
-              {!group.supervisors?.length ? (
-                <span style={{ fontSize: "0.75rem", color: "#64748b", fontStyle: "italic" }}>Sin líder asignado</span>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+            ) : supervisorsCount > 0 ? (
+              <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "hsl(var(--primary))", textTransform: "uppercase", letterSpacing: "0.06em", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <Crown size={14} /> Líderes de Equipo ({supervisorsCount})
+              </div>
+            ) : subLeadersCount > 0 ? (
+              <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.06em", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <Shield size={14} /> Sub-Líderes de Equipo ({subLeadersCount})
+              </div>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.75rem", color: "#64748b", fontStyle: "italic" }}>
+                <Shield size={14} /> Sin líderes asignados
+              </div>
+            )}
+
+            {/* Content List: Active Tab or Only Available Role or Both Stacked */}
+            {(() => {
+              const renderSupervisors = () => (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", maxHeight: "160px", overflowY: "auto", paddingRight: "4px" }}>
+                  {viewBothLeaders && (
+                    <div style={{ fontSize: "0.65rem", fontWeight: 800, color: "hsl(var(--primary))", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0.2rem 0" }}>
+                      👑 Líderes ({supervisorsCount})
+                    </div>
+                  )}
                   {group.supervisors.map((sup: any) => (
-                    <div key={sup.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <Avatar user={sup} size={24} />
+                    <div 
+                      key={sup.id} 
+                      style={{ 
+                        display: "flex", 
+                        alignItems: "center", 
+                        gap: "0.6rem", 
+                        padding: "0.35rem 0.55rem", 
+                        borderRadius: "0.6rem", 
+                        backgroundColor: "rgba(59, 130, 246, 0.08)", 
+                        border: "1px solid rgba(59, 130, 246, 0.16)",
+                        transition: "background 0.15s"
+                      }}
+                    >
+                      <Avatar user={sup} size={26} />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: "0.8rem", color: "#f8fafc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <div style={{ fontWeight: 700, fontSize: "0.82rem", color: "#f8fafc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={sup.name}>
                           {sup.name}
                         </div>
                         {sup.position && (
-                          <div style={{ fontSize: "0.65rem", color: "#94a3b8" }}>
+                          <div style={{ fontSize: "0.68rem", color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={sup.position}>
                             {sup.position}
                           </div>
                         )}
@@ -1473,39 +1590,41 @@ function GroupCard({
                           e.currentTarget.style.color = "#94a3b8"
                         }}
                       >
-                        <Trash2 size={11} />
+                        <Trash2 size={12} />
                       </button>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
+              )
 
-            {/* Sub-Leaders */}
-            <div 
-              style={{ 
-                padding: "0.85rem", 
-                borderRadius: "0.85rem", 
-                backgroundColor: "rgba(255, 255, 255, 0.02)", 
-                border: "1px solid rgba(255, 255, 255, 0.08)" 
-              }}
-            >
-              <div style={{ fontSize: "0.65rem", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                <Shield size={12} /> Sub-Líderes ({group.subLeaders?.length || 0})
-              </div>
-              {!group.subLeaders?.length ? (
-                <span style={{ fontSize: "0.75rem", color: "#64748b", fontStyle: "italic" }}>Sin sub-líder</span>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+              const renderSubLeaders = () => (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", maxHeight: "160px", overflowY: "auto", paddingRight: "4px" }}>
+                  {viewBothLeaders && (
+                    <div style={{ fontSize: "0.65rem", fontWeight: 800, color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0.4rem 0 0.2rem" }}>
+                      🛡️ Sub-Líderes ({subLeadersCount})
+                    </div>
+                  )}
                   {group.subLeaders.map((sub: any) => (
-                    <div key={sub.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <Avatar user={sub} size={24} />
+                    <div 
+                      key={sub.id} 
+                      style={{ 
+                        display: "flex", 
+                        alignItems: "center", 
+                        gap: "0.6rem", 
+                        padding: "0.35rem 0.55rem", 
+                        borderRadius: "0.6rem", 
+                        backgroundColor: "rgba(139, 92, 246, 0.08)", 
+                        border: "1px solid rgba(139, 92, 246, 0.18)",
+                        transition: "background 0.15s"
+                      }}
+                    >
+                      <Avatar user={sub} size={26} />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: "0.8rem", color: "#f8fafc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <div style={{ fontWeight: 700, fontSize: "0.82rem", color: "#f8fafc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={sub.name}>
                           {sub.name}
                         </div>
                         {sub.position && (
-                          <div style={{ fontSize: "0.65rem", color: "#94a3b8" }}>
+                          <div style={{ fontSize: "0.68rem", color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={sub.position}>
                             {sub.position}
                           </div>
                         )}
@@ -1539,13 +1658,35 @@ function GroupCard({
                           e.currentTarget.style.color = "#94a3b8"
                         }}
                       >
-                        <Trash2 size={11} />
+                        <Trash2 size={12} />
                       </button>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
+              )
+
+              if (viewBothLeaders && supervisorsCount > 0 && subLeadersCount > 0) {
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                    {renderSupervisors()}
+                    {renderSubLeaders()}
+                  </div>
+                )
+              }
+
+              const showSupervisors = (supervisorsCount > 0 && subLeadersCount > 0)
+                ? activeLeaderTab === "supervisors"
+                : supervisorsCount > 0
+
+              const showSubLeaders = (supervisorsCount > 0 && subLeadersCount > 0)
+                ? activeLeaderTab === "subLeaders"
+                : subLeadersCount > 0
+
+              if (showSupervisors && supervisorsCount > 0) return renderSupervisors()
+              if (showSubLeaders && subLeadersCount > 0) return renderSubLeaders()
+
+              return null
+            })()}
           </div>
 
           {/* Members (Integrantes) Section */}
@@ -1655,16 +1796,19 @@ function GroupCard({
                 Sin integrantes asignados aún. Haz clic en <strong>+ Sumar</strong>.
               </div>
             ) : (
-              <div 
-                style={{ 
-                  display: "flex", 
-                  flexDirection: "column", 
-                  gap: "0.4rem", 
-                  maxHeight: "220px", 
-                  overflowY: "auto", 
-                  paddingRight: "4px" 
-                }}
-              >
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                <div 
+                  style={{ 
+                    display: "flex", 
+                    flexDirection: "column", 
+                    gap: "0.4rem", 
+                    maxHeight: "260px", 
+                    overflowY: "auto", 
+                    paddingRight: "6px",
+                    scrollbarWidth: "thin",
+                    scrollbarColor: "rgba(255, 255, 255, 0.18) transparent"
+                  }}
+                >
                 {group.members.map((member: any) => {
                   const isChecked = selectedMemberIds.has(member.id)
                   return (
@@ -1764,6 +1908,23 @@ function GroupCard({
                     </div>
                   )
                 })}
+                </div>
+                {group.members.length > 5 && (
+                  <div style={{ 
+                    textAlign: "center", 
+                    fontSize: "0.7rem", 
+                    color: "#94a3b8", 
+                    paddingTop: "0.45rem", 
+                    borderTop: "1px solid rgba(255, 255, 255, 0.06)",
+                    fontWeight: 600,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "0.35rem"
+                  }}>
+                    <span>↕ Desliza para explorar los {group.members.length} integrantes</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -2324,7 +2485,7 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
         <div 
           style={{ 
             display: "grid", 
-            gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", 
+            gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))", 
             gap: "1.5rem" 
           }}
         >
