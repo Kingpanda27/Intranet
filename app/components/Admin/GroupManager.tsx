@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useTransition, useEffect, useRef, useMemo } from "react"
+import { createPortal } from "react-dom"
 import { 
   createGroup, 
   updateGroup, 
@@ -71,7 +72,8 @@ const COLOR_PRESETS = [
 const ICON_PRESETS = ["🏢", "🎧", "📞", "🎮", "📦", "⚡", "💻", "🛡️", "☕", "🤝", "🏹", "🎯", "🦇", "💬", "🍒", "💳", "🔍", "📊", "👥", "🚀"]
 
 function Avatar({ user, size = 32 }: { user: any, size?: number }) {
-  const roleColor = ROLE_COLORS[user.role] || "hsl(var(--primary))"
+  if (!user) return null
+  const roleColor = ROLE_COLORS[user?.role] || "hsl(var(--primary))"
   return (
     <div 
       style={{ 
@@ -131,21 +133,31 @@ function ConfirmModal({
   onConfirm,
   onCancel
 }: ConfirmModalProps) {
-  if (!isOpen) return null
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
-  return (
+  if (!isOpen || !mounted) return null
+
+  return createPortal(
     <div 
       style={{
         position: "fixed",
-        inset: 0,
-        zIndex: 999999,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: "100vw",
+        height: "100vh",
+        zIndex: 9999999,
         backgroundColor: "rgba(0, 0, 0, 0.78)",
         backdropFilter: "blur(12px)",
         WebkitBackdropFilter: "blur(12px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "1rem",
+        padding: "1.5rem",
         animation: "fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)"
       }}
       onClick={(e) => {
@@ -202,7 +214,7 @@ function ConfirmModal({
         </div>
 
         {/* Member preview if removing members */}
-        {members.length > 0 && (
+        {members && members.length > 0 && (
           <div 
             style={{
               maxHeight: "160px",
@@ -216,9 +228,9 @@ function ConfirmModal({
               gap: "0.4rem"
             }}
           >
-            {members.map(m => (
+            {members.filter(Boolean).map(m => (
               <div 
-                key={m.id}
+                key={m.id || Math.random()}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -317,7 +329,8 @@ function ConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -332,6 +345,11 @@ interface AddMembersModalProps {
 }
 
 function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMembersModalProps) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   const [search, setSearch] = useState("")
   const [filterMode, setFilterMode] = useState<"all" | "unassigned" | "otherGroup">("all")
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set())
@@ -435,18 +453,25 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
     })
   }
 
-  return (
+  if (!mounted) return null
+
+  return createPortal(
     <div 
       style={{ 
         position: "fixed", 
-        inset: 0, 
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: "100vw",
+        height: "100vh",
         backgroundColor: "rgba(0, 0, 0, 0.75)", 
         backdropFilter: "blur(14px)",
         WebkitBackdropFilter: "blur(14px)",
         display: "flex", 
         alignItems: "center", 
         justifyContent: "center", 
-        zIndex: 99999,
+        zIndex: 9999999,
         padding: "1rem",
         animation: "fadeIn 0.2s ease-out"
       }}
@@ -840,7 +865,8 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -1959,15 +1985,41 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
       errorMessage: null,
       onConfirm: () => {
         startActionTransition(async () => {
-          // Optimistically remove group
-          setLocalGroups(prev => prev.filter(g => g.id !== group.id))
+          let success = false
+          let errorMsg = ""
+
+          // 1. Intentar Server Action
           try {
-            await deleteGroup(group.id)
+            const res = await deleteGroup(group.id)
+            if (res && res.success) success = true
+            else if (res && res.error) errorMsg = res.error
+          } catch (e: any) {
+            console.warn("Server action failed, trying REST API fallback...", e)
+          }
+
+          // 2. Fallback a API REST
+          if (!success) {
+            try {
+              const res = await fetch("/api/admin/groups/members", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "deleteGroup", groupId: group.id })
+              })
+              const data = await res.json()
+              if (data && data.success) success = true
+              else errorMsg = data?.error || "Error al eliminar el grupo."
+            } catch (apiErr: any) {
+              errorMsg = apiErr?.message || "Error de red al eliminar grupo."
+            }
+          }
+
+          if (success) {
+            setLocalGroups(prev => prev.filter(g => g.id !== group.id))
             setConfirmModalState(prev => ({ ...prev, isOpen: false, errorMessage: null }))
-            setToastMessage({ type: "success", text: `Grupo "${group.name}" eliminado.` })
+            setToastMessage({ type: "success", text: `Grupo "${group.name}" eliminado correctamente.` })
             router.refresh()
-          } catch (err: any) {
-            setConfirmModalState(prev => ({ ...prev, errorMessage: "Error al eliminar el grupo." }))
+          } else {
+            setConfirmModalState(prev => ({ ...prev, errorMessage: errorMsg || "Error al eliminar el grupo." }))
             router.refresh()
           }
         })

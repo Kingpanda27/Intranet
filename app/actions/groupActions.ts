@@ -116,17 +116,34 @@ export async function updateGroup(groupId: string, formData: FormData) {
 export async function deleteGroup(groupId: string) {
   await assertTechnology()
   try {
-    // Remove all members first (set projectId to null)
+    // 1. Quitar todos los miembros asignados
     await prisma.user.updateMany({
       where: { projectId: groupId },
       data: { projectId: null }
     })
+
+    // 2. Desvincular eventos de calendario asociados
+    await prisma.calendarEvent.updateMany({
+      where: { projectId: groupId },
+      data: { projectId: null }
+    }).catch(err => console.warn("Notice updating calendarEvents:", err?.message))
+
+    // 3. Desvincular supervisores y sub-líderes
+    await prisma.project.update({
+      where: { id: groupId },
+      data: {
+        supervisors: { set: [] },
+        subLeaders: { set: [] }
+      }
+    }).catch(err => console.warn("Notice clearing leaders:", err?.message))
+
+    // 4. Eliminar el proyecto
     await prisma.project.delete({ where: { id: groupId } })
     revalidatePath("/admin/groups")
     return { success: true }
-  } catch (error) {
-    console.error(error)
-    return { error: "Error al eliminar el grupo." }
+  } catch (error: any) {
+    console.error("Error al eliminar grupo:", error)
+    return { error: error?.message || "Error al eliminar el grupo." }
   }
 }
 

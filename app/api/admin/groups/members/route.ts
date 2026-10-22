@@ -50,7 +50,26 @@ export async function DELETE(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { groupId, userIds } = body
+    const { groupId, userIds, action } = body
+
+    // Soporte para eliminar grupo completo vía API REST
+    if (action === "deleteGroup" && groupId) {
+      await prisma.user.updateMany({
+        where: { projectId: groupId },
+        data: { projectId: null }
+      })
+      await prisma.calendarEvent.updateMany({
+        where: { projectId: groupId },
+        data: { projectId: null }
+      }).catch(err => console.warn("Notice updating calendarEvents:", err?.message))
+      await prisma.project.update({
+        where: { id: groupId },
+        data: { supervisors: { set: [] }, subLeaders: { set: [] } }
+      }).catch(err => console.warn("Notice clearing leaders:", err?.message))
+      await prisma.project.delete({ where: { id: groupId } })
+      revalidatePath("/admin/groups")
+      return NextResponse.json({ success: true })
+    }
 
     if (!Array.isArray(userIds) || userIds.length === 0) {
       return NextResponse.json({ error: "Debes especificar los IDs de los usuarios a remover" }, { status: 400 })
