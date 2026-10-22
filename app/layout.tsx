@@ -38,7 +38,7 @@ export default async function RootLayout({
               <div className="app-layout">
                 <OnlinePing />
                 <Sidebar />
-                <main className="animate-in" style={{ flex: 1, height: "100vh", overflowY: "auto", display: 'flex', flexDirection: 'column' }}>
+                <main style={{ flex: 1, height: "100vh", overflowY: "auto", display: 'flex', flexDirection: 'column' }}>
                   <TopBar />
                   <div className="container" style={{ width: "94%", maxWidth: "1720px", padding: "2rem 1.5rem", margin: "0 auto", flex: 1 }}>
                     {children}

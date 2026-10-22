@@ -28,6 +28,7 @@ async function main() {
     { local: 'app/components/Admin/GroupManager.tsx', remote: '/var/www/html/app/components/Admin/GroupManager.tsx' },
     { local: 'app/components/Admin/UserManager.tsx', remote: '/var/www/html/app/components/Admin/UserManager.tsx' },
     { local: 'app/api/admin/groups/members/route.ts', remote: '/var/www/html/app/api/admin/groups/members/route.ts' },
+    { local: 'app/layout.tsx', remote: '/var/www/html/app/layout.tsx' },
   ];
 
   for (const item of filesToTransfer) {
