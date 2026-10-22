@@ -13,8 +13,8 @@ export async function getTeamDashboard(groupId: string) {
   const team = await prisma.project.findUnique({
     where: { id: groupId },
     include: {
-      supervisors: { select: { id: true, name: true, email: true, role: true, image: true, position: true } },
-      subLeaders: { select: { id: true, name: true, email: true, role: true, image: true, position: true } },
+      supervisors: { select: { id: true, name: true, email: true, role: true, image: true, position: true, birthday: true, showBirthday: true } },
+      subLeaders: { select: { id: true, name: true, email: true, role: true, image: true, position: true, birthday: true, showBirthday: true } },
       members: { 
         select: { 
           id: true, 

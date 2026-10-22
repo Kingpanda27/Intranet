@@ -5,6 +5,7 @@ export type Role =
   | "AGENT"
   | "USER"
   | "SUPERVISOR"
+  | "TEAM_LEAD"
   | "MANAGER"
   | "HR"
   | "TECHNOLOGY"
@@ -37,6 +38,7 @@ export const ROLE_HIERARCHY: Record<string, number> = {
   USER: 10,
   AGENT: 10,
   SUPERVISOR: 20,
+  TEAM_LEAD: 20,
   MANAGER: 30,
   HR: 35,
   TECHNOLOGY: 40,
@@ -85,6 +87,12 @@ const ROLE_PERMISSIONS: Record<Role, Set<Permission>> = {
     "vacations:approve", "vacations:create_on_behalf"
   ]),
   SUPERVISOR: new Set([
+    "users:role:request",
+    "documents:read",
+    "posts:feature",
+    "vacations:approve", "vacations:create_on_behalf"
+  ]),
+  TEAM_LEAD: new Set([
     "users:role:request",
     "documents:read",
     "posts:feature",

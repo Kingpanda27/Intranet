@@ -144,7 +144,7 @@ export async function updateUserAdmin(userId: string, formData: FormData) {
   const role = formData.get("role") as string
   const name = formData.get("name") as string
 
-  const validRoles = ["USER", "SUPERVISOR", "TECHNOLOGY", "HR", "MANAGER", "IT_MANAGER", "NO_ROLE"]
+  const validRoles = ["AGENT", "USER", "SUPERVISOR", "TEAM_LEAD", "TECHNOLOGY", "TECHNOLOGY_ADMIN", "HR", "MANAGER", "IT_MANAGER", "NO_ROLE"]
   if (role && !validRoles.includes(role)) {
     return { error: "Rol inválido." }
   }

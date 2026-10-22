@@ -10,23 +10,40 @@ export default async function AdminGroupsPage() {
   if (!session?.user) redirect("/")
 
   const user = session.user as any
-  if (user.role !== "TECHNOLOGY" && user.role !== "IT_MANAGER") redirect("/")
+  if (user.role !== "TECHNOLOGY" && user.role !== "IT_MANAGER" && user.role !== "TECHNOLOGY_ADMIN") redirect("/")
 
   const [groups, allUsers] = await Promise.all([getGroups(), getAllUsersForGroups()])
 
   return (
-    <div className="container" style={{ padding: "2rem 1.5rem" }}>
-      <header style={{ marginBottom: "2rem" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
-          <div style={{ padding: "0.6rem", borderRadius: "0.75rem", backgroundColor: "hsl(var(--primary)/0.15)" }}>
-            <Users size={24} style={{ color: "hsl(var(--primary))" }} />
+    <div className="container" style={{ padding: "2.5rem 1.5rem" }}>
+      <header style={{ marginBottom: "2.5rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.5rem" }}>
+          <div 
+            style={{ 
+              padding: "0.75rem", 
+              borderRadius: "1rem", 
+              backgroundColor: "hsl(var(--primary) / 0.15)",
+              border: "1px solid hsl(var(--primary) / 0.3)",
+              boxShadow: "0 0 25px hsl(var(--primary) / 0.15)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+          >
+            <Users size={26} style={{ color: "hsl(var(--primary))" }} />
           </div>
-          <h1 style={{ margin: 0, fontSize: "2rem" }}>Gestión de Grupos</h1>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+              <h1 style={{ margin: 0, fontSize: "2.2rem", fontWeight: 900, letterSpacing: "-0.02em" }}>Gestión de Grupos</h1>
+              <span style={{ padding: "0.2rem 0.65rem", borderRadius: "9999px", backgroundColor: "rgba(245, 158, 11, 0.12)", color: "#f59e0b", border: "1px solid rgba(245, 158, 11, 0.25)", fontSize: "0.75rem", fontWeight: 800 }}>
+                Control Maestro
+              </span>
+            </div>
+            <p style={{ color: "hsl(var(--muted-foreground))", margin: "0.35rem 0 0", fontSize: "0.95rem" }}>
+              Administra escuadrones operativos, asigna liderazgos, sub-líderes e integra colaboradores en masa.
+            </p>
+          </div>
         </div>
-        <p style={{ color: "hsl(var(--muted-foreground))", margin: 0 }}>
-          Crea grupos de trabajo y asigna supervisores y miembros.
-          <span style={{ marginLeft: "0.5rem", padding: "0.15rem 0.5rem", borderRadius: "0.3rem", backgroundColor: "hsl(25 90% 55% / 0.1)", color: "hsl(25 90% 55%)", fontSize: "0.8rem", fontWeight: 700 }}>Solo Tecnología</span>
-        </p>
       </header>
 
       <GroupManager groups={groups} allUsers={allUsers} />

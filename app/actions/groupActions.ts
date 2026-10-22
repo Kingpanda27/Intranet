@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache"
 async function assertTechnology() {
   const session = await getServerSession(authOptions)
   const role = (session?.user as any)?.role
-  if (!session?.user || (role !== "TECHNOLOGY" && role !== "IT_MANAGER")) {
+  if (!session?.user || (role !== "TECHNOLOGY" && role !== "IT_MANAGER" && role !== "TECHNOLOGY_ADMIN")) {
     throw new Error("Acceso denegado. Solo Tecnología o IT Manager pueden gestionar grupos.")
   }
   return session
@@ -130,40 +130,64 @@ export async function deleteGroup(groupId: string) {
   }
 }
 
-export async function addMemberToGroup(groupId: string, userId: string) {
+export async function addMembersToGroup(groupId: string, userIds: string[]) {
   await assertTechnology()
+  if (!groupId || !Array.isArray(userIds) || userIds.length === 0) {
+    return { error: "Debes seleccionar al menos un usuario para agregar." }
+  }
   try {
-    await prisma.user.update({
-      where: { id: userId },
+    await prisma.user.updateMany({
+      where: { id: { in: userIds } },
       data: { projectId: groupId }
     })
     revalidatePath("/admin/groups")
-    return { success: true }
-  } catch (error) {
-    console.error(error)
-    return { error: "Error al agregar el miembro." }
+    revalidatePath(`/groups/${groupId}`)
+    return { success: true, count: userIds.length }
+  } catch (error: any) {
+    console.error("Error al agregar miembros:", error)
+    return { error: error?.message || "Error al agregar los integrantes." }
+  }
+}
+
+export async function addMemberToGroup(groupId: string, userId: string) {
+  return await addMembersToGroup(groupId, [userId])
+}
+
+export async function removeMembersFromGroup(userIds: string[]) {
+  await assertTechnology()
+  if (!Array.isArray(userIds) || userIds.length === 0) {
+    return { error: "Debes seleccionar al menos un integrante para remover." }
+  }
+  try {
+    await prisma.user.updateMany({
+      where: { id: { in: userIds } },
+      data: { projectId: null }
+    })
+    revalidatePath("/admin/groups")
+    return { success: true, count: userIds.length }
+  } catch (error: any) {
+    console.error("Error al remover miembros:", error)
+    return { error: error?.message || "Error al remover los integrantes." }
   }
 }
 
 export async function removeMemberFromGroup(userId: string) {
-  await assertTechnology()
-  try {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { projectId: null }
-    })
-    revalidatePath("/admin/groups")
-    return { success: true }
-  } catch (error) {
-    console.error(error)
-    return { error: "Error al remover el miembro." }
-  }
+  return await removeMembersFromGroup([userId])
 }
 
 export async function getAllUsersForGroups() {
   await assertTechnology()
   return await prisma.user.findMany({
-    select: { id: true, name: true, email: true, role: true, image: true, projectId: true },
+    select: { 
+      id: true, 
+      name: true, 
+      email: true, 
+      role: true, 
+      position: true,
+      image: true, 
+      projectId: true,
+      project: { select: { id: true, name: true } }
+    },
     orderBy: { name: "asc" }
   })
 }

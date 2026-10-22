@@ -9,6 +9,15 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1
 ## [Unreleased]
 
 ### Added
+- **Sincronización Automática con DeskTime (`sync_desktime_groups.mjs`):** Extracción e integración en modo solo lectura (`SELECT`) con la base de datos MySQL externa `wfm_platform` (`desktime_employee_data`, `odoo_employee_data`, `org_team_managers`), creando y homologando 49 grupos/escuadrones, mapeando 274 empleados a sus equipos correspondientes, sincronizando puestos laborales (`position`), asignando líderes y sublíderes, y actualizando roles de sistema.
+- **Rediseño Integral de Gestión de Grupos (`GroupManager.tsx` y `admin/groups/page.tsx`):**
+  - Banner interactivo de métricas KPI (Escuadrones Activos, Miembros Asignados, Líderes Activos y Promedio de Integrantes por Grupo).
+  - Buscador reactivo en tiempo real y filtros rápidos por categorías (*Todos*, *Con integrantes*, *Vacíos*, *Con líderes*).
+  - Reemplazo de la antigua 'X' roja de eliminación por un botón circular minimalista con icono SVG de papelera, halo resplandeciente (`glow`) al pasar el cursor y tooltip contextual.
+  - **Modal Moderno de Confirmación (`ConfirmModal`):** Cuadro de diálogo centrado en pantalla con desenfoque de fondo (`backdrop-filter: blur(12px)`), mensaje preventivo y advertencia de confirmación antes de desvincular usuarios.
+  - **Adición Masiva de Integrantes (`AddMembersModal` y `groupActions.ts`):** Modal interactivo con buscador instantáneo, filtrado por pestañas (*Todos*, *Sin grupo*, *En otro grupo* con distintivo visual de transferencia) y selección múltiple para agregar múltiples colaboradores a la vez.
+  - **Eliminación Masiva de Integrantes:** Modo de selección múltiple por tarjeta (*"Seleccionar varios"*) con casillas de verificación individuales y botón de desvinculación en bloque (*"Quitar seleccionados"*).
+  - **Soporte para Roles `TEAM_LEAD` y `TECHNOLOGY_ADMIN`:** Integración en la matriz de permisos (`permissions.ts`), validación en acciones de usuario (`userActions.ts`), soporte en gestión de tiempo libre (`timeOffActions.ts`) y habilitación de administración de grupos para `TECHNOLOGY_ADMIN`.
 - Monitoreo en tiempo real de telemetría y tiempos de inferencia de la API de NVIDIA NIM.
 - **Importación Masiva Nativa desde Microsoft 365 Admin Center (`UserManager.tsx` y `userActions.ts`):** Compatibilidad directa con archivos CSV de Microsoft Entra / M365 (`Display name`, `User principal name`, `Block credential`, `Title`, `Department`, `Object Id`), filtrando de manera automática únicamente usuarios activos (`Block credential = False`) y actualizando perfiles existentes sin duplicidad ni caídas de servidor.
 - **Modal Moderno de Confirmación y Eliminación Masiva de Usuarios (`UserManager.tsx` y `userActions.ts`):** Reemplazo definitivo del diálogo nativo del navegador (`confirm()`) por un pop-up moderno centrado en la pantalla con estética glassmorphism, desenfoque de fondo (`backdrop-filter: blur(8px)`), lista previa desplazable de usuarios seleccionados, roles y advertencia de seguridad.
