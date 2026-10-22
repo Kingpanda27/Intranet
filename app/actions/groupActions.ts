@@ -153,17 +153,53 @@ export async function addMemberToGroup(groupId: string, userId: string) {
   return await addMembersToGroup(groupId, [userId])
 }
 
-export async function removeMembersFromGroup(userIds: string[]) {
+export async function removeMembersFromGroup(
+  arg1: string | string[], 
+  arg2?: string[]
+) {
   await assertTechnology()
-  if (!Array.isArray(userIds) || userIds.length === 0) {
+  let groupId: string | null = null
+  let userIds: string[] = []
+
+  if (typeof arg1 === "string" && Array.isArray(arg2)) {
+    groupId = arg1
+    userIds = arg2
+  } else if (Array.isArray(arg1)) {
+    userIds = arg1
+    if (typeof arg2 === "string") groupId = arg2
+  } else if (typeof arg1 === "string" && !arg2) {
+    userIds = [arg1]
+  }
+
+  if (userIds.length === 0) {
     return { error: "Debes seleccionar al menos un integrante para remover." }
   }
+
   try {
+    // 1. Quitar de integrantes asignados al proyecto
     await prisma.user.updateMany({
-      where: { id: { in: userIds } },
+      where: { 
+        id: { in: userIds },
+        ...(groupId ? { projectId: groupId } : {})
+      },
       data: { projectId: null }
     })
+
+    // 2. Si se pasó groupId, también desvincular de supervisores o sub-líderes del proyecto
+    if (groupId) {
+      await prisma.project.update({
+        where: { id: groupId },
+        data: {
+          supervisors: { disconnect: userIds.map(id => ({ id })) },
+          subLeaders: { disconnect: userIds.map(id => ({ id })) }
+        }
+      }).catch(err => {
+        console.warn("Notice on disconnecting supervisors/subLeaders in action:", err?.message)
+      })
+    }
+
     revalidatePath("/admin/groups")
+    if (groupId) revalidatePath(`/groups/${groupId}`)
     return { success: true, count: userIds.length }
   } catch (error: any) {
     console.error("Error al remover miembros:", error)
@@ -171,8 +207,11 @@ export async function removeMembersFromGroup(userIds: string[]) {
   }
 }
 
-export async function removeMemberFromGroup(userId: string) {
-  return await removeMembersFromGroup([userId])
+export async function removeMemberFromGroup(groupIdOrUserId: string, userIdOptional?: string) {
+  if (userIdOptional) {
+    return await removeMembersFromGroup(groupIdOrUserId, [userIdOptional])
+  }
+  return await removeMembersFromGroup([groupIdOrUserId])
 }
 
 export async function getAllUsersForGroups() {

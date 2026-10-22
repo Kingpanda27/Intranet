@@ -40,6 +40,7 @@ import {
   Palette
 } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 const ROLE_COLORS: Record<string, string> = {
   AGENT: "hsl(220 10% 50%)",
@@ -112,6 +113,7 @@ interface ConfirmModalProps {
   confirmText?: string
   cancelText?: string
   isPending?: boolean
+  errorMessage?: string | null
   onConfirm: () => void
   onCancel: () => void
 }
@@ -125,6 +127,7 @@ function ConfirmModal({
   confirmText = "Confirmar",
   cancelText = "Cancelar",
   isPending = false,
+  errorMessage = null,
   onConfirm,
   onCancel
 }: ConfirmModalProps) {
@@ -239,6 +242,27 @@ function ConfirmModal({
           </div>
         )}
 
+        {/* Mensaje de error si la acción falla */}
+        {errorMessage && (
+          <div 
+            style={{ 
+              padding: "0.65rem 0.85rem", 
+              borderRadius: "0.75rem", 
+              backgroundColor: "rgba(239, 68, 68, 0.15)",
+              border: "1px solid rgba(239, 68, 68, 0.3)",
+              color: "#f87171",
+              fontSize: "0.82rem",
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem"
+            }}
+          >
+            <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "0.5rem" }}>
           <button 
@@ -304,9 +328,10 @@ interface AddMembersModalProps {
   group: any
   allUsers: any[]
   onClose: () => void
+  onMembersAdded?: (groupId: string, userIds: string[]) => void
 }
 
-function AddMembersModal({ group, allUsers, onClose }: AddMembersModalProps) {
+function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMembersModalProps) {
   const [search, setSearch] = useState("")
   const [filterMode, setFilterMode] = useState<"all" | "unassigned" | "otherGroup">("all")
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set())
@@ -360,25 +385,51 @@ function AddMembersModal({ group, allUsers, onClose }: AddMembersModalProps) {
     }
   }
 
-  // Execute Batch Add
+  // Execute Batch Add with Server Action and REST API fallback
   const handleAddSelected = () => {
     const userIds = Array.from(selectedUserIds)
     if (userIds.length === 0) return
 
     startTransition(async () => {
-      const result = await addMembersToGroup(group.id, userIds)
-      if (result.success) {
+      let success = false
+      let errorMsg = ""
+
+      try {
+        const result = await addMembersToGroup(group.id, userIds)
+        if (result && result.success) success = true
+        else if (result && result.error) errorMsg = result.error
+      } catch (err: any) {
+        console.warn("Server action failed, trying REST API...", err)
+      }
+
+      if (!success) {
+        try {
+          const res = await fetch("/api/admin/groups/members", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ groupId: group.id, userIds })
+          })
+          const data = await res.json()
+          if (data && data.success) success = true
+          else errorMsg = data?.error || "Error al agregar integrantes."
+        } catch (apiErr: any) {
+          errorMsg = apiErr?.message || "Error al conectar con el servidor."
+        }
+      }
+
+      if (success) {
+        if (onMembersAdded) onMembersAdded(group.id, userIds)
         setFeedback({ 
           type: "success", 
           message: `¡Se añadieron ${userIds.length} integrante(s) exitosamente a ${group.name}!` 
         })
         setTimeout(() => {
           onClose()
-        }, 1200)
+        }, 900)
       } else {
         setFeedback({ 
           type: "error", 
-          message: result.error || "Error al agregar los integrantes." 
+          message: errorMsg || "Error al agregar los integrantes." 
         })
       }
     })
@@ -1088,7 +1139,8 @@ function GroupCard({
   index,
   onRequestDeleteGroup,
   onRequestRemoveMember,
-  onRequestRemoveMultiple
+  onRequestRemoveMultiple,
+  onMembersAdded
 }: { 
   group: any
   allUsers: any[]
@@ -1096,6 +1148,7 @@ function GroupCard({
   onRequestDeleteGroup: (group: any) => void
   onRequestRemoveMember: (group: any, member: any) => void
   onRequestRemoveMultiple: (group: any, members: any[]) => void
+  onMembersAdded?: (groupId: string, userIds: string[]) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -1160,6 +1213,7 @@ function GroupCard({
           group={group} 
           allUsers={allUsers} 
           onClose={() => setShowAddModal(false)} 
+          onMembersAdded={onMembersAdded}
         />
       )}
 
@@ -1364,6 +1418,37 @@ function GroupCard({
                           </div>
                         )}
                       </div>
+                      <button 
+                        type="button"
+                        onClick={() => onRequestRemoveMember(group, sup)}
+                        title={`Quitar a ${sup.name} de líderes`}
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: "50%",
+                          border: "1px solid transparent",
+                          backgroundColor: "transparent",
+                          color: "#94a3b8",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          transition: "all 0.2s",
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.15)"
+                          e.currentTarget.style.borderColor = "rgba(239, 68, 68, 0.3)"
+                          e.currentTarget.style.color = "#ef4444"
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.backgroundColor = "transparent"
+                          e.currentTarget.style.borderColor = "transparent"
+                          e.currentTarget.style.color = "#94a3b8"
+                        }}
+                      >
+                        <Trash2 size={11} />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -1399,6 +1484,37 @@ function GroupCard({
                           </div>
                         )}
                       </div>
+                      <button 
+                        type="button"
+                        onClick={() => onRequestRemoveMember(group, sub)}
+                        title={`Quitar a ${sub.name} de sub-líderes`}
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: "50%",
+                          border: "1px solid transparent",
+                          backgroundColor: "transparent",
+                          color: "#94a3b8",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          transition: "all 0.2s",
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.15)"
+                          e.currentTarget.style.borderColor = "rgba(239, 68, 68, 0.3)"
+                          e.currentTarget.style.color = "#ef4444"
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.backgroundColor = "transparent"
+                          e.currentTarget.style.borderColor = "transparent"
+                          e.currentTarget.style.color = "#94a3b8"
+                        }}
+                      >
+                        <Trash2 size={11} />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -1635,8 +1751,24 @@ function GroupCard({
 // COMPONENTE PRINCIPAL: GROUP MANAGER
 // =========================================================================
 export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: any[] }) {
+  const router = useRouter()
+  const [localGroups, setLocalGroups] = useState(groups)
   const [search, setSearch] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<"all" | "withMembers" | "empty" | "withLeaders">("all")
+  const [toastMessage, setToastMessage] = useState<{ type: "success" | "error", text: string } | null>(null)
+
+  // Sync when prop updates
+  useEffect(() => {
+    setLocalGroups(groups)
+  }, [groups])
+
+  // Auto-dismiss toast
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => setToastMessage(null), 3500)
+      return () => clearTimeout(timer)
+    }
+  }, [toastMessage])
 
   // Modal State for Confirmations
   const [confirmModalState, setConfirmModalState] = useState<{
@@ -1646,6 +1778,7 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
     members?: any[]
     isDestructive: boolean
     confirmText: string
+    errorMessage?: string | null
     onConfirm: () => void
   }>({
     isOpen: false,
@@ -1654,28 +1787,29 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
     members: [],
     isDestructive: true,
     confirmText: "Confirmar",
+    errorMessage: null,
     onConfirm: () => {}
   })
 
   const [isPendingAction, startActionTransition] = useTransition()
 
-  // Calculate high-level stats
-  const totalGroups = groups.length
+  // Calculate high-level stats from local state
+  const totalGroups = localGroups.length
   const totalAssignedMembers = useMemo(() => {
-    return groups.reduce((acc, g) => acc + (g.members?.length || 0), 0)
-  }, [groups])
+    return localGroups.reduce((acc, g) => acc + (g.members?.length || 0), 0)
+  }, [localGroups])
 
   const totalLeaders = useMemo(() => {
     const leaderIds = new Set<string>()
-    groups.forEach(g => {
+    localGroups.forEach(g => {
       g.supervisors?.forEach((s: any) => leaderIds.add(s.id))
     })
     return leaderIds.size
-  }, [groups])
+  }, [localGroups])
 
-  // Filter groups
+  // Filter groups from local state
   const filteredGroups = useMemo(() => {
-    return groups.filter(g => {
+    return localGroups.filter(g => {
       const matchSearch = 
         g.name.toLowerCase().includes(search.toLowerCase()) ||
         g.description?.toLowerCase().includes(search.toLowerCase()) ||
@@ -1684,27 +1818,103 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
 
       if (!matchSearch) return false
 
-      if (categoryFilter === "withMembers") return g.members?.length > 0
+      if (categoryFilter === "withMembers") return (g.members?.length || 0) > 0
       if (categoryFilter === "empty") return (!g.members || g.members.length === 0)
-      if (categoryFilter === "withLeaders") return g.supervisors?.length > 0
+      if (categoryFilter === "withLeaders") return (g.supervisors?.length || 0) > 0
 
       return true
     })
-  }, [groups, search, categoryFilter])
+  }, [localGroups, search, categoryFilter])
+
+  // Resilient Removal Handler (Optimistic UI + Server Action + REST API Fallback)
+  const executeRemoveMembers = async (group: any, memberIds: string[]) => {
+    // 1. Optimistic removal on screen immediately
+    setLocalGroups(prev => prev.map(g => {
+      if (g.id === group.id) {
+        return {
+          ...g,
+          members: (g.members || []).filter((m: any) => !memberIds.includes(m.id)),
+          supervisors: (g.supervisors || []).filter((s: any) => !memberIds.includes(s.id)),
+          subLeaders: (g.subLeaders || []).filter((sub: any) => !memberIds.includes(sub.id))
+        }
+      }
+      return g
+    }))
+
+    // 2. Try Server Action first
+    let success = false
+    let errorMsg = ""
+
+    try {
+      const result = await removeMembersFromGroup(group.id, memberIds)
+      if (result && result.success) {
+        success = true
+      } else if (result && result.error) {
+        errorMsg = result.error
+      }
+    } catch (actionErr: any) {
+      console.warn("Server action failed, trying REST API fallback...", actionErr)
+    }
+
+    // 3. Fallback to resilient REST API if Server Action failed (e.g. build hash mismatch)
+    if (!success) {
+      try {
+        const response = await fetch("/api/admin/groups/members", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ groupId: group.id, userIds: memberIds })
+        })
+        const data = await response.json()
+        if (data && data.success) {
+          success = true
+        } else {
+          errorMsg = data?.error || "Error al remover del grupo."
+        }
+      } catch (apiErr: any) {
+        console.error("REST API removal failed:", apiErr)
+        errorMsg = apiErr?.message || "Error de red al procesar la solicitud."
+      }
+    }
+
+    if (success) {
+      setToastMessage({
+        type: "success",
+        text: memberIds.length === 1 ? "Integrante desvinculado del grupo." : `${memberIds.length} integrantes desvinculados.`
+      })
+      router.refresh()
+      return true
+    } else {
+      setToastMessage({
+        type: "error",
+        text: errorMsg || "No se pudo remover el integrante. Inténtalo de nuevo."
+      })
+      // Re-sync with server
+      router.refresh()
+      return false
+    }
+  }
 
   // Trigger Confirmation: Delete Single Member
   const handleRequestRemoveMember = (group: any, member: any) => {
     setConfirmModalState({
       isOpen: true,
       title: `¿Remover a ${member.name}?`,
-      description: `¿Estás seguro de que deseas quitar a este integrante del grupo "${group.name}"? Podrás volver a agregarlo en cualquier momento.`,
+      description: `¿Estás seguro de que deseas quitar a este usuario del grupo "${group.name}"? Podrás volver a agregarlo en cualquier momento.`,
       members: [member],
       isDestructive: true,
-      confirmText: "Quitar integrante",
+      confirmText: "Quitar del grupo",
+      errorMessage: null,
       onConfirm: () => {
         startActionTransition(async () => {
-          await removeMembersFromGroup([member.id])
-          setConfirmModalState(prev => ({ ...prev, isOpen: false }))
+          const ok = await executeRemoveMembers(group, [member.id])
+          if (ok) {
+            setConfirmModalState(prev => ({ ...prev, isOpen: false, errorMessage: null }))
+          } else {
+            setConfirmModalState(prev => ({ 
+              ...prev, 
+              errorMessage: "Hubo un problema al desvincular. Por favor inténtalo nuevamente." 
+            }))
+          }
         })
       }
     })
@@ -1712,6 +1922,7 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
 
   // Trigger Confirmation: Delete Multiple Members
   const handleRequestRemoveMultiple = (group: any, members: any[]) => {
+    const memberIds = members.map(m => m.id)
     setConfirmModalState({
       isOpen: true,
       title: `¿Remover ${members.length} integrantes?`,
@@ -1719,10 +1930,18 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
       members,
       isDestructive: true,
       confirmText: `Quitar ${members.length} integrantes`,
+      errorMessage: null,
       onConfirm: () => {
         startActionTransition(async () => {
-          await removeMembersFromGroup(members.map(m => m.id))
-          setConfirmModalState(prev => ({ ...prev, isOpen: false }))
+          const ok = await executeRemoveMembers(group, memberIds)
+          if (ok) {
+            setConfirmModalState(prev => ({ ...prev, isOpen: false, errorMessage: null }))
+          } else {
+            setConfirmModalState(prev => ({ 
+              ...prev, 
+              errorMessage: "Hubo un problema al desvincular en lote. Por favor inténtalo de nuevo." 
+            }))
+          }
         })
       }
     })
@@ -1737,17 +1956,79 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
       members: group.members,
       isDestructive: true,
       confirmText: "Eliminar grupo",
+      errorMessage: null,
       onConfirm: () => {
         startActionTransition(async () => {
-          await deleteGroup(group.id)
-          setConfirmModalState(prev => ({ ...prev, isOpen: false }))
+          // Optimistically remove group
+          setLocalGroups(prev => prev.filter(g => g.id !== group.id))
+          try {
+            await deleteGroup(group.id)
+            setConfirmModalState(prev => ({ ...prev, isOpen: false, errorMessage: null }))
+            setToastMessage({ type: "success", text: `Grupo "${group.name}" eliminado.` })
+            router.refresh()
+          } catch (err: any) {
+            setConfirmModalState(prev => ({ ...prev, errorMessage: "Error al eliminar el grupo." }))
+            router.refresh()
+          }
         })
       }
     })
   }
 
+  // Handle members added optimistically
+  const handleMembersAdded = (groupId: string, userIds: string[]) => {
+    const addedUserObjs = allUsers.filter(u => userIds.includes(u.id))
+    setLocalGroups(prev => prev.map(g => {
+      if (g.id === groupId) {
+        const existingIds = new Set((g.members || []).map((m: any) => m.id))
+        const newToAdd = addedUserObjs.filter(u => !existingIds.has(u.id)).map(u => ({ ...u, projectId: groupId }))
+        return {
+          ...g,
+          members: [...(g.members || []), ...newToAdd]
+        }
+      }
+      return g
+    }))
+    setToastMessage({
+      type: "success",
+      text: userIds.length === 1 ? "1 nuevo integrante incorporado." : `${userIds.length} nuevos integrantes incorporados.`
+    })
+    router.refresh()
+  }
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem", position: "relative" }}>
+      {/* Toast Notification Banner */}
+      {toastMessage && (
+        <div 
+          style={{
+            position: "fixed",
+            bottom: "2rem",
+            right: "2rem",
+            zIndex: 9999999,
+            padding: "0.85rem 1.25rem",
+            borderRadius: "0.85rem",
+            backgroundColor: toastMessage.type === "success" ? "#064e3b" : "#7f1d1d",
+            color: "#ffffff",
+            border: toastMessage.type === "success" ? "1px solid #10b981" : "1px solid #ef4444",
+            boxShadow: "0 10px 30px rgba(0, 0, 0, 0.6)",
+            fontWeight: 700,
+            fontSize: "0.88rem",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.6rem",
+            animation: "fadeIn 0.25s ease-out"
+          }}
+        >
+          {toastMessage.type === "success" ? (
+            <CheckCircle2 size={18} color="#34d399" />
+          ) : (
+            <AlertTriangle size={18} color="#f87171" />
+          )}
+          <span>{toastMessage.text}</span>
+        </div>
+      )}
+
       {/* Centered Confirmation Modal */}
       <ConfirmModal 
         isOpen={confirmModalState.isOpen}
@@ -1756,9 +2037,14 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
         members={confirmModalState.members}
         isDestructive={confirmModalState.isDestructive}
         confirmText={confirmModalState.confirmText}
+        errorMessage={confirmModalState.errorMessage}
         isPending={isPendingAction}
         onConfirm={confirmModalState.onConfirm}
-        onCancel={() => setConfirmModalState(prev => ({ ...prev, isOpen: false }))}
+        onCancel={() => {
+          if (!isPendingAction) {
+            setConfirmModalState(prev => ({ ...prev, isOpen: false, errorMessage: null }))
+          }
+        }}
       />
 
       {/* KPI Stats Cards Banner */}
@@ -1999,6 +2285,7 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
               onRequestDeleteGroup={handleRequestDeleteGroup}
               onRequestRemoveMember={handleRequestRemoveMember}
               onRequestRemoveMultiple={handleRequestRemoveMultiple}
+              onMembersAdded={handleMembersAdded}
             />
           ))}
         </div>
