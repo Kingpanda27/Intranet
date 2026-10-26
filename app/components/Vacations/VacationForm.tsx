@@ -46,7 +46,7 @@ export const CATEGORIES: CategoryTab[] = [
   { id: "ALL", label: "Todas" },
   { id: "LEAVE", label: "Tiempo Libre" },
   { id: "HEALTH_FAMILY", label: "Salud y Familia" },
-  { id: "REMOTE_IT", label: "Incidencias Remoto / IT", badge: "Urgente" }
+  { id: "REMOTE_IT", label: "Incidencias Remoto / IT" }
 ]
 
 export interface RequestTypeItem {
