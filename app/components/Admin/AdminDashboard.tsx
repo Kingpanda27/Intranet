@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect, useTransition } from "react"
+import { useState, useEffect, useTransition, useMemo } from "react"
 import { createPortal } from "react-dom"
-import { CheckCircle2, XCircle, User, Briefcase, Calendar, MessageSquare, Download, Clock, History, Trash2, Paperclip, ExternalLink, AlertCircle, Pencil, X, Save, RefreshCw, Users, ChevronDown, ChevronUp, Search, Layers, LayoutGrid, ListFilter, Shield, Sparkles } from "lucide-react"
+import { CheckCircle2, XCircle, User, Briefcase, Calendar, MessageSquare, Download, Clock, History, Trash2, Paperclip, ExternalLink, AlertCircle, Pencil, X, Save, RefreshCw, Users, ChevronDown, ChevronUp, Search, Layers, LayoutGrid, ListFilter, Shield, Sparkles, Filter, FileSpreadsheet } from "lucide-react"
 import { getAllSupervisedRequests, updateRequestStatus, RequestStatus, deleteTimeOffRequest, editTimeOffRequest } from "@/app/actions/timeOffActions"
 import Papa from "papaparse"
 import { formatDateLong, formatDateShort, formatTime12h, formatDateTimeShort } from "@/lib/dateUtils"
@@ -15,6 +15,7 @@ export default function AdminDashboard() {
   const [isPending, startTransition] = useTransition()
   const [editingReq, setEditingReq] = useState<any | null>(null)
   const [mounted, setMounted] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -151,53 +152,57 @@ export default function AdminDashboard() {
     })
   }
 
-  const handleExport = () => {
-    try {
-      const dataToExport = requests.map(r => ({
-        Empleado: r.user?.name || "Desconocido",
-        Email: r.user?.email || "Sin Email",
-        Grupo: r.user?.project?.name || "Sin Grupo",
-        Tipo: r.type === "VACATION" ? "Vacaciones" : 
-              r.type === "PERMISSION" ? `Permiso Especial (${r.specialType === "HOURS" ? "Horas" : r.specialType === "HALF" ? "Medio Día" : "Día Completo"})` : 
-              r.type === "SPECIAL" ? `Permiso Especial (${r.specialType === "HOURS" ? "Horas" : r.specialType === "HALF" ? "Medio Día" : "Día Completo"})` : 
-              r.type === "HOURS_MAKEUP" ? "Reposición de Horas" : 
-              r.type === "EARLY_LEAVE" ? "Salida Temprana" :
-              r.type === "SICK_LEAVE" ? "Enfermedad" :
-              r.type === "MEDICAL_LEAVE" ? "Licencia Médica" :
-              r.type === "MATERNITY_LEAVE" ? "Maternidad" :
-              r.type === "PATERNITY_LEAVE" ? "Paternidad" :
-              r.type === "BEREAVEMENT_LEAVE" ? "Luto Familiar" : r.type,
-        Inicio: r.type === "HOURS_MAKEUP" ? (r.absenceDate ? formatDateShort(r.absenceDate) : "") : formatDateShort(r.startDate) + (r.type === "EARLY_LEAVE" ? " " + formatTime12h(r.startDate) : ""),
-        Fin: r.type === "HOURS_MAKEUP" ? (r.makeupDate ? formatDateShort(r.makeupDate) : "") : formatDateShort(r.endDate),
-        Creado_Por: r.createdBy?.name || r.user?.name || "No disponible",
-        Fecha_Creacion: formatDateShort(r.createdAt),
-        Hora_Creacion: formatTime12h(r.createdAt),
-        Horas_Solicitadas: r.type === "HOURS_MAKEUP" ? (r.hoursToMakeUp || 0) : (r.hoursRequested || 0),
-        Horas_Aprobadas: r.hoursApproved !== null && r.hoursApproved !== undefined ? r.hoursApproved : "",
-        Horas_Utilizadas: r.hoursUsed !== null && r.hoursUsed !== undefined ? r.hoursUsed : "",
-        Estado: r.status === "PENDING" ? "Pendiente" : r.status === "APPROVED" ? "Aprobada" : r.status === "REJECTED" ? "Rechazada" : r.status,
-        Fecha_Aprobacion_Rechazo: r.status === "APPROVED" ? formatDateTimeShort(r.approvedAt) : r.status === "REJECTED" ? formatDateTimeShort(r.rejectedAt) : "—",
-        Procesado_Por: r.status === "APPROVED" ? (r.approvedBy?.name || "—") : r.status === "REJECTED" ? (r.rejectedBy?.name || "—") : "—",
-        Impacto_Bono: r.status === "APPROVED" ? (r.affectsBonus ? "Afecta Bono" : "No Afecta Bono") : "—",
-        Motivo: r.reason || "",
-        Nota_Supervisor: r.supervisorNote || ""
-      }))
-      
-      const csv = "\uFEFF" + Papa.unparse(dataToExport) // BOM for UTF-8 Excel support
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.setAttribute("download", `Reporte_Ausencias_${new Date().toISOString().split('T')[0]}.csv`)
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-    } catch (e: any) {
-      console.error("Error exporting CSV:", e)
-      alert("Error al generar el archivo CSV: " + e.message)
+  // Grupos únicos disponibles extraídos de las solicitudes del supervisor
+  const availableGroups = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; color: string | null; icon: string | null }>()
+    let hasUnassigned = false
+
+    requests.forEach(r => {
+      const proj = r.user?.project
+      if (proj && proj.id) {
+        if (!map.has(proj.id)) {
+          map.set(proj.id, {
+            id: proj.id,
+            name: proj.name || "Sin nombre",
+            color: proj.color || "#6366f1",
+            icon: proj.icon || "Users"
+          })
+        }
+      } else {
+        hasUnassigned = true
+      }
+    })
+
+    const list = Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
+    if (hasUnassigned) {
+      list.push({
+        id: "unassigned",
+        name: "Sin Grupo Asignado",
+        color: "#94a3b8",
+        icon: "UserX"
+      })
     }
-  }
+    return list
+  }, [requests])
+
+  // Años disponibles en base a los registros existentes
+  const availableYears = useMemo(() => {
+    const yearsSet = new Set<number>()
+    const currentY = new Date().getFullYear()
+    yearsSet.add(currentY)
+
+    requests.forEach(r => {
+      const dStr = r.startDate || r.absenceDate || r.createdAt
+      if (dStr) {
+        const d = new Date(dStr)
+        if (!isNaN(d.getTime())) {
+          yearsSet.add(d.getFullYear())
+        }
+      }
+    })
+
+    return Array.from(yearsSet).sort((a, b) => b - a)
+  }, [requests])
 
   const pendingRequests = requests.filter(r => r.status === "PENDING")
   const historyRequests = requests.filter(r => r.status !== "PENDING")
@@ -317,9 +322,16 @@ export default function AdminDashboard() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
         <h1 style={{ margin: 0 }}>Panel de Aprobaciones</h1>
         
-        <button type="button" onClick={handleExport} className="btn btn-surface" style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.9rem" }}>
-          <Download size={16} />
+        <button 
+          type="button" 
+          onClick={() => setShowExportModal(true)} 
+          className="btn btn-surface hover-scale" 
+          style={{ display: "flex", alignItems: "center", gap: "0.55rem", fontSize: "0.9rem", fontWeight: 700 }}
+          title="Personalizar período por mes y filtrar por grupo para exportar CSV"
+        >
+          <FileSpreadsheet size={17} style={{ color: "hsl(var(--primary))" }} />
           Exportar Reporte (CSV)
+          <ChevronDown size={14} style={{ opacity: 0.7 }} />
         </button>
       </div>
 
@@ -972,6 +984,18 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Modal para Exportar Reporte Personalizado (CSV) */}
+      {showExportModal && mounted && createPortal(
+        <ExportReportModal
+          initialGroup={selectedGroupFilter}
+          requests={requests}
+          availableGroups={availableGroups}
+          availableYears={availableYears}
+          onClose={() => setShowExportModal(false)}
+        />,
+        document.body
+      )}
+
       {/* Modal Editar Solicitud para Supervisores / Managers */}
       {editingReq && mounted && createPortal(
         <EditAdminRequestModal
@@ -984,6 +1008,555 @@ export default function AdminDashboard() {
         />,
         document.body
       )}
+    </div>
+  )
+}
+
+// Opciones de Meses para Exportación
+const MONTHS_OPTIONS = [
+  { value: "ALL", label: "Todos los meses (Año completo)" },
+  { value: "0", label: "Enero" },
+  { value: "1", label: "Febrero" },
+  { value: "2", label: "Marzo" },
+  { value: "3", label: "Abril" },
+  { value: "4", label: "Mayo" },
+  { value: "5", label: "Junio" },
+  { value: "6", label: "Julio" },
+  { value: "7", label: "Agosto" },
+  { value: "8", label: "Septiembre" },
+  { value: "9", label: "Octubre" },
+  { value: "10", label: "Noviembre" },
+  { value: "11", label: "Diciembre" }
+]
+
+// Parser seguro de año y mes sin desfase por zona horaria
+function parseYearMonth(dateInput: Date | string | number | null | undefined): { year: number, month: number } | null {
+  if (!dateInput) return null
+  if (typeof dateInput === "string") {
+    const match = dateInput.match(/^(\d{4})-(\d{2})/)
+    if (match) {
+      return {
+        year: parseInt(match[1], 10),
+        month: parseInt(match[2], 10) - 1 // 0-indexed
+      }
+    }
+  }
+  const d = new Date(dateInput)
+  if (isNaN(d.getTime())) return null
+  return {
+    year: d.getFullYear(),
+    month: d.getMonth()
+  }
+}
+
+// Formateo legible de tipos de solicitudes
+function formatTypeReadable(r: any): string {
+  switch (r.type) {
+    case "VACATION":
+      return "Vacaciones"
+    case "PERMISSION":
+    case "SPECIAL": {
+      const spec = r.specialType === "HOURS" ? "Horas" : r.specialType === "HALF" ? "Medio Día" : "Día Completo"
+      return `Permiso Especial (${spec})`
+    }
+    case "HOURS_MAKEUP":
+      return "Reposición de Horas"
+    case "EARLY_LEAVE":
+      return "Salida Temprana"
+    case "SICK_LEAVE":
+      return "Enfermedad Común"
+    case "MEDICAL_LEAVE":
+      return "Licencia Médica"
+    case "MATERNITY_LEAVE":
+    case "MATERNITY":
+      return "Maternidad"
+    case "PATERNITY_LEAVE":
+    case "PATERNITY":
+      return "Paternidad"
+    case "BEREAVEMENT_LEAVE":
+    case "BEREAVEMENT":
+      return "Luto Familiar"
+    case "REMOTE_INTERNET":
+      return "Incidencia: Falla de Internet (Remoto)"
+    case "REMOTE_POWER":
+      return "Incidencia: Falla Eléctrica (Remoto)"
+    case "REMOTE_HARDWARE":
+      return "Incidencia: Falla de Hardware / PC (Remoto)"
+    case "REMOTE_VPN":
+      return "Incidencia: Problema de VPN / Red (Remoto)"
+    default:
+      return r.type || "Permiso"
+  }
+}
+
+function ExportReportModal({
+  initialGroup,
+  requests,
+  availableGroups,
+  availableYears,
+  onClose
+}: {
+  initialGroup: string
+  requests: any[]
+  availableGroups: Array<{ id: string; name: string; color: string | null; icon: string | null }>
+  availableYears: number[]
+  onClose: () => void
+}) {
+  const [exportGroup, setExportGroup] = useState<string>(initialGroup || "ALL")
+  const [exportMonth, setExportMonth] = useState<string>(() => String(new Date().getMonth()))
+  const [exportYear, setExportYear] = useState<string>(() => String(new Date().getFullYear()))
+  const [exportStatus, setExportStatus] = useState<string>("ALL")
+
+  // Filtrado reactivo de datos para el reporte
+  const filteredData = useMemo(() => {
+    return requests.filter(r => {
+      // 1. Filtrar por Grupo
+      if (exportGroup !== "ALL") {
+        if (exportGroup === "unassigned") {
+          if (r.user?.project?.id) return false
+        } else {
+          if (r.user?.project?.id !== exportGroup) return false
+        }
+      }
+
+      // 2. Filtrar por Estado
+      if (exportStatus !== "ALL") {
+        if (r.status !== exportStatus) return false
+      }
+
+      // 3. Filtrar por Fecha (Año y Mes)
+      if (exportYear !== "ALL" || exportMonth !== "ALL") {
+        const ymStart = parseYearMonth(r.startDate || r.absenceDate || r.createdAt)
+        const ymEnd = r.endDate ? parseYearMonth(r.endDate) : null
+
+        const matchesStart = ymStart ? (
+          (exportYear === "ALL" || ymStart.year === Number(exportYear)) &&
+          (exportMonth === "ALL" || ymStart.month === Number(exportMonth))
+        ) : false
+
+        const matchesEnd = ymEnd ? (
+          (exportYear === "ALL" || ymEnd.year === Number(exportYear)) &&
+          (exportMonth === "ALL" || ymEnd.month === Number(exportMonth))
+        ) : false
+
+        if (!matchesStart && !matchesEnd) return false
+      }
+
+      return true
+    })
+  }, [requests, exportGroup, exportStatus, exportMonth, exportYear])
+
+  // Generador de nombre de archivo descriptivo
+  const generateFileName = () => {
+    const parts = ["Reporte_Permisos"]
+
+    if (exportGroup === "ALL") {
+      parts.push("Todos_Los_Grupos")
+    } else if (exportGroup === "unassigned") {
+      parts.push("Sin_Grupo")
+    } else {
+      const grp = availableGroups.find(g => g.id === exportGroup)
+      const cleanName = (grp?.name || "Grupo")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9_-]/g, "_")
+      parts.push(cleanName)
+    }
+
+    if (exportMonth !== "ALL") {
+      const monthObj = MONTHS_OPTIONS.find(m => m.value === exportMonth)
+      const cleanMonth = (monthObj?.label || "Mes")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9_-]/g, "_")
+      parts.push(cleanMonth)
+    }
+
+    if (exportYear !== "ALL") {
+      parts.push(exportYear)
+    } else if (exportMonth === "ALL") {
+      parts.push("Historico")
+    }
+
+    if (exportStatus !== "ALL") {
+      parts.push(exportStatus.toLowerCase())
+    }
+
+    return `${parts.join("_")}.csv`
+  }
+
+  const handleDownloadCSV = () => {
+    try {
+      if (filteredData.length === 0) {
+        alert("No hay solicitudes que coincidan con los filtros seleccionados.")
+        return
+      }
+
+      const rows = filteredData.map(r => ({
+        "Colaborador": r.user?.name || "Desconocido",
+        "Correo Electronico": r.user?.email || "Sin Email",
+        "Rol / Cargo": r.user?.role || "USER",
+        "Grupo / Campana": r.user?.project?.name || "Sin Grupo Asignado",
+        "Tipo de Solicitud": formatTypeReadable(r),
+        "Fecha Inicio / Ausencia": r.type === "HOURS_MAKEUP" 
+          ? (r.absenceDate ? formatDateShort(r.absenceDate) : "") 
+          : formatDateShort(r.startDate) + (r.type === "EARLY_LEAVE" ? " " + formatTime12h(r.startDate) : ""),
+        "Fecha Fin / Reposicion": r.type === "HOURS_MAKEUP" 
+          ? (r.makeupDate ? formatDateShort(r.makeupDate) : "") 
+          : formatDateShort(r.endDate),
+        "Horario / Turno": r.type === "HOURS_MAKEUP"
+          ? `${r.makeupStartTime || "—"} a ${r.makeupEndTime || "—"}`
+          : (r.type === "SPECIAL" && r.specialType === "HOURS")
+            ? `${r.exitTime || "—"} a ${r.returnTime || "—"}`
+            : (r.type === "EARLY_LEAVE")
+              ? `Salida: ${formatTime12h(r.startDate)}`
+              : "Jornada completa",
+        "Horas Solicitadas": r.type === "HOURS_MAKEUP" ? (r.hoursToMakeUp || 0) : (r.hoursRequested || 0),
+        "Horas Aprobadas": r.hoursApproved !== null && r.hoursApproved !== undefined ? r.hoursApproved : "",
+        "Horas Utilizadas": r.hoursUsed !== null && r.hoursUsed !== undefined ? r.hoursUsed : "",
+        "Estado": r.status === "PENDING" ? "Pendiente" : r.status === "APPROVED" ? "Aprobada" : r.status === "REJECTED" ? "Rechazada" : r.status,
+        "Impacto en Bono": r.status === "APPROVED" ? (r.affectsBonus ? "Afecta Bono" : "No Afecta Bono") : "—",
+        "Motivo": r.reason || "",
+        "Nota de Supervisor": r.supervisorNote || "",
+        "Registrado Por": r.createdBy?.name || r.user?.name || "No disponible",
+        "Fecha de Registro": formatDateShort(r.createdAt),
+        "Hora de Registro": formatTime12h(r.createdAt),
+        "Fecha de Resolucion": r.status === "APPROVED" ? formatDateTimeShort(r.approvedAt) : r.status === "REJECTED" ? formatDateTimeShort(r.rejectedAt) : "—",
+        "Resolucion Por": r.status === "APPROVED" ? (r.approvedBy?.name || "—") : r.status === "REJECTED" ? (r.rejectedBy?.name || "—") : "—",
+        "Tiene Adjunto": r.documentUrl ? "Si" : "No",
+        "Enlace Adjunto": r.documentUrl || ""
+      }))
+
+      const csv = "\uFEFF" + Papa.unparse(rows)
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.setAttribute("download", generateFileName())
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      onClose()
+    } catch (e: any) {
+      console.error("Error al exportar CSV:", e)
+      alert("Error al generar el archivo CSV: " + e.message)
+    }
+  }
+
+  const approvedCount = filteredData.filter(r => r.status === "APPROVED").length
+  const pendingCount = filteredData.filter(r => r.status === "PENDING").length
+  const rejectedCount = filteredData.filter(r => r.status === "REJECTED").length
+
+  return (
+    <div 
+      className="animate-in fade-in" 
+      style={{ 
+        position: "fixed", top: 0, left: 0, right: 0, bottom: 0, 
+        backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",
+        zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" 
+      }}
+      onClick={(e) => { if(e.target === e.currentTarget) onClose() }}
+    >
+      <div 
+        className="animate-in zoom-in-95 card glass" 
+        style={{ 
+          backgroundColor: "hsl(var(--background))", width: "100%", maxWidth: "560px", 
+          borderRadius: "20px", display: "flex", flexDirection: "column",
+          boxShadow: "0 24px 60px rgba(0,0,0,0.35)", overflow: "hidden", border: "1px solid hsl(var(--border))"
+        }}
+      >
+        {/* Header del Modal */}
+        <div style={{ 
+          padding: "1.25rem 1.5rem", 
+          borderBottom: "1px solid hsl(var(--border)/0.5)", 
+          display: "flex", 
+          justifyContent: "space-between", 
+          alignItems: "center", 
+          backgroundColor: "hsl(var(--surface))" 
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <div style={{
+              width: "42px",
+              height: "42px",
+              borderRadius: "12px",
+              backgroundColor: "hsl(var(--primary) / 0.12)",
+              color: "hsl(var(--primary))",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}>
+              <FileSpreadsheet size={22} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: "1.15rem", fontWeight: 800, margin: 0, color: "hsl(var(--foreground))" }}>
+                Exportar Reporte (CSV)
+              </h2>
+              <p style={{ margin: "0.15rem 0 0", fontSize: "0.8rem", color: "hsl(var(--muted-foreground))" }}>
+                Filtra por grupo y selecciona el mes deseado
+              </p>
+            </div>
+          </div>
+
+          <button 
+            type="button"
+            onClick={onClose} 
+            className="btn btn-ghost" 
+            style={{ padding: "0.35rem", borderRadius: "50%", color: "hsl(var(--muted-foreground))", minWidth: "auto" }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Formulario */}
+        <div style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1.25rem", maxHeight: "75vh", overflowY: "auto" }}>
+          
+          {/* 1. Selector de Grupo / Campaña */}
+          <div>
+            <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem", fontWeight: 750, marginBottom: "0.45rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "hsl(var(--foreground))" }}>
+              <Users size={14} style={{ color: "hsl(var(--primary))" }} />
+              Grupo / Campaña a Exportar
+            </label>
+            <select
+              value={exportGroup}
+              onChange={(e) => setExportGroup(e.target.value)}
+              className="input"
+              style={{ width: "100%", padding: "0.65rem 0.85rem", borderRadius: "10px", fontSize: "0.88rem", fontWeight: 600, backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+            >
+              <option value="ALL">🌐 Todos los grupos y campañas ({requests.length} solicitudes en total)</option>
+              {availableGroups.map(g => (
+                <option key={g.id} value={g.id}>
+                  {g.id === "unassigned" ? "👤" : "👥"} {g.name}
+                </option>
+              ))}
+            </select>
+            <span style={{ fontSize: "0.72rem", color: "hsl(var(--muted-foreground))", marginTop: "0.3rem", display: "block" }}>
+              {exportGroup === "ALL" 
+                ? "Se incluirán solicitudes de todos los grupos y equipos."
+                : `Solo se incluirán solicitudes de colaboradores pertenecientes a este grupo.`
+              }
+            </span>
+          </div>
+
+          {/* 2. Selector de Período (Mes y Año) */}
+          <div>
+            <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem", fontWeight: 750, marginBottom: "0.45rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "hsl(var(--foreground))" }}>
+              <Calendar size={14} style={{ color: "hsl(var(--primary))" }} />
+              Mes y Año del Reporte
+            </label>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: "0.75rem" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", marginBottom: "0.25rem" }}>
+                  Mes
+                </label>
+                <select
+                  value={exportMonth}
+                  onChange={(e) => setExportMonth(e.target.value)}
+                  className="input"
+                  style={{ width: "100%", padding: "0.6rem 0.75rem", borderRadius: "10px", fontSize: "0.85rem", fontWeight: 600, backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+                >
+                  {MONTHS_OPTIONS.map(m => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", marginBottom: "0.25rem" }}>
+                  Año
+                </label>
+                <select
+                  value={exportYear}
+                  onChange={(e) => setExportYear(e.target.value)}
+                  className="input"
+                  style={{ width: "100%", padding: "0.6rem 0.75rem", borderRadius: "10px", fontSize: "0.85rem", fontWeight: 600, backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+                >
+                  <option value="ALL">Todos los años</option>
+                  {availableYears.map(y => (
+                    <option key={y} value={String(y)}>{y}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Accesos Rápidos de Período */}
+            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.55rem" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const now = new Date()
+                  setExportMonth(String(now.getMonth()))
+                  setExportYear(String(now.getFullYear()))
+                }}
+                className="btn btn-ghost hover-scale"
+                style={{ padding: "0.2rem 0.55rem", fontSize: "0.72rem", borderRadius: "6px", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+              >
+                ⚡ Mes Actual
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date()
+                  d.setMonth(d.getMonth() - 1)
+                  setExportMonth(String(d.getMonth()))
+                  setExportYear(String(d.getFullYear()))
+                }}
+                className="btn btn-ghost hover-scale"
+                style={{ padding: "0.2rem 0.55rem", fontSize: "0.72rem", borderRadius: "6px", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+              >
+                ⏪ Mes Anterior
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setExportMonth("ALL")
+                  setExportYear(String(new Date().getFullYear()))
+                }}
+                className="btn btn-ghost hover-scale"
+                style={{ padding: "0.2rem 0.55rem", fontSize: "0.72rem", borderRadius: "6px", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+              >
+                📅 Todo el Año ({new Date().getFullYear()})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setExportMonth("ALL")
+                  setExportYear("ALL")
+                }}
+                className="btn btn-ghost hover-scale"
+                style={{ padding: "0.2rem 0.55rem", fontSize: "0.72rem", borderRadius: "6px", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+              >
+                🌐 Todo el Histórico
+              </button>
+            </div>
+          </div>
+
+          {/* 3. Selector de Estado de Solicitud */}
+          <div>
+            <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem", fontWeight: 750, marginBottom: "0.45rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "hsl(var(--foreground))" }}>
+              <Filter size={14} style={{ color: "hsl(var(--primary))" }} />
+              Estado de la Solicitud
+            </label>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.4rem" }}>
+              {[
+                { id: "ALL", label: "Todas" },
+                { id: "APPROVED", label: "Aprobadas" },
+                { id: "PENDING", label: "Pendientes" },
+                { id: "REJECTED", label: "Rechazadas" }
+              ].map(st => (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => setExportStatus(st.id)}
+                  style={{
+                    padding: "0.45rem 0.5rem",
+                    borderRadius: "8px",
+                    fontSize: "0.78rem",
+                    fontWeight: 700,
+                    border: "1px solid",
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                    backgroundColor: exportStatus === st.id ? "hsl(var(--primary))" : "hsl(var(--surface))",
+                    color: exportStatus === st.id ? "hsl(var(--primary-foreground))" : "hsl(var(--foreground))",
+                    borderColor: exportStatus === st.id ? "hsl(var(--primary))" : "hsl(var(--border))"
+                  }}
+                >
+                  {st.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 4. Resumen en Vivo */}
+          <div style={{
+            backgroundColor: "hsl(var(--surface))",
+            borderRadius: "12px",
+            padding: "1rem",
+            border: "1px solid hsl(var(--border))",
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.5rem"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "0.82rem", fontWeight: 750, color: "hsl(var(--foreground))" }}>
+                Resumen de Exportación
+              </span>
+              <span style={{
+                fontSize: "0.78rem",
+                fontWeight: 800,
+                padding: "0.2rem 0.6rem",
+                borderRadius: "999px",
+                backgroundColor: filteredData.length > 0 ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)",
+                color: filteredData.length > 0 ? "#10b981" : "#ef4444"
+              }}>
+                {filteredData.length} {filteredData.length === 1 ? "registro encontrado" : "registros encontrados"}
+              </span>
+            </div>
+
+            {filteredData.length > 0 ? (
+              <>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", fontSize: "0.72rem", color: "hsl(var(--muted-foreground))" }}>
+                  <span>✓ Aprobadas: <strong>{approvedCount}</strong></span>
+                  <span>•</span>
+                  <span>⏳ Pendientes: <strong>{pendingCount}</strong></span>
+                  <span>•</span>
+                  <span>✕ Rechazadas: <strong>{rejectedCount}</strong></span>
+                </div>
+                <div style={{ fontSize: "0.72rem", color: "hsl(var(--muted-foreground))", marginTop: "0.2rem" }}>
+                  Archivo de salida: <code style={{ color: "hsl(var(--primary))", fontWeight: 700 }}>{generateFileName()}</code>
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: "0.75rem", color: "#ef4444", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                <AlertCircle size={14} />
+                No hay solicitudes que coincidan con estos filtros. Prueba con otro mes o grupo.
+              </div>
+            )}
+          </div>
+
+        </div>
+
+        {/* Footer */}
+        <div style={{ 
+          padding: "1rem 1.5rem", 
+          borderTop: "1px solid hsl(var(--border)/0.5)", 
+          display: "flex", 
+          justifyContent: "flex-end", 
+          gap: "0.75rem", 
+          backgroundColor: "hsl(var(--surface)/0.5)" 
+        }}>
+          <button 
+            type="button" 
+            onClick={onClose} 
+            className="btn btn-ghost" 
+            style={{ borderRadius: "10px", fontSize: "0.85rem" }}
+          >
+            Cancelar
+          </button>
+          
+          <button 
+            type="button" 
+            onClick={handleDownloadCSV} 
+            disabled={filteredData.length === 0}
+            className="btn btn-primary hover-scale" 
+            style={{ 
+              borderRadius: "10px", 
+              fontSize: "0.85rem", 
+              fontWeight: 700, 
+              display: "inline-flex", 
+              alignItems: "center", 
+              gap: "0.5rem",
+              opacity: filteredData.length === 0 ? 0.5 : 1,
+              cursor: filteredData.length === 0 ? "not-allowed" : "pointer"
+            }}
+          >
+            <Download size={15} />
+            Descargar CSV ({filteredData.length})
+          </button>
+        </div>
+
+      </div>
     </div>
   )
 }

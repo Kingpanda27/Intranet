@@ -4,6 +4,17 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y este proyecto se adhiere a [Semantic Versioning (SemVer)](https://semver.org/lang/es/).
 
+## [1.2.7] - 2026-10-26
+
+### Added
+- **Exportación Personalizada de Reporte CSV con Filtro por Grupo y Mes (`AdminDashboard.tsx`):**
+  - **Modal Interactivo de Exportación:** Al presionar *Exportar Reporte (CSV)* en el Panel de Control, se despliega un modal estilizado (Dark Mode, backdrop blur) para configurar con precisión los parámetros del reporte antes de descargarlo.
+  - **Filtro por Grupo / Campaña:** Permite exportar todas las solicitudes del personal supervisado (*"Todos los grupos y campañas"*) o seleccionar un grupo específico (ej. Soporte, Ventas, IT, o *Sin Grupo Asignado*), aislando exclusivamente los colaboradores pertenecientes a ese equipo.
+  - **Filtro por Mes y Año:** Selector dedicado para elegir cualquier mes del año (Enero a Diciembre o *"Todos los meses"*), junto con selector de año y botones de acceso rápido (*⚡ Mes Actual*, *⏪ Mes Anterior*, *📅 Todo el Año*, *🌐 Todo el Histórico*).
+  - **Filtro Adicional por Estado de Solicitud:** Selector para exportar todas las solicitudes o filtrar por *"Solo Aprobadas"* (ideal para nómina y RRHH), *"Solo Pendientes"* o *"Solo Rechazadas"*.
+  - **Previsualización en Vivo de Registros:** Resumen dinámico que calcula al instante la cantidad exacta de registros encontrados, con desglose de solicitudes aprobadas, pendientes y rechazadas, y nombre previsto del archivo a descargar.
+  - **Nomenclatura Inteligente y Formato UTF-8 BOM:** Genera nombres descriptivos de archivo (ej. `Reporte_Permisos_Soporte_Tecnico_Octubre_2026.csv`) e incluye el prefijo UTF-8 BOM (`\uFEFF`) para que Microsoft Excel y Numbers reconozcan correctamente caracteres y tildes en español sin distorsiones.
+
 ## [1.2.6] - 2026-10-26
 
 ### Added
