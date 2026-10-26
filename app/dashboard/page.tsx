@@ -3,6 +3,8 @@ import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import AdminDashboard from "@/app/components/Admin/AdminDashboard"
 
+import { canAccessApprovalsPanel } from "@/lib/requestAuthorization"
+
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions)
   
@@ -11,10 +13,8 @@ export default async function DashboardPage() {
   }
 
   const user = session.user as any
-  const allowedRoles = ["SUPERVISOR", "MANAGER", "IT_MANAGER", "TECHNOLOGY", "TECHNOLOGY_ADMIN", "HR"]
-  const isMaster = user.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || user.isSuperAdmin
-  if (!allowedRoles.includes(user.role) && !isMaster) {
-    redirect("/")
+  if (!canAccessApprovalsPanel(user)) {
+    redirect("/acceso-denegado")
   }
 
   return (

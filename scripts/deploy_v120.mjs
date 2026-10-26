@@ -22,7 +22,7 @@ async function main() {
   }
 
   console.log("===============================================================");
-  console.log(`    DESPLIEGUE A PRODUCCIÓN - INTRANET v1.2.0 (${host}) `);
+  console.log(`    DESPLIEGUE A PRODUCCIÓN - INTRANET v1.2.4 (${host}) `);
   console.log("===============================================================");
 
   // 1. Conectar SSH
@@ -31,7 +31,7 @@ async function main() {
   console.log("✓ Conectado exitosamente.");
 
   // 2. Archivos a transferir
-  console.log("\n[2/5] Transfiriendo archivos de la versión 1.2.0...");
+  console.log("\n[2/5] Transfiriendo archivos de la versión 1.2.4...");
   const filesToTransfer = [
     { local: 'package.json', remote: '/var/www/html/package.json' },
     { local: 'CHANGELOG.md', remote: '/var/www/html/CHANGELOG.md' },
@@ -51,8 +51,17 @@ async function main() {
     { local: 'app/components/Admin/UserManager.tsx', remote: '/var/www/html/app/components/Admin/UserManager.tsx' },
     { local: 'app/components/Layout/Sidebar.tsx', remote: '/var/www/html/app/components/Layout/Sidebar.tsx' },
     { local: 'app/components/Vacations/VacationForm.tsx', remote: '/var/www/html/app/components/Vacations/VacationForm.tsx' },
-    { local: 'app/components/Vacations/VacationList.tsx', remote: '/var/www/html/app/components/Vacations/VacationList.tsx' },
-    { local: 'app/vacations/page.tsx', remote: '/var/www/html/app/vacations/page.tsx' }
+    { local: 'app/vacations/page.tsx', remote: '/var/www/html/app/vacations/page.tsx' },
+    { local: 'lib/authorizationRoles.ts', remote: '/var/www/html/lib/authorizationRoles.ts' },
+    { local: 'lib/requestAuthorization.ts', remote: '/var/www/html/lib/requestAuthorization.ts' },
+    { local: 'app/api/requests/route.ts', remote: '/var/www/html/app/api/requests/route.ts' },
+    { local: 'app/api/requests/[id]/route.ts', remote: '/var/www/html/app/api/requests/[id]/route.ts' },
+    { local: 'app/api/requests/[id]/approve/route.ts', remote: '/var/www/html/app/api/requests/[id]/approve/route.ts' },
+    { local: 'app/api/requests/[id]/reject/route.ts', remote: '/var/www/html/app/api/requests/[id]/reject/route.ts' },
+    { local: 'app/configuracion-ti/page.tsx', remote: '/var/www/html/app/configuracion-ti/page.tsx' },
+    { local: 'app/acceso-denegado/page.tsx', remote: '/var/www/html/app/acceso-denegado/page.tsx' },
+    { local: 'app/dashboard/page.tsx', remote: '/var/www/html/app/dashboard/page.tsx' },
+    { local: 'app/admin/config/page.tsx', remote: '/var/www/html/app/admin/config/page.tsx' }
   ];
 
   for (const item of filesToTransfer) {

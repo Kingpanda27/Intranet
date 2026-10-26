@@ -4,6 +4,28 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y este proyecto se adhiere a [Semantic Versioning (SemVer)](https://semver.org/lang/es/).
 
+## [1.2.4] - 2026-10-26
+
+### Added
+- **Matriz de Permisos y Alcance de Datos (Data Scoping / Row-Level Authorization / IDOR Protection):**
+  - **Motor Central de Autorización (`lib/authorizationRoles.ts` y `lib/requestAuthorization.ts`):**
+    - `isCEO`: Acceso y alcance global para CEO / Master Admin (Ivan Reyes) / SuperAdmin. Visualización y gestión total sin restricciones corporativas.
+    - `canAccessITConfig` / `isTechnologyStaff`: Acceso exclusivo al módulo de Configuración de TI (`/admin/config`, `/configuracion-ti`, y `/api/whatsapp/*`) para personal de `Technology` / `IT` y `IT Manager`. Restricción total para RRHH, Managers de otras áreas, Supervisores y Empleados regulares.
+    - `canAccessApprovalsPanel`: Acceso al Panel de Aprobaciones (`/dashboard`) reservado para roles directivos y supervisores (`CEO`, `RRHH`, `Manager`, `IT Manager`, `Supervisor`, `Team Lead`, `Technology`). Bloqueo estricto para empleados regulares (`USER`, `AGENT`).
+    - `getTimeOffScopeFilter`: Cláusula SQL/ORM dinámica que impone aislamiento de datos por rol. Para Supervisores y Team Leads, filtra estrictamente por `userId IN managedUserIds` mediante las relaciones `supervisors` y `subLeaders` de sus grupos asignados. Para `IT_MANAGER`, permite alcance global en incidencias técnicas (`REMOTE_*`) y solicitudes de su equipo directo.
+    - `authorizeRequestAction`: Blindaje contra vulnerabilidades BOLA / IDOR. Valida a nivel de base de datos que el usuario solicitante sea supervisor legítimo del empleado antes de procesar cualquier cambio de estado.
+  - **Endpoints API Blindados (`app/api/requests/*`):**
+    - `POST` / `PATCH /api/requests/:id/approve`: Verificación de sesión y pertenencia a equipo. Responde `403 Forbidden` ante intentos de aprobación de solicitudes ajenas.
+    - `POST` / `PATCH /api/requests/:id/reject`: Verificación de pertenencia y captura obligatoria/opcional de motivo de rechazo.
+    - `GET /api/requests`: Consulta con alcance dinámico de solicitudes (`getTimeOffScopeFilter`) y filtrado opcional por `?status=`.
+    - `GET` / `PATCH /api/requests/:id`: Verificación de propiedad (solicitante) o supervisor directo para consultas puntuales.
+  - **Protección de Enrutamiento y Frontend:**
+    - Nueva página `/acceso-denegado` con diseño Dark Mode de alta seguridad, visualización de credenciales de sesión y botones de retorno contextual.
+    - Redirección de URL directa `/configuracion-ti` con validación en servidor hacia `/admin/config` o `/acceso-denegado`.
+    - Protección en Server Components de `/admin/config` y `/dashboard` contra accesos no autorizados.
+    - `middleware.ts`: Verificación perimetral en borde para rutas de interfaz (`/admin/config`, `/configuracion-ti`, `/dashboard`) y endpoints de configuración (`/api/whatsapp/*`).
+    - `Sidebar.tsx`: Ocultamiento de la opción `Configuración TI` para RRHH y otros roles no autorizados, manteniendo intactas las opciones para roles con permisos válidos.
+
 ## [1.2.3] - 2026-10-26
 
 ### Added

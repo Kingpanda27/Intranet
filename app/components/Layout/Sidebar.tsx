@@ -10,6 +10,7 @@ import React, { useState, useEffect } from 'react'
 import { getMyGroups } from '@/app/actions/teamActions'
 import { useSupportChat } from '@/app/components/SupportAILlama/SupportContext'
 import { canViewAuditLogs } from '@/lib/auditPermissions'
+import { canAccessITConfig, canAccessApprovalsPanel } from '@/lib/authorizationRoles'
 
 export function Sidebar() {
   const { data: session } = useSession()
@@ -20,7 +21,8 @@ export function Sidebar() {
   const { isSupportOpen, openSupportChat, closeSupportChat, activeView, canAccessAdmin } = useSupportChat()
 
   const isMasterAdmin = user?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || user?.isSuperAdmin
-  const hasDashboardAccess = isMasterAdmin || user?.role === "SUPERVISOR" || user?.role === "MANAGER" || user?.role === "IT_MANAGER" || user?.role === "TECHNOLOGY_ADMIN" || user?.role === "HR" || user?.role === "TECHNOLOGY"
+  const hasDashboardAccess = canAccessApprovalsPanel(user)
+  const isITConfigAccess = canAccessITConfig(user)
   const isTechnology = isMasterAdmin || user?.role === "TECHNOLOGY" || user?.role === "IT_MANAGER" || user?.role === "TECHNOLOGY_ADMIN" || user?.role === "HR"
   const canViewAudit = canViewAuditLogs(user)
   const isEmployeeOnly = !isMasterAdmin && (user?.role === "USER" || user?.role === "AGENT")
@@ -123,7 +125,7 @@ export function Sidebar() {
             <span>Gestión de Grupos</span>
           </Link>
         )}
-        {isTechnology && (
+        {isITConfigAccess && (
           <Link href="/admin/config" onClick={() => closeSupportChat()} className={getLinkClass("/admin/config")}>
             <Settings size={18} />
             <span>Configuración TI</span>

@@ -8,6 +8,14 @@ import { sendTimeOffEmail } from "@/lib/email"
 import { saveFile } from "./fileActions"
 import { createAuditLog } from "./auditActions"
 import { MIN_VACATION_DAYS } from "@/lib/vacationPolicy"
+import {
+  canAccessApprovalsPanel,
+  getTimeOffScopeFilter,
+  authorizeRequestAction,
+  getManagedProjectIds,
+  isCEO,
+  TECHNICAL_REQUEST_TYPES
+} from "@/lib/requestAuthorization"
 
 export type RequestType =
   | "VACATION"
@@ -54,15 +62,15 @@ export async function getEligibleEmployeesForTimeOff() {
   if (!session || !session.user) return []
 
   const user = session.user as any
-  const role = user.role
-  const userId = user.id
+  const role = (user.role || "").toUpperCase().trim()
 
-  const isManager = ["HR", "MANAGER", "IT_MANAGER", "TECHNOLOGY"].includes(role)
-  const isSupervisor = role === "SUPERVISOR" || role === "TEAM_LEAD"
+  if (!canAccessApprovalsPanel(user)) return []
 
-  if (!isManager && !isSupervisor) return []
+  const isMaster = isCEO(user)
+  const isHR = role === "HR"
 
-  if (isManager) {
+  // 1. CEO y RRHH -> Acceso a todos los empleados
+  if (isMaster || isHR) {
     const users = await prisma.user.findMany({
       where: { role: { not: "NO_ROLE" } },
       select: {
@@ -77,17 +85,52 @@ export async function getEligibleEmployeesForTimeOff() {
     return users.map(u => ({ ...u, vacationBalance: u.vacationBalance ?? 0 }))
   }
 
-  if (isSupervisor) {
-    const supervisedProjects = await (prisma.project as any).findMany({
-      where: { supervisors: { some: { id: userId } } },
+  // 2. IT Manager / Tecnología
+  if (role === "IT_MANAGER" || role === "TECHNOLOGY_ADMIN" || role === "TECHNOLOGY") {
+    const managedProjectIds = await getManagedProjectIds(user.id)
+    const techProjects = await prisma.project.findMany({
+      where: {
+        OR: [
+          { name: { contains: "tech" } },
+          { name: { contains: "software" } },
+          { name: { contains: "ti" } },
+          { name: { contains: "it" } },
+          ...(managedProjectIds.length > 0 ? [{ id: { in: managedProjectIds } }] : [])
+        ]
+      },
       select: { id: true }
     })
-    const projectIds = supervisedProjects.map((p: any) => p.id)
+    const techProjectIds = Array.from(new Set([...managedProjectIds, ...techProjects.map(p => p.id)]))
 
     const users = await prisma.user.findMany({
       where: {
         role: { not: "NO_ROLE" },
-        ...(projectIds.length > 0 ? { projectId: { in: projectIds } } : {})
+        OR: [
+          { role: { in: ["TECHNOLOGY", "TECHNOLOGY_ADMIN", "IT_MANAGER"] } },
+          ...(techProjectIds.length > 0 ? [{ projectId: { in: techProjectIds } }] : [])
+        ]
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        vacationBalance: true,
+        project: { select: { name: true } }
+      },
+      orderBy: { name: "asc" }
+    })
+    return users.map(u => ({ ...u, vacationBalance: u.vacationBalance ?? 0 }))
+  }
+
+  // 3. Supervisor / Team Lead / Manager de Operaciones -> Solo su equipo directo
+  if (role === "SUPERVISOR" || role === "TEAM_LEAD" || role === "MANAGER") {
+    const managedProjectIds = await getManagedProjectIds(user.id)
+    if (managedProjectIds.length === 0) return []
+
+    const users = await prisma.user.findMany({
+      where: {
+        role: { not: "NO_ROLE" },
+        projectId: { in: managedProjectIds }
       },
       select: {
         id: true,
@@ -654,7 +697,15 @@ export async function getPendingRequests() {
   if (!session || !session.user) throw new Error("No autorizado")
 
   const user = session.user as any
-  const role = user.role
+
+  if (!canAccessApprovalsPanel(user)) {
+    throw new Error("Acceso denegado: No tienes permisos para consultar solicitudes de aprobación.")
+  }
+
+  const scopeFilter = await getTimeOffScopeFilter(user)
+  if (scopeFilter === null) {
+    return []
+  }
 
   const selectFields = {
     id: true,
@@ -711,42 +762,16 @@ export async function getPendingRequests() {
     makeupDate: r.makeupDate ? r.makeupDate.toISOString() : null,
   })
 
-  // RRHH, MANAGER, IT_MANAGER y Administrador Maestro ven todo
-  const isMasterAdmin = user.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (user as any).isSuperAdmin
-  if (role === "HR" || role === "MANAGER" || role === "IT_MANAGER" || isMasterAdmin) {
-    const requests = await prisma.timeOffRequest.findMany({
-      where: { status: "PENDING" },
-      select: selectFields,
-      orderBy: { createdAt: "desc" },
-    })
+  const requests = await prisma.timeOffRequest.findMany({
+    where: {
+      status: "PENDING",
+      ...scopeFilter
+    },
+    select: selectFields,
+    orderBy: { createdAt: "desc" },
+  })
 
-    return requests.map(mapRequestDates)
-  }
-
-  // Supervisores ven solo su proyecto
-  if (role === "SUPERVISOR" || role === "TEAM_LEAD") {
-    const supervisedProjects = await (prisma.project as any).findMany({
-      where: { supervisors: { some: { id: user.id } } },
-      select: { id: true }
-    })
-    
-    const projectIds = supervisedProjects.map((p: any) => p.id)
-
-    const requests = await prisma.timeOffRequest.findMany({
-      where: {
-        status: "PENDING",
-        user: {
-          projectId: { in: projectIds }
-        }
-      },
-      select: selectFields,
-      orderBy: { createdAt: "desc" },
-    })
-
-    return requests.map(mapRequestDates)
-  }
-
-  return []
+  return requests.map(mapRequestDates)
 }
 
 export async function getAllSupervisedRequests() {
@@ -754,7 +779,15 @@ export async function getAllSupervisedRequests() {
   if (!session || !session.user) throw new Error("No autorizado")
 
   const user = session.user as any
-  const role = user.role
+
+  if (!canAccessApprovalsPanel(user)) {
+    throw new Error("Acceso denegado: No tienes permisos para consultar solicitudes de aprobación.")
+  }
+
+  const scopeFilter = await getTimeOffScopeFilter(user)
+  if (scopeFilter === null) {
+    return []
+  }
 
   const selectFields = {
     id: true,
@@ -811,40 +844,13 @@ export async function getAllSupervisedRequests() {
     makeupDate: r.makeupDate ? r.makeupDate.toISOString() : null,
   })
 
-  // RRHH, MANAGER, IT_MANAGER y Administrador Maestro ven todo
-  const isMasterAdmin = user.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (user as any).isSuperAdmin
-  if (role === "HR" || role === "MANAGER" || role === "IT_MANAGER" || isMasterAdmin) {
-    const requests = await prisma.timeOffRequest.findMany({
-      select: selectFields,
-      orderBy: { createdAt: "desc" },
-    })
+  const requests = await prisma.timeOffRequest.findMany({
+    where: scopeFilter,
+    select: selectFields,
+    orderBy: { createdAt: "desc" },
+  })
 
-    return requests.map(mapRequestDates)
-  }
-
-  // Supervisores ven solo su proyecto
-  if (role === "SUPERVISOR" || role === "TEAM_LEAD") {
-    const supervisedProjects = await (prisma.project as any).findMany({
-      where: { supervisors: { some: { id: user.id } } },
-      select: { id: true }
-    })
-    
-    const projectIds = supervisedProjects.map((p: any) => p.id)
-
-    const requests = await prisma.timeOffRequest.findMany({
-      where: {
-        user: {
-          projectId: { in: projectIds }
-        }
-      },
-      select: selectFields,
-      orderBy: { createdAt: "desc" },
-    })
-
-    return requests.map(mapRequestDates)
-  }
-
-  return []
+  return requests.map(mapRequestDates)
 }
 
 export async function updateRequestStatus(
@@ -867,17 +873,19 @@ export async function updateRequestStatus(
   if (!session || !session.user) throw new Error("No autorizado")
 
   const user = session.user as any
-  
-  if (user.role === "USER") throw new Error("No tienes permisos")
+
+  // 1. Verificación BOLA / IDOR Estricta
+  const auth = await authorizeRequestAction(user, requestId)
+  if (!auth.authorized) {
+    return {
+      success: false,
+      error: auth.error || "Acceso denegado (403 Forbidden): No tienes autorización sobre esta solicitud."
+    }
+  }
+
+  const oldRequest = auth.request
 
   try {
-    const oldRequest = await prisma.timeOffRequest.findUnique({
-      where: { id: requestId },
-      select: { status: true, userId: true, type: true, startDate: true, endDate: true }
-    })
-
-    if (!oldRequest) return { success: false, error: "Solicitud no encontrada" }
-
     // Logic for vacation balance deduction/restoration
     if (oldRequest.type === "VACATION") {
       const workingDays = await calculateWorkingDays(oldRequest.startDate, oldRequest.endDate)
@@ -922,7 +930,7 @@ export async function updateRequestStatus(
       if (extraParams.returnTime) updateData.returnTime = extraParams.returnTime
     }
 
-    const request = await prisma.timeOffRequest.update({
+    await prisma.timeOffRequest.update({
       where: { id: requestId },
       data: updateData,
     })
@@ -940,7 +948,7 @@ export async function updateRequestStatus(
 
     // Registro de Auditoría
     await createAuditLog(
-      "APPROVE_TIME_OFF",
+      status === "APPROVED" ? "APPROVE_TIME_OFF" : "REJECT_TIME_OFF",
       `TimeOffRequest:${requestId}`,
       `Solicitud de tiempo libre de tipo ${oldRequest.type} fue actualizada a '${status}' por ${user.name || user.email}. Nota: ${note || "Ninguna"}.`
     )
@@ -959,12 +967,26 @@ export async function deleteTimeOffRequest(requestId: string) {
   if (!session || !session.user) throw new Error("No autorizado")
 
   const user = session.user as any
-  if (user.role === "USER") throw new Error("No tienes permisos")
+
+  // Verificación BOLA / IDOR
+  const auth = await authorizeRequestAction(user, requestId)
+  if (!auth.authorized) {
+    return {
+      success: false,
+      error: auth.error || "Acceso denegado (403 Forbidden): No tienes autorización para eliminar esta solicitud."
+    }
+  }
 
   try {
     await prisma.timeOffRequest.delete({
       where: { id: requestId },
     })
+
+    await createAuditLog(
+      "DELETE_TIME_OFF",
+      `TimeOffRequest:${requestId}`,
+      `Solicitud de tiempo libre ${requestId} eliminada por ${user.name || user.email}.`
+    )
 
     revalidatePath("/dashboard")
     revalidatePath("/vacations")
@@ -1022,8 +1044,6 @@ export async function cancelTimeOffRequest(requestId: string) {
 
   const loggedInUser = session.user as any
   const userId = loggedInUser.id
-  const userRole = loggedInUser.role
-  const isManagement = ["SUPERVISOR", "MANAGER", "IT_MANAGER", "HR", "TECHNOLOGY"].includes(userRole)
 
   try {
     const existingReq = await prisma.timeOffRequest.findUnique({
@@ -1034,8 +1054,15 @@ export async function cancelTimeOffRequest(requestId: string) {
       return { success: false, error: "Solicitud no encontrada" }
     }
 
-    if (existingReq.userId !== userId && !isManagement) {
-      return { success: false, error: "No tienes permiso para cancelar esta solicitud" }
+    // Si no es el propio empleado dueño de la solicitud, validar autorización de mando
+    if (existingReq.userId !== userId) {
+      const auth = await authorizeRequestAction(loggedInUser, requestId)
+      if (!auth.authorized) {
+        return {
+          success: false,
+          error: auth.error || "Acceso denegado (403 Forbidden): No tienes permiso para cancelar la solicitud de este empleado."
+        }
+      }
     }
 
     if (existingReq.status === "CANCELLED") {
@@ -1055,8 +1082,14 @@ export async function cancelTimeOffRequest(requestId: string) {
       data: { status: "CANCELLED" }
     })
 
+    await createAuditLog(
+      "CANCEL_TIME_OFF",
+      `TimeOffRequest:${requestId}`,
+      `Solicitud de tiempo libre cancelada por ${loggedInUser.name || loggedInUser.email}.`
+    )
+
     revalidatePath("/vacations")
-    revalidatePath("/admin/vacations")
+    revalidatePath("/dashboard")
     return { success: true }
   } catch (error) {
     console.error("Error al cancelar solicitud:", error)
