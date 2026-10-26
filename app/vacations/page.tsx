@@ -63,7 +63,7 @@ export default async function VacationsPage() {
     .reduce((sum, r) => sum + (r.requestedDays || 0), 0)
 
   return (
-    <main className="container animate-in" style={{ paddingTop: "2.5rem", paddingBottom: "4rem", maxWidth: "1200px" }}>
+    <main className="container animate-in" style={{ paddingTop: "2.5rem", paddingBottom: "4rem", maxWidth: "1560px", width: "100%" }}>
       <header style={{ marginBottom: "2.5rem" }}>
         <h1 style={{ fontSize: "2rem", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <CalendarDays size={32} color="hsl(var(--primary))" />
@@ -93,12 +93,12 @@ export default async function VacationsPage() {
         <UpcomingHolidayCard upcomingHolidays={holidayEvents as any} />
       </div>
 
-      {/* Fila 2: Formulario (70%) y Widgets (30%) */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "2.5rem", alignItems: "flex-start", marginBottom: "2.5rem" }} className="vacations-grid">
+      {/* Fila 2: Formulario (Principal) y Widgets Lateral */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "2rem", alignItems: "flex-start", marginBottom: "2.5rem" }} className="vacations-grid">
         <style dangerouslySetInnerHTML={{__html: `
           @media (min-width: 1024px) {
             .vacations-grid {
-              grid-template-columns: 1fr 360px !important;
+              grid-template-columns: 1fr 380px !important;
             }
           }
         `}} />

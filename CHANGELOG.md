@@ -6,6 +6,13 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1
 
 ---
 
+## [1.2.1] - 2026-10-26
+
+### Changed
+- **Ampliación y Balance de Contenedor en Vacaciones y Permisos (`vacations/page.tsx`):**
+  - Se incrementó el `maxWidth` del contenedor de `1200px` a `1560px` conservando su centrado armónico, eliminando el espacio vacío sobredimensionado a la izquierda junto a la barra lateral sin apretar el lateral derecho.
+  - Ajuste de proporciones en la cuadrícula principal a `1fr 380px` con un espaciado óptimo (`gap: 2rem`), permitiendo que el formulario de solicitudes y las métricas aprovechen la resolución de pantalla distribuyéndose en columnas limpias de alta legibilidad.
+
 ## [1.2.0] - 2026-10-26
 
 ### Added

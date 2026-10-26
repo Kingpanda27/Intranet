@@ -37,7 +37,8 @@ async function main() {
     { local: 'app/components/Admin/AuditLogViewer.tsx', remote: '/var/www/html/app/components/Admin/AuditLogViewer.tsx' },
     { local: 'app/components/Layout/Sidebar.tsx', remote: '/var/www/html/app/components/Layout/Sidebar.tsx' },
     { local: 'app/components/Vacations/VacationForm.tsx', remote: '/var/www/html/app/components/Vacations/VacationForm.tsx' },
-    { local: 'app/components/Vacations/VacationList.tsx', remote: '/var/www/html/app/components/Vacations/VacationList.tsx' }
+    { local: 'app/components/Vacations/VacationList.tsx', remote: '/var/www/html/app/components/Vacations/VacationList.tsx' },
+    { local: 'app/vacations/page.tsx', remote: '/var/www/html/app/vacations/page.tsx' }
   ];
 
   for (const item of filesToTransfer) {
