@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { 
   Send, 
   CalendarDays, 
@@ -291,9 +291,14 @@ export function VacationForm({
   const [incidentContext, setIncidentContext] = useState("")
   const [incidentNeedsItReview, setIncidentNeedsItReview] = useState(false)
   
-  // Solicitar en nombre de otro empleado (para Managers/Supervisores)
+  // Solicitar en nombre de equipo / colaboradores (para Managers/Supervisores)
   const [onBehalf, setOnBehalf] = useState(false)
-  const [targetUserId, setTargetUserId] = useState("")
+  const [selectionMethod, setSelectionMethod] = useState<"GROUP" | "INDIVIDUAL">("GROUP")
+  const [selectedGroup, setSelectedGroup] = useState<string>("")
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([])
+  const [isExceptionListOpen, setIsExceptionListOpen] = useState(false)
+  const [showMassConfirmModal, setShowMassConfirmModal] = useState(false)
+  const [pendingFormData, setPendingFormData] = useState<FormData | null>(null)
   const [autoApprove, setAutoApprove] = useState(true)
 
   // Búsqueda autocompletada de empleados
@@ -308,7 +313,9 @@ export function VacationForm({
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const selectedEmployee = employees.find(e => e.id === targetUserId)
+  const selectedEmployee = selectedEmployeeIds.length === 1 
+    ? employees.find(e => e.id === selectedEmployeeIds[0]) 
+    : null
   const effectiveBalance = (onBehalf && selectedEmployee) ? selectedEmployee.vacationBalance : balance
 
   // Identificar si la tarjeta seleccionada es de Incidencia Remota
@@ -408,8 +415,40 @@ export function VacationForm({
     const nameMatch = emp.name?.toLowerCase().includes(term)
     const emailMatch = emp.email?.toLowerCase().includes(term)
     const projectMatch = emp.project?.name?.toLowerCase().includes(term)
-    return nameMatch || emailMatch || projectMatch
+    const idMatch = emp.id.toLowerCase().includes(term)
+    return nameMatch || emailMatch || projectMatch || idMatch
   })
+
+  // Grupos calculados dinámicamente desde la lista de colaboradores
+  const availableGroups = useMemo(() => {
+    const map = new Map<string, EmployeeOption[]>()
+    employees.forEach(emp => {
+      const gName = emp.project?.name?.trim() || "Sin Proyecto / General"
+      if (!map.has(gName)) map.set(gName, [])
+      map.get(gName)!.push(emp)
+    })
+    return Array.from(map.entries())
+      .map(([name, members]) => ({ name, count: members.length, members }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [employees])
+
+  const handleAddAllFromGroup = () => {
+    if (!selectedGroup) return
+    if (selectedGroup === "ALL") {
+      const allIds = employees.map(e => e.id)
+      setSelectedEmployeeIds(prev => Array.from(new Set([...prev, ...allIds])))
+    } else {
+      const grp = availableGroups.find(g => g.name === selectedGroup)
+      if (grp) {
+        const groupIds = grp.members.map(e => e.id)
+        setSelectedEmployeeIds(prev => Array.from(new Set([...prev, ...groupIds])))
+      }
+    }
+  }
+
+  const handleRemoveIndividual = (empId: string) => {
+    setSelectedEmployeeIds(prev => prev.filter(id => id !== empId))
+  }
 
   const handleFileChange = (selectedFile: File | null) => {
     setFileError(null)
@@ -486,6 +525,7 @@ export function VacationForm({
   }
 
   const requestedDays = calculateDays()
+  const isBalanceExceeded = !onBehalf && requestType === "VACATION" && requestedDays > effectiveBalance
 
   // Manejar cambio de pestañas de categoría
   const handleCategoryChange = (catId: CategoryId) => {
@@ -508,14 +548,67 @@ export function VacationForm({
     return t.category === selectedCategory
   })
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+  const executeSubmission = async (formData: FormData) => {
     setLoading(true)
     setMessage(null)
-
-    if (onBehalf && !targetUserId) {
-      setMessage({ type: "error", text: "Debes buscar y seleccionar un empleado de la lista para registrar la solicitud." })
+    try {
+      const result = await createTimeOffRequest(formData)
       setLoading(false)
+      setShowMassConfirmModal(false)
+      setPendingFormData(null)
+
+      if (result?.error) {
+        setMessage({ type: "error", text: result.error })
+      } else {
+        const isMass = onBehalf && selectedEmployeeIds.length > 1
+        setMessage({ 
+          type: "success", 
+          text: result.message || (isMass
+            ? `Se aplicó la incidencia/solicitud exitosamente a ${selectedEmployeeIds.length} colaboradores del equipo.`
+            : isRemoteIncident
+              ? "Reporte de incidencia enviado con éxito a tu supervisor y soporte IT."
+              : onBehalf 
+                ? `Solicitud enviada exitosamente para ${selectedEmployee?.name || "el colaborador"}.`
+                : "Solicitud enviada correctamente.")
+        })
+        setStartDate("")
+        setEndDate("")
+        setLeaveTime("")
+        setSpecialType("FULL")
+        setExitTime("")
+        setReturnTime("")
+        setHoursRequested("")
+        setAbsenceDate("")
+        setHoursToMakeUp("")
+        setMakeupDate("")
+        setMakeupStartTime("")
+        setMakeupEndTime("")
+        setIncidentStartTime("")
+        setIncidentEndTime("")
+        setIncidentExactHours("")
+        setIncidentContext("")
+        setIncidentNeedsItReview(false)
+        setSelectedEmployeeIds([])
+        setSearchTerm("")
+        setSelectedGroup("")
+        setIsExceptionListOpen(false)
+        setOnBehalf(false)
+        handleFileChange(null)
+      }
+    } catch (err: any) {
+      setLoading(false)
+      setShowMassConfirmModal(false)
+      setPendingFormData(null)
+      setMessage({ type: "error", text: "Error inesperado al enviar la solicitud." })
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setMessage(null)
+
+    if (onBehalf && selectedEmployeeIds.length === 0) {
+      setMessage({ type: "error", text: "Debes seleccionar al menos un colaborador para registrar en nombre del equipo." })
       return
     }
 
@@ -529,12 +622,11 @@ export function VacationForm({
           type: "error", 
           text: `Por políticas de la empresa, las solicitudes de vacaciones deben realizarse con al menos 25 días de anticipación. La fecha de inicio mínima permitida a partir de hoy es el ${dateFormatted}.` 
         })
-        setLoading(false)
         return
       }
     }
 
-    if (requestType === "VACATION") {
+    if (requestType === "VACATION" && !onBehalf) {
       const currentBalance = effectiveBalance
       if (currentBalance >= MIN_VACATION_DAYS) {
         if (requestedDays < MIN_VACATION_DAYS) {
@@ -542,7 +634,6 @@ export function VacationForm({
             type: "error",
             text: `Las solicitudes de vacaciones deben ser de un mínimo de ${MIN_VACATION_DAYS} días laborables consecutivos, de acuerdo con la política de la empresa.`
           })
-          setLoading(false)
           return
         }
       } else {
@@ -551,7 +642,6 @@ export function VacationForm({
             type: "error",
             text: `Tu saldo disponible es de ${currentBalance} día${currentBalance !== 1 ? 's' : ''}. Cuando el saldo es menor a ${MIN_VACATION_DAYS} días, debes solicitar la totalidad de los días restantes (${currentBalance} día${currentBalance !== 1 ? 's' : ''}).`
           })
-          setLoading(false)
           return
         }
       }
@@ -561,32 +651,34 @@ export function VacationForm({
     const isDocumentRequired = !!DOCUMENT_GUIDELINES[requestType]
     if (isDocumentRequired && !file) {
       setMessage({ type: "error", text: "La documentación de respaldo es obligatoria para este tipo de solicitud." })
-      setLoading(false)
       return
     }
-    
+
+    if (isRemoteIncident) {
+      if (!incidentDate) {
+        setMessage({ type: "error", text: "Debes seleccionar la fecha de la falla." })
+        return
+      }
+      if (!incidentStartTime || !incidentEndTime) {
+        setMessage({ type: "error", text: "Debes ingresar la hora en que empezó y la hora en que terminó la falla." })
+        return
+      }
+    }
+
     const formData = new FormData(e.currentTarget)
     if (file) {
       formData.set("document", file)
     }
 
     if (onBehalf) {
-      formData.set("targetUserId", targetUserId)
+      formData.set("assigned_employee_ids", JSON.stringify(selectedEmployeeIds))
+      if (selectedEmployeeIds.length > 0) {
+        formData.set("targetUserId", selectedEmployeeIds[0])
+      }
       formData.set("autoApprove", autoApprove ? "true" : "false")
     }
 
     if (isRemoteIncident) {
-      if (!incidentDate) {
-        setMessage({ type: "error", text: "Debes seleccionar la fecha de la falla." })
-        setLoading(false)
-        return
-      }
-      if (!incidentStartTime || !incidentEndTime) {
-        setMessage({ type: "error", text: "Debes ingresar la hora en que empezó y la hora en que terminó la falla." })
-        setLoading(false)
-        return
-      }
-
       formData.set("incidentDate", incidentDate)
       formData.set("incidentStartTime", incidentStartTime)
       formData.set("incidentEndTime", incidentEndTime)
@@ -610,47 +702,14 @@ export function VacationForm({
       formData.set("makeupEndTime", makeupEndTime)
     }
 
-    try {
-      const result = await createTimeOffRequest(formData)
-      
-      setLoading(false)
-      if (result?.error) {
-        setMessage({ type: "error", text: result.error })
-      } else {
-        setMessage({ 
-          type: "success", 
-          text: isRemoteIncident
-            ? "Reporte de incidencia enviado con éxito a tu supervisor y soporte IT."
-            : onBehalf 
-              ? `Solicitud enviada exitosamente para ${selectedEmployee?.name || "el empleado"}.`
-              : "Solicitud enviada correctamente." 
-        })
-        setStartDate("")
-        setEndDate("")
-        setLeaveTime("")
-        setSpecialType("FULL")
-        setExitTime("")
-        setReturnTime("")
-        setHoursRequested("")
-        setAbsenceDate("")
-        setHoursToMakeUp("")
-        setMakeupDate("")
-        setMakeupStartTime("")
-        setMakeupEndTime("")
-        setIncidentStartTime("")
-        setIncidentEndTime("")
-        setIncidentExactHours("")
-        setIncidentContext("")
-        setIncidentNeedsItReview(false)
-        setTargetUserId("")
-        setSearchTerm("")
-        setOnBehalf(false)
-        handleFileChange(null)
-      }
-    } catch (err: any) {
-      setLoading(false)
-      setMessage({ type: "error", text: "Error inesperado al enviar la solicitud." })
+    // Diálogo de confirmación claro si hay más de 1 persona seleccionada
+    if (onBehalf && selectedEmployeeIds.length > 1) {
+      setPendingFormData(formData)
+      setShowMassConfirmModal(true)
+      return
     }
+
+    await executeSubmission(formData)
   }
 
   return (
@@ -749,13 +808,14 @@ export function VacationForm({
               </span>
             </div>
 
-            <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
+            {/* 1. Selector de Ámbito de Registro */}
+            <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "center" }}>
               <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", fontSize: "15px", cursor: "pointer", fontWeight: !onBehalf ? 700 : 500, color: !onBehalf ? "#f8fafc" : "#94a3b8" }}>
                 <input 
                   type="radio" 
                   name="onBehalfMode" 
                   checked={!onBehalf} 
-                  onChange={() => { setOnBehalf(false); setTargetUserId(""); setSearchTerm(""); }} 
+                  onChange={() => { setOnBehalf(false); setSelectedEmployeeIds([]); setSearchTerm(""); setSelectedGroup(""); setIsExceptionListOpen(false); }} 
                   style={{ width: "17px", height: "17px", accentColor: "#3b82f6" }}
                 />
                 <span>Para mí mismo</span>
@@ -769,112 +829,516 @@ export function VacationForm({
                   onChange={() => setOnBehalf(true)} 
                   style={{ width: "17px", height: "17px", accentColor: "#3b82f6" }}
                 />
-                <span>Registrar en nombre de un empleado</span>
+                <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <span>En nombre de equipo / colaboradores</span>
+                  <span style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    backgroundColor: "rgba(59, 130, 246, 0.2)",
+                    color: "#93c5fd",
+                    padding: "0.15rem 0.55rem",
+                    borderRadius: "9999px",
+                    border: "1px solid rgba(59, 130, 246, 0.35)"
+                  }}>
+                    Rol Supervisor/Manager
+                  </span>
+                </span>
               </label>
             </div>
 
+            {/* 2. Panel de Asignación Masiva (se muestra condicionalmente) */}
             {onBehalf && (
-              <div className="animate-in" style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "0.25rem", borderTop: "1px solid rgba(51, 65, 85, 0.5)", paddingTop: "1rem" }}>
-                <div ref={employeeDropdownRef} style={{ position: "relative" }}>
-                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 600, fontSize: "15px", color: "#e2e8f0" }}>
-                    Buscar o Seleccionar Empleado *
-                  </label>
+              <div className="animate-in" style={{ display: "flex", flexDirection: "column", gap: "1.15rem", marginTop: "0.25rem", borderTop: "1px solid rgba(51, 65, 85, 0.5)", paddingTop: "1rem" }}>
+                
+                {/* Selector de Método de Selección (Sub-tabs / Toggle) */}
+                <div style={{
+                  display: "inline-flex",
+                  padding: "0.25rem",
+                  borderRadius: "0.75rem",
+                  backgroundColor: "rgba(15, 23, 42, 0.9)",
+                  border: "1px solid rgba(51, 65, 85, 0.7)",
+                  width: "fit-content",
+                  gap: "0.35rem"
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectionMethod("GROUP")}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      padding: "0.55rem 1rem",
+                      borderRadius: "0.6rem",
+                      fontSize: "13.5px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      border: "none",
+                      transition: "all 0.15s ease",
+                      backgroundColor: selectionMethod === "GROUP" ? "rgba(59, 130, 246, 0.25)" : "transparent",
+                      color: selectionMethod === "GROUP" ? "#60a5fa" : "#94a3b8",
+                      boxShadow: selectionMethod === "GROUP" ? "0 2px 8px rgba(59, 130, 246, 0.25)" : "none",
+                      outline: selectionMethod === "GROUP" ? "1px solid rgba(59, 130, 246, 0.5)" : "none"
+                    }}
+                  >
+                    <Users size={16} />
+                    <span>Por Grupo / Campaña / Turno</span>
+                  </button>
 
-                  <div style={{ display: "flex", alignItems: "center", position: "relative" }}>
-                    <Search size={18} style={{ position: "absolute", left: "1.1rem", color: "#94a3b8", pointerEvents: "none" }} />
-                    <input
-                      type="text"
-                      className="input"
-                      placeholder="Escribe el nombre o correo del empleado..."
-                      value={selectedEmployee ? (selectedEmployee.name || selectedEmployee.email || "") : searchTerm}
-                      onFocus={() => setIsDropdownOpen(true)}
-                      onChange={(e) => {
-                        setSearchTerm(e.target.value)
-                        if (targetUserId) setTargetUserId("")
-                        setIsDropdownOpen(true)
-                      }}
-                      style={{
-                        fontSize: "15px",
-                        borderRadius: "0.75rem",
-                        padding: "0.85rem 2.75rem 0.85rem 3rem",
-                        width: "100%",
-                        fontWeight: 600,
-                        border: selectedEmployee ? "2px solid #3b82f6" : "1px solid #334155",
-                        backgroundColor: "#0f172a",
-                        color: "#f8fafc"
-                      }}
-                    />
-                    {(selectedEmployee || searchTerm) && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectionMethod("INDIVIDUAL")}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      padding: "0.55rem 1rem",
+                      borderRadius: "0.6rem",
+                      fontSize: "13.5px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      border: "none",
+                      transition: "all 0.15s ease",
+                      backgroundColor: selectionMethod === "INDIVIDUAL" ? "rgba(59, 130, 246, 0.25)" : "transparent",
+                      color: selectionMethod === "INDIVIDUAL" ? "#60a5fa" : "#94a3b8",
+                      boxShadow: selectionMethod === "INDIVIDUAL" ? "0 2px 8px rgba(59, 130, 246, 0.25)" : "none",
+                      outline: selectionMethod === "INDIVIDUAL" ? "1px solid rgba(59, 130, 246, 0.5)" : "none"
+                    }}
+                  >
+                    <Search size={16} />
+                    <span>Selección Individual Múltiple</span>
+                  </button>
+                </div>
+
+                {/* Opción A: Por Grupo / Campaña / Turno */}
+                {selectionMethod === "GROUP" && (
+                  <div className="animate-in" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                    <label style={{ display: "block", fontWeight: 600, fontSize: "14px", color: "#e2e8f0" }}>
+                      Elegir Agrupación o Campaña *
+                    </label>
+                    <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+                      <select
+                        value={selectedGroup}
+                        onChange={(e) => setSelectedGroup(e.target.value)}
+                        className="input"
+                        style={{
+                          flex: "1 1 300px",
+                          fontSize: "14px",
+                          borderRadius: "0.75rem",
+                          padding: "0.75rem 1rem",
+                          fontWeight: 600,
+                          backgroundColor: "#0f172a",
+                          color: "#f8fafc",
+                          border: "1px solid #334155"
+                        }}
+                      >
+                        <option value="">-- Selecciona una agrupación o departamento --</option>
+                        <option value="ALL">🌟 Mi Equipo Directo / Todos los Colaboradores ({employees.length} personas)</option>
+                        {availableGroups.map((grp) => (
+                          <option key={grp.name} value={grp.name}>
+                            🏢 {grp.name} ({grp.count} personas)
+                          </option>
+                        ))}
+                      </select>
+
                       <button
                         type="button"
-                        onClick={() => {
-                          setTargetUserId("")
-                          setSearchTerm("")
-                          setIsDropdownOpen(true)
-                        }}
+                        onClick={handleAddAllFromGroup}
+                        disabled={!selectedGroup}
                         style={{
-                          position: "absolute",
-                          right: "0.85rem",
-                          background: "none",
-                          border: "none",
-                          color: "#94a3b8",
-                          cursor: "pointer",
-                          padding: "0.35rem"
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.5rem",
+                          padding: "0.75rem 1.25rem",
+                          borderRadius: "0.75rem",
+                          backgroundColor: selectedGroup ? "#2563eb" : "rgba(30, 41, 59, 0.5)",
+                          color: selectedGroup ? "#ffffff" : "#64748b",
+                          border: selectedGroup ? "1px solid #3b82f6" : "1px solid #334155",
+                          fontSize: "14px",
+                          fontWeight: 700,
+                          cursor: selectedGroup ? "pointer" : "not-allowed",
+                          transition: "all 0.15s ease",
+                          whiteSpace: "nowrap"
                         }}
-                        title="Limpiar búsqueda"
+                        title="Añadir todos los miembros de este grupo a la asignación"
                       >
-                        <X size={18} />
+                        <Check size={16} />
+                        <span>Seleccionar todos</span>
                       </button>
-                    )}
+                    </div>
+                    <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8" }}>
+                      Al hacer clic en &quot;Seleccionar todos&quot; se añadirán los miembros del grupo. Puedes desmarcar excepciones en la barra de abajo.
+                    </p>
                   </div>
+                )}
 
-                  {/* Dropdown flotante con resultados filtrados */}
-                  {isDropdownOpen && !selectedEmployee && (
-                    <div 
-                      style={{
-                        position: "absolute",
-                        top: "calc(100% + 0.45rem)",
-                        left: 0,
-                        right: 0,
-                        maxHeight: "280px",
-                        overflowY: "auto",
-                        backgroundColor: "#0f172a",
-                        color: "#f8fafc",
-                        border: "1px solid #3b82f6",
-                        borderRadius: "0.875rem",
-                        boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.95)",
-                        zIndex: 9999,
-                        padding: "0.5rem",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "0.35rem"
-                      }}
-                    >
-                      {filteredEmployees.length > 0 ? (
-                        filteredEmployees.map((emp) => (
-                          <div
-                            key={emp.id}
+                {/* Opción B: Selección Individual Múltiple */}
+                {selectionMethod === "INDIVIDUAL" && (
+                  <div className="animate-in" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                    <label style={{ display: "block", fontWeight: 600, fontSize: "14px", color: "#e2e8f0" }}>
+                      Buscar Colaborador por Nombre, Correo o ID
+                    </label>
+                    <div ref={employeeDropdownRef} style={{ position: "relative" }}>
+                      <div style={{ display: "flex", alignItems: "center", position: "relative" }}>
+                        <Search size={18} style={{ position: "absolute", left: "1.1rem", color: "#94a3b8", pointerEvents: "none" }} />
+                        <input
+                          type="text"
+                          className="input"
+                          placeholder="Escribe el nombre, correo o ID del colaborador..."
+                          value={searchTerm}
+                          onFocus={() => setIsDropdownOpen(true)}
+                          onChange={(e) => {
+                            setSearchTerm(e.target.value)
+                            setIsDropdownOpen(true)
+                          }}
+                          style={{
+                            fontSize: "14.5px",
+                            borderRadius: "0.75rem",
+                            padding: "0.8rem 2.75rem 0.8rem 3rem",
+                            width: "100%",
+                            fontWeight: 600,
+                            border: "1px solid #334155",
+                            backgroundColor: "#0f172a",
+                            color: "#f8fafc"
+                          }}
+                        />
+                        {searchTerm && (
+                          <button
+                            type="button"
                             onClick={() => {
-                              setTargetUserId(emp.id)
-                              setSearchTerm(emp.name || emp.email || "")
+                              setSearchTerm("")
                               setIsDropdownOpen(false)
                             }}
                             style={{
-                              padding: "0.85rem 1rem",
-                              borderRadius: "0.65rem",
+                              position: "absolute",
+                              right: "0.85rem",
+                              background: "none",
+                              border: "none",
+                              color: "#94a3b8",
                               cursor: "pointer",
+                              padding: "0.35rem"
+                            }}
+                            title="Limpiar búsqueda"
+                          >
+                            <X size={18} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Dropdown predictivo de resultados */}
+                      {isDropdownOpen && (
+                        <div 
+                          style={{
+                            position: "absolute",
+                            top: "calc(100% + 0.45rem)",
+                            left: 0,
+                            right: 0,
+                            maxHeight: "260px",
+                            overflowY: "auto",
+                            backgroundColor: "#0f172a",
+                            color: "#f8fafc",
+                            border: "1px solid #3b82f6",
+                            borderRadius: "0.875rem",
+                            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.95)",
+                            zIndex: 9999,
+                            padding: "0.5rem",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "0.35rem"
+                          }}
+                        >
+                          {filteredEmployees.length > 0 ? (
+                            filteredEmployees.slice(0, 40).map((emp) => {
+                              const isAlreadySelected = selectedEmployeeIds.includes(emp.id)
+                              return (
+                                <div
+                                  key={emp.id}
+                                  onClick={() => {
+                                    if (isAlreadySelected) {
+                                      handleRemoveIndividual(emp.id)
+                                    } else {
+                                      setSelectedEmployeeIds(prev => [...prev, emp.id])
+                                    }
+                                    setSearchTerm("")
+                                  }}
+                                  style={{
+                                    padding: "0.7rem 0.9rem",
+                                    borderRadius: "0.6rem",
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    transition: "all 0.15s ease",
+                                    backgroundColor: isAlreadySelected ? "rgba(59, 130, 246, 0.2)" : "rgba(30, 41, 59, 0.5)",
+                                    border: isAlreadySelected ? "1px solid #3b82f6" : "1px solid rgba(51, 65, 85, 0.4)"
+                                  }}
+                                >
+                                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                                    <div style={{
+                                      width: "32px",
+                                      height: "32px",
+                                      borderRadius: "50%",
+                                      backgroundColor: isAlreadySelected ? "#2563eb" : "rgba(59, 130, 246, 0.2)",
+                                      color: isAlreadySelected ? "#ffffff" : "#60a5fa",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      fontWeight: 800,
+                                      fontSize: "13px",
+                                      flexShrink: 0
+                                    }}>
+                                      {(emp.name || emp.email || "U").charAt(0).toUpperCase()}
+                                    </div>
+                                    <div>
+                                      <div style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc", lineHeight: 1.2 }}>
+                                        {emp.name || emp.email}
+                                      </div>
+                                      {emp.email && <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "0.15rem" }}>{emp.email}</div>}
+                                    </div>
+                                  </div>
+
+                                  <div style={{ textAlign: "right", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                    {emp.project?.name && (
+                                      <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 600, backgroundColor: "rgba(15, 23, 42, 0.8)", padding: "0.2rem 0.5rem", borderRadius: "0.35rem" }}>
+                                        {emp.project.name}
+                                      </span>
+                                    )}
+                                    {isAlreadySelected ? (
+                                      <span style={{ fontSize: "12px", fontWeight: 700, color: "#60a5fa", display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                                        <Check size={14} /> Asignado
+                                      </span>
+                                    ) : (
+                                      <span style={{ fontSize: "12px", fontWeight: 600, color: "#94a3b8" }}>
+                                        + Añadir
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })
+                          ) : (
+                            <div style={{ padding: "1.25rem", fontSize: "13.5px", color: "#94a3b8", textAlign: "center", fontWeight: 600 }}>
+                              No se encontraron colaboradores coincidentes.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Chips de colaboradores seleccionados */}
+                    {selectedEmployeeIds.length > 0 && (
+                      <div style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "0.5rem",
+                        padding: "0.75rem",
+                        backgroundColor: "rgba(15, 23, 42, 0.7)",
+                        border: "1px solid rgba(51, 65, 85, 0.6)",
+                        borderRadius: "0.75rem",
+                        maxHeight: "150px",
+                        overflowY: "auto"
+                      }}>
+                        {selectedEmployeeIds.map(empId => {
+                          const emp = employees.find(e => e.id === empId)
+                          return (
+                            <div 
+                              key={empId}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.45rem",
+                                padding: "0.3rem 0.65rem",
+                                borderRadius: "0.5rem",
+                                backgroundColor: "rgba(30, 41, 59, 0.9)",
+                                border: "1px solid rgba(59, 130, 246, 0.35)",
+                                color: "#f1f5f9",
+                                fontSize: "13.5px",
+                                fontWeight: 600
+                              }}
+                            >
+                              <div style={{
+                                width: "22px",
+                                height: "22px",
+                                borderRadius: "50%",
+                                backgroundColor: "#2563eb",
+                                color: "#ffffff",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: "11px",
+                                fontWeight: 800,
+                                flexShrink: 0
+                              }}>
+                                {(emp?.name || emp?.email || "U").charAt(0).toUpperCase()}
+                              </div>
+                              <span style={{ maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {emp?.name || emp?.email || empId}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveIndividual(empId)}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  color: "#94a3b8",
+                                  cursor: "pointer",
+                                  padding: "2px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  borderRadius: "3px"
+                                }}
+                                title="Remover"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 2. Barra de Resumen y Excepciones */}
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: "0.75rem",
+                  padding: "0.85rem 1rem",
+                  backgroundColor: "rgba(15, 23, 42, 0.85)",
+                  border: "1px solid rgba(51, 65, 85, 0.7)",
+                  borderRadius: "0.75rem"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                    <Users size={18} color="#60a5fa" />
+                    <span style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc" }}>
+                      Total asignados:
+                    </span>
+                    <span style={{
+                      fontSize: "13.5px",
+                      fontWeight: 800,
+                      backgroundColor: selectedEmployeeIds.length > 0 ? "rgba(59, 130, 246, 0.2)" : "rgba(100, 116, 139, 0.2)",
+                      color: selectedEmployeeIds.length > 0 ? "#93c5fd" : "#94a3b8",
+                      border: `1px solid ${selectedEmployeeIds.length > 0 ? "rgba(59, 130, 246, 0.4)" : "rgba(100, 116, 139, 0.3)"}`,
+                      padding: "0.2rem 0.65rem",
+                      borderRadius: "9999px"
+                    }}>
+                      👥 {selectedEmployeeIds.length} colaborador{selectedEmployeeIds.length !== 1 ? "es" : ""}
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    {selectedEmployeeIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setIsExceptionListOpen(prev => !prev)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.4rem",
+                          fontSize: "13px",
+                          fontWeight: 600,
+                          color: isExceptionListOpen ? "#60a5fa" : "#cbd5e1",
+                          background: isExceptionListOpen ? "rgba(59, 130, 246, 0.15)" : "rgba(30, 41, 59, 0.6)",
+                          border: `1px solid ${isExceptionListOpen ? "rgba(59, 130, 246, 0.4)" : "rgba(51, 65, 85, 0.8)"}`,
+                          padding: "0.45rem 0.85rem",
+                          borderRadius: "0.5rem",
+                          cursor: "pointer",
+                          transition: "all 0.15s ease"
+                        }}
+                      >
+                        <span>Ver lista / Gestionar excepciones</span>
+                        {isExceptionListOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                      </button>
+                    )}
+
+                    {selectedEmployeeIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedEmployeeIds([])
+                          setIsExceptionListOpen(false)
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.35rem",
+                          fontSize: "13px",
+                          fontWeight: 600,
+                          color: "#f87171",
+                          background: "rgba(239, 68, 68, 0.1)",
+                          border: "1px solid rgba(239, 68, 68, 0.25)",
+                          padding: "0.45rem 0.75rem",
+                          borderRadius: "0.5rem",
+                          cursor: "pointer",
+                          transition: "all 0.15s ease"
+                        }}
+                        title="Remover todos los colaboradores seleccionados"
+                      >
+                        <RotateCcw size={14} />
+                        <span>Limpiar selección</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Lista desplegable para desmarcar excepciones */}
+                {isExceptionListOpen && selectedEmployeeIds.length > 0 && (
+                  <div className="animate-in" style={{
+                    backgroundColor: "rgba(15, 23, 42, 0.95)",
+                    border: "1px solid rgba(59, 130, 246, 0.3)",
+                    borderRadius: "0.75rem",
+                    padding: "0.85rem 1rem",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.6rem"
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ fontSize: "12.5px", color: "#94a3b8", fontWeight: 600 }}>
+                        Desmarca a los colaboradores específicos que NO deben incluirse en este registro:
+                      </div>
+                      <span style={{ fontSize: "12px", color: "#60a5fa", fontWeight: 700 }}>
+                        {selectedEmployeeIds.length} incluidos
+                      </span>
+                    </div>
+
+                    <div style={{
+                      maxHeight: "220px",
+                      overflowY: "auto",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.4rem",
+                      paddingRight: "0.25rem"
+                    }}>
+                      {selectedEmployeeIds.map(empId => {
+                        const emp = employees.find(e => e.id === empId)
+                        return (
+                          <label 
+                            key={empId}
+                            style={{
                               display: "flex",
-                              justifyContent: "space-between",
                               alignItems: "center",
-                              transition: "all 0.15s ease",
-                              backgroundColor: targetUserId === emp.id ? "rgba(59, 130, 246, 0.2)" : "rgba(30, 41, 59, 0.5)",
-                              border: targetUserId === emp.id ? "1px solid #3b82f6" : "1px solid rgba(51, 65, 85, 0.4)"
+                              justifyContent: "space-between",
+                              padding: "0.55rem 0.75rem",
+                              backgroundColor: "rgba(30, 41, 59, 0.6)",
+                              border: "1px solid rgba(51, 65, 85, 0.5)",
+                              borderRadius: "0.5rem",
+                              cursor: "pointer",
+                              transition: "all 0.15s ease"
                             }}
                           >
-                            <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+                              <input
+                                type="checkbox"
+                                checked={true}
+                                onChange={() => handleRemoveIndividual(empId)}
+                                style={{ width: "16px", height: "16px", accentColor: "#3b82f6", cursor: "pointer" }}
+                              />
                               <div style={{
-                                width: "38px",
-                                height: "38px",
+                                width: "28px",
+                                height: "28px",
                                 borderRadius: "50%",
                                 backgroundColor: "rgba(59, 130, 246, 0.2)",
                                 color: "#60a5fa",
@@ -882,56 +1346,39 @@ export function VacationForm({
                                 alignItems: "center",
                                 justifyContent: "center",
                                 fontWeight: 800,
-                                fontSize: "15px",
-                                flexShrink: 0
+                                fontSize: "12px"
                               }}>
-                                {(emp.name || emp.email || "U").charAt(0).toUpperCase()}
+                                {(emp?.name || emp?.email || "U").charAt(0).toUpperCase()}
                               </div>
                               <div>
-                                <div style={{ fontSize: "15px", fontWeight: 700, color: "#f8fafc", lineHeight: 1.2 }}>
-                                  {emp.name || emp.email}
+                                <div style={{ fontSize: "13.5px", fontWeight: 700, color: "#f8fafc" }}>
+                                  {emp?.name || emp?.email || empId}
                                 </div>
-                                {emp.email && <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "0.2rem" }}>{emp.email}</div>}
+                                {emp?.email && <div style={{ fontSize: "11.5px", color: "#94a3b8" }}>{emp.email}</div>}
                               </div>
                             </div>
-                            <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.2rem" }}>
-                              <span style={{ 
-                                fontSize: "13px", 
-                                fontWeight: 800, 
-                                backgroundColor: "rgba(59, 130, 246, 0.2)", 
-                                color: "#93c5fd",
-                                padding: "0.25rem 0.6rem",
-                                borderRadius: "0.5rem"
-                              }}>
-                                {emp.vacationBalance} días
-                              </span>
-                              {emp.project?.name && (
-                                <div style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 600 }}>
-                                  {emp.project.name}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div style={{ padding: "1.25rem", fontSize: "14px", color: "#94a3b8", textAlign: "center", fontWeight: 600 }}>
-                          No se encontraron empleados coincidentes.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
 
-                {selectedEmployee && (
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#0f172a", padding: "0.85rem 1.15rem", borderRadius: "0.75rem", border: "1px solid #334155" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-                      <UserCheck size={18} color="#3b82f6" />
-                      <span style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc" }}>Empleado: {selectedEmployee.name}</span>
+                            {emp?.project?.name && (
+                              <span style={{
+                                fontSize: "11.5px",
+                                fontWeight: 600,
+                                color: "#94a3b8",
+                                backgroundColor: "rgba(15, 23, 42, 0.8)",
+                                padding: "0.2rem 0.5rem",
+                                borderRadius: "0.35rem",
+                                border: "1px solid rgba(51, 65, 85, 0.5)"
+                              }}>
+                                {emp.project.name}
+                              </span>
+                            )}
+                          </label>
+                        )
+                      })}
                     </div>
-                    <span style={{ fontSize: "15px", fontWeight: 800, color: "#10b981" }}>{selectedEmployee.vacationBalance} <span style={{ fontSize: "13px" }}>días disponibles</span></span>
                   </div>
                 )}
 
+                {/* Auto-Aprobar Checkbox */}
                 <label style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "14px", cursor: "pointer", color: "#e2e8f0", fontWeight: 600 }}>
                   <input
                     type="checkbox"
@@ -939,7 +1386,7 @@ export function VacationForm({
                     onChange={(e) => setAutoApprove(e.target.checked)}
                     style={{ width: "18px", height: "18px", accentColor: "#3b82f6" }}
                   />
-                  <span>Aprobar automáticamente e impactar el saldo (Recomendado para ausencias ya tomadas)</span>
+                  <span>Aprobar automáticamente e impactar el saldo (Recomendado para ausencias o incidencias ya validadas)</span>
                 </label>
               </div>
             )}
@@ -1751,7 +2198,7 @@ export function VacationForm({
         {/* Botón de Envío Dinámico */}
         <button 
           type="submit" 
-          disabled={loading || (requestType === "VACATION" && requestedDays > effectiveBalance)} 
+          disabled={loading || isBalanceExceeded} 
           style={{ 
             marginTop: "0.5rem", 
             width: "100%", 
@@ -1764,8 +2211,8 @@ export function VacationForm({
               : "linear-gradient(135deg, #3b82f6, #1d4ed8)",
             color: "#ffffff", 
             fontWeight: 800,
-            cursor: loading || (requestType === "VACATION" && requestedDays > effectiveBalance) ? "not-allowed" : "pointer",
-            opacity: loading || (requestType === "VACATION" && requestedDays > effectiveBalance) ? 0.6 : 1,
+            cursor: loading || isBalanceExceeded ? "not-allowed" : "pointer",
+            opacity: loading || isBalanceExceeded ? 0.6 : 1,
             boxShadow: isRemoteIncident
               ? "0 6px 20px rgba(249, 115, 22, 0.35)"
               : "0 6px 20px rgba(59, 130, 246, 0.35)",
@@ -1786,14 +2233,145 @@ export function VacationForm({
           <span>
             {loading 
               ? "Enviando solicitud..." 
-              : requestType === "VACATION" && requestedDays > effectiveBalance 
-                ? "Saldo Insuficiente" 
-                : isRemoteIncident 
-                  ? "Reportar Incidencia de Teletrabajo" 
-                  : "Enviar Solicitud"}
+              : onBehalf && selectedEmployeeIds.length > 1
+                ? `Aplicar ${activeTypeItem.label} a ${selectedEmployeeIds.length} colaboradores`
+                : isBalanceExceeded 
+                  ? "Saldo Insuficiente" 
+                  : isRemoteIncident 
+                    ? "Reportar Incidencia de Teletrabajo" 
+                    : "Enviar Solicitud"}
           </span>
         </button>
       </form>
+
+      {/* Modal de Confirmación para Registro Masivo */}
+      {showMassConfirmModal && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.75)",
+          backdropFilter: "blur(6px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 99999,
+          padding: "1rem"
+        }}>
+          <div 
+            className="animate-in"
+            style={{
+              maxWidth: "500px",
+              width: "100%",
+              backgroundColor: "#0f172a",
+              border: "1px solid #3b82f6",
+              borderRadius: "1.25rem",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.9)",
+              padding: "1.75rem",
+              display: "flex",
+              flexDirection: "column",
+              gap: "1.25rem"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+              <div style={{
+                width: "48px",
+                height: "48px",
+                borderRadius: "1rem",
+                backgroundColor: "rgba(59, 130, 246, 0.15)",
+                border: "1px solid rgba(59, 130, 246, 0.3)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0
+              }}>
+                <Users size={24} color="#60a5fa" />
+              </div>
+              <div>
+                <h3 style={{ fontSize: "1.2rem", fontWeight: 800, margin: 0, color: "#f8fafc" }}>
+                  Confirmar Registro Masivo
+                </h3>
+                <p style={{ margin: "0.25rem 0 0 0", fontSize: "13px", color: "#94a3b8" }}>
+                  Asignación simultánea de solicitud
+                </p>
+              </div>
+            </div>
+
+            <div style={{
+              padding: "1.1rem",
+              backgroundColor: "rgba(30, 41, 59, 0.6)",
+              border: "1px solid rgba(51, 65, 85, 0.6)",
+              borderRadius: "0.875rem",
+              fontSize: "14.5px",
+              color: "#cbd5e1",
+              lineHeight: 1.5
+            }}>
+              ¿Deseas aplicar la incidencia <strong style={{ color: activeTypeItem.color }}>{activeTypeItem.label}</strong> a <strong style={{ color: "#60a5fa" }}>{selectedEmployeeIds.length} colaboradores</strong> del equipo?
+              
+              <div style={{ marginTop: "0.85rem", paddingTop: "0.85rem", borderTop: "1px solid rgba(51, 65, 85, 0.5)", fontSize: "12.5px", color: "#94a3b8", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                <div><strong>Horario / Fechas:</strong> {isRemoteIncident ? `${incidentDate} (${incidentStartTime || "--"} a ${incidentEndTime || "--"}${incidentExactHours && incidentExactHours !== "--" ? ` - ${incidentExactHours}` : ""})` : (startDate ? `${startDate} al ${endDate || startDate}` : "Fecha actual")}</div>
+                <div><strong>Aprobación:</strong> {autoApprove ? "Aprobación automática inmediata" : "Pendiente de validación"}</div>
+                <div><strong>Colaboradores seleccionados:</strong> {selectedEmployeeIds.slice(0, 5).map(id => employees.find(e => e.id === id)?.name || id).join(", ")}{selectedEmployeeIds.length > 5 ? ` y ${selectedEmployeeIds.length - 5} más` : ""}</div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMassConfirmModal(false)
+                  setLoading(false)
+                }}
+                disabled={loading}
+                style={{
+                  padding: "0.75rem 1.25rem",
+                  borderRadius: "0.75rem",
+                  backgroundColor: "rgba(30, 41, 59, 0.8)",
+                  border: "1px solid #334155",
+                  color: "#cbd5e1",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  cursor: "pointer"
+                }}
+              >
+                Cancelar / Revisar
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  if (pendingFormData) {
+                    await executeSubmission(pendingFormData)
+                  }
+                }}
+                disabled={loading}
+                style={{
+                  padding: "0.75rem 1.35rem",
+                  borderRadius: "0.75rem",
+                  background: "linear-gradient(135deg, #3b82f6, #1d4ed8)",
+                  border: "none",
+                  color: "#ffffff",
+                  fontSize: "14px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  boxShadow: "0 4px 14px rgba(59, 130, 246, 0.4)"
+                }}
+              >
+                {loading ? (
+                  <span>Registrando...</span>
+                ) : (
+                  <>
+                    <Check size={16} />
+                    <span>Confirmar y Registrar ({selectedEmployeeIds.length})</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

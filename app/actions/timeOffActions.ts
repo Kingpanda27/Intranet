@@ -115,18 +115,39 @@ export async function createTimeOffRequest(formData: FormData) {
   const loggedInName = (session.user as any).name || (session.user as any).email
   if (!loggedInUserId) throw new Error("ID de usuario no encontrado")
 
-  const targetUserId = formData.get("targetUserId") as string | null
-  const autoApprove = formData.get("autoApprove") === "true"
+  const assignedEmployeeIdsRaw = formData.get("assigned_employee_ids") as string | null
+  let targetUserIds: string[] = []
 
+  if (assignedEmployeeIdsRaw) {
+    try {
+      const parsed = JSON.parse(assignedEmployeeIdsRaw)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        targetUserIds = parsed.filter(id => typeof id === "string" && id.trim().length > 0)
+      }
+    } catch {
+      targetUserIds = assignedEmployeeIdsRaw.split(",").map(s => s.trim()).filter(Boolean)
+    }
+  }
+
+  const targetUserId = formData.get("targetUserId") as string | null
+  if (targetUserIds.length === 0 && targetUserId) {
+    targetUserIds = [targetUserId]
+  }
+
+  const autoApprove = formData.get("autoApprove") === "true"
   const canManage = ["SUPERVISOR", "TEAM_LEAD", "MANAGER", "IT_MANAGER", "HR", "TECHNOLOGY"].includes(loggedInRole)
 
-  let userId = loggedInUserId
-  let isCreatedOnBehalf = false
-
-  if (targetUserId && targetUserId !== loggedInUserId && canManage) {
-    userId = targetUserId
-    isCreatedOnBehalf = true
+  if (targetUserIds.length === 0) {
+    targetUserIds = [loggedInUserId]
   }
+
+  const isMass = targetUserIds.length > 1
+  if (isMass && !canManage) {
+    return { success: false, error: "No tienes permisos de supervisor o manager para registrar solicitudes masivas." }
+  }
+
+  let userId = targetUserIds[0] || loggedInUserId
+  let isCreatedOnBehalf = (targetUserIds.length > 0 && targetUserIds[0] !== loggedInUserId) || isMass
 
   const type = formData.get("type") as RequestType || "VACATION"
   const startDateStr = formData.get("startDate") as string
@@ -239,6 +260,139 @@ export async function createTimeOffRequest(formData: FormData) {
   }
 
   try {
+    if (isMass) {
+      const createdRequests = []
+      const affectedUserNames: string[] = []
+
+      for (const tId of targetUserIds) {
+        const u = await prisma.user.findUnique({
+          where: { id: tId },
+          select: { id: true, name: true, email: true, vacationBalance: true }
+        })
+        if (!u) continue
+
+        const initialStatus = autoApprove ? "APPROVED" : "PENDING"
+
+        if (initialStatus === "APPROVED" && type === "VACATION" && workingDays > 0) {
+          await prisma.user.update({
+            where: { id: tId },
+            data: { vacationBalance: { decrement: workingDays } }
+          })
+        }
+
+        const requestReason = `[Registro Masivo por ${loggedInName}] ${reason || ""}`.trim()
+
+        const req = await prisma.timeOffRequest.create({
+          data: {
+            userId: tId,
+            createdById: loggedInUserId,
+            type,
+            startDate,
+            endDate,
+            requestedDays: workingDays,
+            reason: requestReason,
+            status: initialStatus,
+            documentUrl,
+            documentName,
+            absenceDate,
+            hoursToMakeUp,
+            makeupDate,
+            makeupStartTime,
+            makeupEndTime,
+            specialType,
+            exitTime,
+            returnTime,
+            hoursRequested,
+            hoursApproved: hoursRequested
+          }
+        })
+
+        createdRequests.push(req)
+        affectedUserNames.push(u.name || u.email || tId)
+
+        try {
+          await prisma.notification.create({
+            data: {
+              userId: tId,
+              title: "Incidencia / Solicitud registrada por tu supervisor",
+              message: `${loggedInName} ha registrado una solicitud de ${type} para tu equipo. Estado: ${initialStatus === "APPROVED" ? "Aprobada" : "Pendiente"}.`,
+              type: "TIME_OFF",
+              link: "/vacations"
+            }
+          })
+        } catch (notifErr) {
+          console.error("Error creating notification for user:", tId, notifErr)
+        }
+      }
+
+      try {
+        await createAuditLog({
+          action: "CREATE_TIME_OFF_MASS",
+          target: `TimeOffBatch:${createdRequests.length}`,
+          actorUserId: loggedInUserId,
+          userName: loggedInName,
+          newValue: `${type} para ${createdRequests.length} colaboradores`,
+          result: "SUCCESS",
+          metadata: { count: createdRequests.length, userIds: targetUserIds, type }
+        })
+      } catch (auditErr) {
+        console.error("Error in mass audit log:", auditErr)
+      }
+
+      // Group email notification
+      try {
+        let typeLabel = "Incidencia / Permiso de Equipo"
+        switch (type) {
+          case "VACATION": typeLabel = "Vacaciones"; break
+          case "PERMISSION": typeLabel = "Permiso Especial"; break
+          case "EARLY_LEAVE": typeLabel = "Salida Temprana"; break
+          case "SICK_LEAVE": typeLabel = "Licencia por Enfermedad (Corta)"; break
+          case "MEDICAL_LEAVE": typeLabel = "Licencia Médica Oficial"; break
+          case "MATERNITY_LEAVE":
+          case "MATERNITY_PATERNITY": typeLabel = "Licencia por Maternidad / Paternidad"; break
+          case "PATERNITY_LEAVE": typeLabel = "Licencia por Paternidad"; break
+          case "BEREAVEMENT_LEAVE": typeLabel = "Licencia por Fallecimiento / Duelo"; break
+          case "HOURS_MAKEUP": typeLabel = "Reposición de Horas"; break
+          case "REMOTE_INTERNET": typeLabel = "Incidencia Teletrabajo: Falla de Internet"; break
+          case "REMOTE_POWER": typeLabel = "Incidencia Teletrabajo: Corte de Luz"; break
+          case "REMOTE_HARDWARE": typeLabel = "Incidencia Teletrabajo: Avería de Hardware / PC"; break
+          case "REMOTE_VPN": typeLabel = "Incidencia Teletrabajo: Fallo de VPN / Accesos"; break
+        }
+
+        let timeDetails = `Inicio: ${startDateStr}`
+        if (isRemoteIncident) {
+          const timeStr = incidentStartTime && incidentEndTime 
+            ? `Horario: ${incidentStartTime} a ${incidentEndTime} (Total: ${incidentExactHours && incidentExactHours !== "--" ? incidentExactHours : "Calculado"})\n`
+            : (incidentDuration ? `Duración estimada: ${incidentDuration}\n` : "")
+          timeDetails = `Fecha de la falla: ${incidentDate || startDateStr || "Hoy"}\n${timeStr}`
+        } else if (type === "EARLY_LEAVE") {
+          timeDetails = `Fecha: ${startDateStr}\nHora de salida: ${leaveTime}`
+        } else {
+          timeDetails = `Desde: ${startDateStr}\nHasta: ${endDateStr}`
+        }
+
+        await sendTimeOffEmail({
+          employeeName: `${createdRequests.length} colaboradores (Asignación Masiva por ${loggedInName})`,
+          projectName: "Asignación Masiva",
+          typeLabel: `${typeLabel} (Masivo)`,
+          timeDetails,
+          reason: `${reason || "Registro de equipo"}\nColaboradores (${createdRequests.length}):\n${affectedUserNames.slice(0, 20).map(n => `- ${n}`).join("\n")}${affectedUserNames.length > 20 ? `\n... y ${affectedUserNames.length - 20} más` : ""}`,
+          toEmails: ["hr@tnoutsourcing.com"]
+        })
+      } catch (emailErr) {
+        console.error("Error sending mass notification email:", emailErr)
+      }
+
+      revalidatePath("/vacations")
+      revalidatePath("/dashboard")
+      return {
+        success: true,
+        count: createdRequests.length,
+        id: createdRequests[0]?.id,
+        message: `Se aplicó la incidencia/solicitud exitosamente a ${createdRequests.length} colaboradores del equipo.`
+      }
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { name: true, email: true, vacationBalance: true }

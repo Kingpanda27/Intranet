@@ -6,6 +6,26 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1
 
 ---
 
+## [1.2.2] - 2026-10-26
+
+### Added
+- **Modo de Registro Administrado Masivo para Equipos (`VacationForm.tsx`, `timeOffActions.ts`):**
+  - **Selector de Ámbito de Registro:** Opciones de radio `Para mí mismo` (por defecto) y `En nombre de equipo / colaboradores` con badge distintivo `Rol Supervisor/Manager`.
+  - **Panel de Asignación Masiva Contenido:**
+    - Sub-tabs/Toggle con diseño Dark Mode entre **Por Grupo / Campaña / Turno** y **Selección Individual Múltiple**.
+    - **Opción A (Por Grupo):** Dropdown con conteo de colaboradores por escuadrón/campaña y botón rápido `[Seleccionar todos]` que añade a todos los integrantes en un solo clic.
+    - **Opción B (Selección Individual Múltiple):** Input predictivo con autocompletado en tiempo real por nombre, correo o ID y chips visuales interactivos con avatar/iniciales, tooltip y botón `×` para desasignar.
+  - **Barra de Resumen y Gestión de Excepciones:**
+    - Contador reactivo: `👥 Total asignados: X colaboradores`.
+    - Menú desplegable `[Ver lista / Gestionar excepciones (▼)]` con checkboxes individuales para desmarcar rápidamente colaboradores específicos no afectados por la incidencia técnica o permiso.
+    - Botón `[Limpiar selección]` para restablecer la asignación completa.
+  - **Diálogo Modal de Confirmación Masiva:** Diálogo previo al envío cuando se asignan más de 1 colaborador: *"¿Deseas aplicar la incidencia [Tipo de Incidencia] a X colaboradores del equipo?"* con desglose de horario, estado de aprobación automática y lista previa de colaboradores.
+  - **Soporte Backend para Lotes (`timeOffActions.ts`):**
+    - Procesamiento de `assigned_employee_ids: string[]` en `createTimeOffRequest`.
+    - Creación iterativa de registros de incidencias/solicitudes vinculados al supervisor y al colaborador objetivo.
+    - Generación de notificaciones individuales en la plataforma para cada miembro asignado y registro de auditoría `CREATE_TIME_OFF_MASS` con metadata estructurada.
+    - Notificación por correo agrupada enviada a RRHH / Supervisión con el resumen del lote.
+
 ## [1.2.1] - 2026-10-26
 
 ### Changed
