@@ -281,6 +281,14 @@ function UserRow({
   const isTech = currentUserRole === "TECHNOLOGY" || currentUserRole === "TECHNOLOGY_ADMIN" || currentUserRole === "IT_MANAGER"
   const isSelf = user.id === currentUserId
 
+  const handleCancel = () => {
+    setName(user.name || "")
+    setEmail(user.email || "")
+    setRole(user.role || "AGENT")
+    setVacationBalance(user.vacationBalance || 0)
+    setEditing(false)
+  }
+
   const handleSave = () => {
     const fd = new FormData()
     fd.set("name", name)
@@ -315,11 +323,7 @@ function UserRow({
   }
 
   return (
-    <tr style={{
-      borderBottom: "1px solid hsl(var(--border) / 0.5)",
-      backgroundColor: isSelected ? "hsl(var(--primary) / 0.08)" : undefined,
-      transition: "background-color 0.15s ease"
-    }}>
+    <tr className={`user-row-modern ${editing ? "user-row-editing" : ""} ${isSelected ? "user-row-selected" : ""}`}>
       {isTech && (
         <td style={{ padding: "1rem", width: "40px", textAlign: "center" }}>
           <input
@@ -345,13 +349,26 @@ function UserRow({
             backgroundColor: "hsl(var(--primary) / 0.1)",
             color: "hsl(var(--primary))",
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "0.9rem", fontWeight: 800
+            fontSize: "0.9rem", fontWeight: 800,
+            flexShrink: 0
           }}>
             {user.name?.charAt(0) || "U"}
           </div>
           <div>
             {editing ? (
-              <input value={name} onChange={e => setName(e.target.value)} className="input" style={{ fontSize: "0.85rem", padding: "0.25rem 0.5rem" }} />
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                <input 
+                  value={name} 
+                  onChange={e => setName(e.target.value)} 
+                  className="user-edit-input" 
+                  style={{ fontSize: "0.85rem", width: "170px" }} 
+                  autoFocus
+                  placeholder="Nombre completo"
+                />
+                <span className="user-editing-pill-badge">
+                  Editando
+                </span>
+              </div>
             ) : (
               <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>{user.name}</div>
             )}
@@ -362,7 +379,13 @@ function UserRow({
 
       <td style={{ padding: "1rem", fontSize: "0.85rem", color: "hsl(var(--muted-foreground))" }}>
         {editing ? (
-          <input value={email} onChange={e => setEmail(e.target.value)} className="input" style={{ fontSize: "0.85rem", padding: "0.25rem 0.5rem" }} />
+          <input 
+            value={email} 
+            onChange={e => setEmail(e.target.value)} 
+            className="user-edit-input" 
+            style={{ fontSize: "0.85rem", width: "100%", maxWidth: "230px" }} 
+            placeholder="correo@empresa.com"
+          />
         ) : (
           user.email
         )}
@@ -370,8 +393,17 @@ function UserRow({
 
       <td style={{ padding: "1rem" }}>
         {editing && isTech ? (
-          <select value={role} onChange={e => setRole(e.target.value)} className="input" style={{ fontSize: "0.8rem", padding: "0.25rem 0.5rem" }}>
-            {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+          <select 
+            value={role} 
+            onChange={e => setRole(e.target.value)} 
+            className="user-edit-input" 
+            style={{ fontSize: "0.8rem", cursor: "pointer" }}
+          >
+            {ROLES.map(r => (
+              <option key={r} value={r} style={{ background: "#0f172a", color: "#f8fafc" }}>
+                {r}
+              </option>
+            ))}
           </select>
         ) : (
           <span style={{
@@ -387,65 +419,113 @@ function UserRow({
 
       <td style={{ padding: "1rem", fontSize: "0.85rem" }}>
         {editing && isTech ? (
-          <input type="number" step="0.5" value={vacationBalance} onChange={e => setVacationBalance(Number(e.target.value))} className="input" style={{ width: "70px", padding: "0.25rem 0.5rem" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+            <input 
+              type="number" 
+              step="0.5" 
+              value={vacationBalance} 
+              onChange={e => setVacationBalance(Number(e.target.value))} 
+              className="user-edit-input" 
+              style={{ width: "70px" }} 
+            />
+            <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>días</span>
+          </div>
         ) : (
           `${user.vacationBalance ?? 0} días`
         )}
       </td>
 
       <td style={{ padding: "1rem" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
           {message && (
-            <span style={{ fontSize: "0.75rem", color: message.type === "success" ? "#10b981" : "#ef4444" }}>
+            <span 
+              className="user-action-status-badge"
+              style={{
+                backgroundColor: message.type === "success" ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)",
+                borderColor: message.type === "success" ? "rgba(16, 185, 129, 0.35)" : "rgba(239, 68, 68, 0.35)",
+                color: message.type === "success" ? "#34d399" : "#f87171"
+              }}
+            >
               {message.text}
             </span>
           )}
 
-          {/* Si es Technology: edición directa */}
+          {/* Si es Technology: Cápsula de acciones moderna o modo edición */}
           {isTech ? (
             editing ? (
-              <>
-                <button onClick={handleSave} disabled={isPending} className="btn btn-primary" style={{ padding: "0.35rem 0.65rem", fontSize: "0.75rem" }}>
-                  <Check size={12} /> Guardar
-                </button>
-                <button onClick={() => setEditing(false)} className="btn btn-surface" style={{ padding: "0.35rem" }}>
-                  <X size={12} />
-                </button>
-              </>
-            ) : (
-              <>
-                <button onClick={() => setEditing(true)} className="btn btn-surface hover-scale" style={{ padding: "0.35rem 0.65rem", fontSize: "0.75rem" }}>
-                  <Edit3 size={12} /> Editar
-                </button>
-                <button onClick={handleInvite} disabled={isPending} className="btn btn-surface hover-scale" style={{ padding: "0.35rem 0.65rem", fontSize: "0.75rem" }}>
-                  <Send size={12} /> Invitar
+              <div className="action-edit-container">
+                <button 
+                  type="button"
+                  onClick={handleSave} 
+                  disabled={isPending} 
+                  className="action-edit-btn-save"
+                >
+                  <Check size={13} />
+                  <span>{isPending ? "Guardando..." : "Guardar"}</span>
                 </button>
                 <button 
+                  type="button"
+                  onClick={handleCancel} 
+                  className="action-edit-btn-cancel"
+                  title="Descartar cambios"
+                >
+                  <X size={13} />
+                  <span>Cancelar</span>
+                </button>
+              </div>
+            ) : (
+              <div className="action-dock-container">
+                <button 
+                  type="button"
+                  onClick={() => setEditing(true)} 
+                  className="action-dock-btn action-dock-btn-edit"
+                  title={`Editar datos de ${user.name}`}
+                >
+                  <Edit3 size={12.5} className="action-dock-icon" />
+                  <span>Editar</span>
+                </button>
+
+                <span className="action-dock-divider" />
+
+                <button 
+                  type="button"
+                  onClick={handleInvite} 
+                  disabled={isPending} 
+                  className="action-dock-btn action-dock-btn-invite"
+                  title={`Reenviar invitación a ${user.email}`}
+                >
+                  <Send size={12} className="action-dock-icon" />
+                  <span>{isPending ? "Enviando..." : "Invitar"}</span>
+                </button>
+
+                <span className="action-dock-divider" />
+
+                <button 
+                  type="button"
                   onClick={() => onDeleteRequest(user)} 
                   disabled={isPending || isSelf} 
-                  className="btn btn-ghost" 
-                  style={{ 
-                    padding: "0.35rem", 
-                    color: isSelf ? "hsl(var(--muted-foreground) / 0.3)" : "hsl(var(--destructive))",
-                    cursor: isSelf ? "not-allowed" : "pointer"
-                  }}
+                  className={`action-dock-btn action-dock-btn-delete ${isSelf ? "disabled" : ""}`}
                   title={isSelf ? "No puedes eliminar tu propia cuenta" : `Eliminar a ${user.name}`}
                 >
-                  <Trash2 size={13} />
+                  <Trash2 size={13} className="action-dock-icon" />
                 </button>
-              </>
+              </div>
             )
           ) : (
             /* Si es Supervisor/Manager: botón para solicitar cambio de rol */
             !isSelf && (
-              <button
-                type="button"
-                onClick={() => onRequestRole(user)}
-                className="btn btn-surface hover-scale"
-                style={{ padding: "0.35rem 0.75rem", fontSize: "0.78rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.35rem", color: "hsl(var(--primary))", border: "1px solid hsl(var(--primary) / 0.2)" }}
-              >
-                <UserCheck size={13} /> Solicitar cambio de rol
-              </button>
+              <div className="action-dock-container">
+                <button
+                  type="button"
+                  onClick={() => onRequestRole(user)}
+                  className="action-dock-btn"
+                  style={{ color: "hsl(var(--primary))" }}
+                  title="Solicitar cambio de rol para este usuario"
+                >
+                  <UserCheck size={13} style={{ color: "hsl(var(--primary))" }} />
+                  <span>Solicitar rol</span>
+                </button>
+              </div>
             )
           )}
         </div>
@@ -453,6 +533,264 @@ function UserRow({
     </tr>
   )
 }
+
+const USER_ACTIONS_STYLES = `
+/* Estilos modernos y animados para la fila y acciones de usuarios */
+.user-row-modern {
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+  transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+.user-row-modern.user-row-selected {
+  background-color: hsl(var(--primary) / 0.08) !important;
+}
+
+.user-row-modern.user-row-editing {
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.12) 0%, rgba(99, 102, 241, 0.06) 45%, rgba(15, 23, 42, 0.55) 100%) !important;
+  box-shadow: inset 3.5px 0 0 #38bdf8, inset 0 1px 0 rgba(56, 189, 248, 0.2), inset 0 -1px 0 rgba(56, 189, 248, 0.2);
+}
+
+.user-edit-input {
+  animation: subtleFieldPop 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  background: rgba(15, 23, 42, 0.85) !important;
+  border: 1px solid rgba(56, 189, 248, 0.38) !important;
+  color: #f8fafc !important;
+  border-radius: 8px !important;
+  padding: 0.35rem 0.65rem !important;
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.12), 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+  transition: all 0.2s ease !important;
+  outline: none !important;
+}
+
+.user-edit-input:focus {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25), 0 2px 8px rgba(0, 0, 0, 0.35) !important;
+}
+
+@keyframes subtleFieldPop {
+  from {
+    opacity: 0;
+    transform: translateY(-2px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.user-editing-pill-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  animation: subtlePulseBadge 2.2s infinite ease-in-out;
+  white-space: nowrap;
+}
+
+@keyframes subtlePulseBadge {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; border-color: rgba(56, 189, 248, 0.65); transform: scale(1.02); }
+}
+
+/* Action Dock Cápsula */
+.action-dock-container {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 3px 5px;
+  gap: 3px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.action-dock-container:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.action-dock-divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 0 1px;
+}
+
+.action-dock-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.action-dock-btn:active {
+  transform: scale(0.96);
+}
+
+/* EDIT BUTTON */
+.action-dock-btn-edit {
+  color: #cbd5e1;
+}
+.action-dock-btn-edit .action-dock-icon {
+  color: #38bdf8;
+  transition: transform 0.2s ease;
+}
+.action-dock-btn-edit:hover {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(56, 189, 248, 0.2);
+  transform: translateY(-1px);
+}
+.action-dock-btn-edit:hover .action-dock-icon {
+  transform: rotate(-12deg) scale(1.1);
+}
+
+/* INVITE BUTTON */
+.action-dock-btn-invite {
+  color: #cbd5e1;
+}
+.action-dock-btn-invite .action-dock-icon {
+  color: #34d399;
+  transition: transform 0.2s ease;
+}
+.action-dock-btn-invite:hover:not(:disabled) {
+  background: rgba(52, 211, 153, 0.12);
+  border-color: rgba(52, 211, 153, 0.35);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(52, 211, 153, 0.2);
+  transform: translateY(-1px);
+}
+.action-dock-btn-invite:hover:not(:disabled) .action-dock-icon {
+  transform: translateX(1px) translateY(-1px);
+}
+.action-dock-btn-invite:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* DELETE BUTTON */
+.action-dock-btn-delete {
+  padding: 5px 8px;
+  color: #f87171;
+}
+.action-dock-btn-delete .action-dock-icon {
+  transition: transform 0.2s ease;
+}
+.action-dock-btn-delete:hover:not(.disabled) {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
+  transform: translateY(-1px);
+}
+.action-dock-btn-delete:hover:not(.disabled) .action-dock-icon {
+  transform: scale(1.15);
+}
+.action-dock-btn-delete.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  color: #64748b;
+}
+
+/* EDIT MODE ACTIONS (animación sutil y disimulada) */
+.action-edit-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  animation: editDockMorph 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes editDockMorph {
+  from {
+    opacity: 0;
+    transform: translateY(-2px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.action-edit-btn-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 13px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: 1px solid rgba(16, 185, 129, 0.6);
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.action-edit-btn-save:hover:not(:disabled) {
+  background: linear-gradient(135deg, #34d399 0%, #059669 100%);
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.45);
+}
+
+.action-edit-btn-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 11px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.action-edit-btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f1f5f9;
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+/* Feedback message badge */
+.user-action-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  animation: subtleFieldPop 0.2s ease;
+  white-space: nowrap;
+}
+`
 
 export function UserManager({ 
   users, 
@@ -555,6 +893,7 @@ export function UserManager({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      <style dangerouslySetInnerHTML={{ __html: USER_ACTIONS_STYLES }} />
       {/* Paneles de Creación solo visibles para Tecnología */}
       {isTech && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: "1.25rem" }}>
@@ -692,7 +1031,7 @@ export function UserManager({
               <th>Correo</th>
               <th>Rol</th>
               <th>Vacaciones</th>
-              <th>Acciones</th>
+              <th style={{ minWidth: "195px" }}>Acciones</th>
             </tr>
           </thead>
           <tbody>

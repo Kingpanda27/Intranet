@@ -35,6 +35,7 @@ async function main() {
     { local: 'app/admin/audit-logs/page.tsx', remote: '/var/www/html/app/admin/audit-logs/page.tsx' },
     { local: 'app/api/admin/groups/members/route.ts', remote: '/var/www/html/app/api/admin/groups/members/route.ts' },
     { local: 'app/components/Admin/AuditLogViewer.tsx', remote: '/var/www/html/app/components/Admin/AuditLogViewer.tsx' },
+    { local: 'app/components/Admin/UserManager.tsx', remote: '/var/www/html/app/components/Admin/UserManager.tsx' },
     { local: 'app/components/Layout/Sidebar.tsx', remote: '/var/www/html/app/components/Layout/Sidebar.tsx' },
     { local: 'app/components/Vacations/VacationForm.tsx', remote: '/var/www/html/app/components/Vacations/VacationForm.tsx' },
     { local: 'app/components/Vacations/VacationList.tsx', remote: '/var/www/html/app/components/Vacations/VacationList.tsx' },
