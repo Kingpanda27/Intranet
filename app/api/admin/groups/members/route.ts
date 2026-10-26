@@ -130,3 +130,54 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: err?.message || "Error interno del servidor" }, { status: 500 })
   }
 }
+
+export async function PUT(req: NextRequest) {
+  const session = await assertAuth()
+  if (!session) {
+    return NextResponse.json({ error: "Acceso denegado" }, { status: 403 })
+  }
+
+  try {
+    const body = await req.json()
+    const { groupId, supervisorIds = [], subLeaderIds = [] } = body
+
+    if (!groupId) {
+      return NextResponse.json({ error: "Falta groupId" }, { status: 400 })
+    }
+
+    const updated = await prisma.project.update({
+      where: { id: groupId },
+      data: {
+        supervisors: { set: (supervisorIds as string[]).map(id => ({ id })) },
+        subLeaders: { set: (subLeaderIds as string[]).map(id => ({ id })) }
+      },
+      include: {
+        supervisors: { select: { id: true, name: true, email: true, role: true, image: true, position: true } },
+        subLeaders: { select: { id: true, name: true, email: true, role: true, image: true, position: true } }
+      }
+    })
+
+    await createAuditLog({
+      action: "GROUP_LEADERS_UPDATED",
+      target: updated.name || `Grupo: ${groupId}`,
+      metadata: { 
+        groupId, 
+        supervisorsCount: supervisorIds.length, 
+        subLeadersCount: subLeaderIds.length, 
+        source: "REST_API" 
+      }
+    })
+
+    revalidatePath("/admin/groups")
+    revalidatePath(`/groups/${groupId}`)
+
+    return NextResponse.json({ 
+      success: true, 
+      supervisors: updated.supervisors, 
+      subLeaders: updated.subLeaders 
+    })
+  } catch (err: any) {
+    console.error("API Error updating leaders:", err)
+    return NextResponse.json({ error: err?.message || "Error interno del servidor" }, { status: 500 })
+  }
+}

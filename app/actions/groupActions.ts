@@ -306,3 +306,51 @@ export async function getAllUsersForGroups() {
     orderBy: { name: "asc" }
   })
 }
+
+export async function setGroupLeaders(
+  groupId: string, 
+  supervisorIds: string[], 
+  subLeaderIds: string[] = []
+) {
+  await assertTechnology()
+  if (!groupId) return { error: "ID de grupo inválido." }
+
+  try {
+    const updated = await prisma.project.update({
+      where: { id: groupId },
+      data: {
+        supervisors: { set: supervisorIds.map(id => ({ id })) },
+        subLeaders: { set: subLeaderIds.map(id => ({ id })) }
+      },
+      include: {
+        supervisors: { select: { id: true, name: true, email: true, role: true, image: true, position: true } },
+        subLeaders: { select: { id: true, name: true, email: true, role: true, image: true, position: true } }
+      }
+    })
+
+    await createAuditLog({
+      action: "GROUP_LEADERS_UPDATED",
+      target: updated.name || groupId,
+      metadata: {
+        groupId,
+        groupName: updated.name,
+        supervisorIds,
+        subLeaderIds,
+        supervisorsCount: supervisorIds.length,
+        subLeadersCount: subLeaderIds.length
+      }
+    })
+
+    revalidatePath("/admin/groups")
+    revalidatePath(`/groups/${groupId}`)
+    return { 
+      success: true, 
+      supervisors: updated.supervisors, 
+      subLeaders: updated.subLeaders 
+    }
+  } catch (error: any) {
+    console.error("Error al actualizar líderes del grupo:", error)
+    return { error: error?.message || "Error al actualizar los líderes del grupo." }
+  }
+}
+

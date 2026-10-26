@@ -4,7 +4,22 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y este proyecto se adhiere a [Semantic Versioning (SemVer)](https://semver.org/lang/es/).
 
----
+## [1.2.3] - 2026-10-26
+
+### Added
+- **Gestión y Asignación de Líderes por Grupo (`GroupManager.tsx`, `groupActions.ts`, `api/admin/groups/members`):**
+  - **Botón y Acción Rápida en Cada Grupo:** Acceso directo mediante ícono de corona dorada `[👑]` en la barra de herramientas superior de cada tarjeta de grupo, así como botones explícitos `[👑 Asignar Líderes]` / `[Gestionar]` en la sección de liderazgo para todos los estados (grupos con ambos roles, con supervisores, con sub-líderes o sin líderes asignados).
+  - **Modal Interactivo `ManageLeadersModal`:**
+    - Panel de resumen con chips visuales e interactivos de líderes principales (`👑`) y sub-líderes (`🛡️`) seleccionados con botón de desasignación instantánea.
+    - Pestañas de filtrado rápido: `👑 Roles de Liderazgo` (Supervisores, Managers, Team Leads, etc.), `👥 Integrantes del Grupo`, y `🌐 Todos los usuarios`.
+    - Barra de búsqueda predictiva en tiempo real por nombre, correo, cargo o rol.
+    - Lista de colaboradores candidatos con botones directos para asignar como Líder Principal (`+ Líder`), asignar como Sub-Líder (`+ Sub-Líder`), intercambiar roles (promover/mover) o quitar de liderazgo.
+    - Barra inferior flotante con conteo exacto de asignaciones, botones de Cancelar y Guardar con indicador de carga animado.
+  - **Integración Backend Dual y Auditoría:**
+    - Server Action `setGroupLeaders(groupId, supervisorIds, subLeaderIds)` con validación de permisos de Tecnología/IT Manager.
+    - Endpoint REST `PUT /api/admin/groups/members` con soporte de fallback ante contingencias de red.
+    - Registro de auditoría `GROUP_LEADERS_UPDATED` con metadata completa (conteo de supervisores y sub-líderes).
+    - Actualización optimista de estado local en la interfaz (`localGroups`) y notificación toast de confirmación sin recargar la página.
 
 ## [1.2.2] - 2026-10-26
 

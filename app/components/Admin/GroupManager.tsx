@@ -7,7 +7,8 @@ import {
   updateGroup, 
   deleteGroup, 
   addMembersToGroup, 
-  removeMembersFromGroup 
+  removeMembersFromGroup,
+  setGroupLeaders
 } from "@/app/actions/groupActions"
 import { 
   Users, 
@@ -871,6 +872,923 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
 }
 
 // =========================================================================
+// MODAL GESTIONAR LÍDERES Y SUB-LÍDERES (ASIGNAR LIDERAZGO)
+// =========================================================================
+interface ManageLeadersModalProps {
+  group: any
+  allUsers: any[]
+  onClose: () => void
+  onLeadersUpdated?: (groupId: string, supervisors: any[], subLeaders: any[]) => void
+}
+
+function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: ManageLeadersModalProps) {
+  const [mounted, setMounted] = useState(false)
+  const [search, setSearch] = useState("")
+  const [filterMode, setFilterMode] = useState<"leadership" | "group_members" | "all">("leadership")
+  
+  // Selected IDs Sets
+  const [selectedSupervisorIds, setSelectedSupervisorIds] = useState<Set<string>>(() => {
+    return new Set((group.supervisors || []).map((s: any) => s.id))
+  })
+  const [selectedSubLeaderIds, setSelectedSubLeaderIds] = useState<Set<string>>(() => {
+    return new Set((group.subLeaders || []).map((s: any) => s.id))
+  })
+
+  const [isPending, setIsPending] = useState(false)
+  const [, startTransition] = useTransition()
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    setMounted(true)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !isPending) onClose()
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [isPending, onClose])
+
+  // Lookup map for fast user resolution
+  const userMap = useMemo(() => {
+    const map = new Map<string, any>()
+    for (const u of allUsers) {
+      map.set(u.id, u)
+    }
+    for (const s of (group.supervisors || [])) {
+      if (!map.has(s.id)) map.set(s.id, s)
+    }
+    for (const sl of (group.subLeaders || [])) {
+      if (!map.has(sl.id)) map.set(sl.id, sl)
+    }
+    return map
+  }, [allUsers, group.supervisors, group.subLeaders])
+
+  const selectedSupervisors = useMemo(() => {
+    return Array.from(selectedSupervisorIds).map(id => userMap.get(id)).filter(Boolean)
+  }, [selectedSupervisorIds, userMap])
+
+  const selectedSubLeaders = useMemo(() => {
+    return Array.from(selectedSubLeaderIds).map(id => userMap.get(id)).filter(Boolean)
+  }, [selectedSubLeaderIds, userMap])
+
+  // Roles categorized as leadership
+  const leadershipRoles = useMemo(() => new Set([
+    "SUPERVISOR", "TEAM_LEAD", "MANAGER", "HR", "TECHNOLOGY", "IT_MANAGER", "TECHNOLOGY_ADMIN", "DIRECTOR", "ADMIN", "SUPERADMIN"
+  ]), [])
+
+  // Candidate users based on search and tab filter
+  const candidateUsers = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const groupMemberIds = new Set((group.members || []).map((m: any) => m.id))
+
+    return allUsers.filter(u => {
+      // Tab filter
+      if (filterMode === "leadership") {
+        const isLeadership = leadershipRoles.has(u.role)
+        const isAlreadySelected = selectedSupervisorIds.has(u.id) || selectedSubLeaderIds.has(u.id)
+        if (!isLeadership && !isAlreadySelected) return false
+      } else if (filterMode === "group_members") {
+        const isMember = groupMemberIds.has(u.id)
+        const isAlreadySelected = selectedSupervisorIds.has(u.id) || selectedSubLeaderIds.has(u.id)
+        if (!isMember && !isAlreadySelected) return false
+      }
+
+      // Search query
+      if (q) {
+        const nameMatch = u.name?.toLowerCase().includes(q)
+        const emailMatch = u.email?.toLowerCase().includes(q)
+        const posMatch = u.position?.toLowerCase().includes(q)
+        const roleMatch = u.role?.toLowerCase().includes(q)
+        return nameMatch || emailMatch || posMatch || roleMatch
+      }
+      return true
+    })
+  }, [allUsers, search, filterMode, leadershipRoles, group.members, selectedSupervisorIds, selectedSubLeaderIds])
+
+  // Actions
+  const handleAssignSupervisor = (userId: string) => {
+    setSelectedSupervisorIds(prev => {
+      const next = new Set(prev)
+      next.add(userId)
+      return next
+    })
+    setSelectedSubLeaderIds(prev => {
+      if (prev.has(userId)) {
+        const next = new Set(prev)
+        next.delete(userId)
+        return next
+      }
+      return prev
+    })
+  }
+
+  const handleAssignSubLeader = (userId: string) => {
+    setSelectedSubLeaderIds(prev => {
+      const next = new Set(prev)
+      next.add(userId)
+      return next
+    })
+    setSelectedSupervisorIds(prev => {
+      if (prev.has(userId)) {
+        const next = new Set(prev)
+        next.delete(userId)
+        return next
+      }
+      return prev
+    })
+  }
+
+  const handleRemoveSupervisor = (userId: string) => {
+    setSelectedSupervisorIds(prev => {
+      const next = new Set(prev)
+      next.delete(userId)
+      return next
+    })
+  }
+
+  const handleRemoveSubLeader = (userId: string) => {
+    setSelectedSubLeaderIds(prev => {
+      const next = new Set(prev)
+      next.delete(userId)
+      return next
+    })
+  }
+
+  const handleSave = () => {
+    setIsPending(true)
+    setErrorMessage(null)
+
+    const supIds = Array.from(selectedSupervisorIds)
+    const subIds = Array.from(selectedSubLeaderIds)
+
+    startTransition(async () => {
+      let success = false
+      let errorMsg = ""
+      let updatedSupervisors: any[] = []
+      let updatedSubLeaders: any[] = []
+
+      // 1. Intentar Server Action
+      try {
+        const res = await setGroupLeaders(group.id, supIds, subIds)
+        if (res && res.success) {
+          success = true
+          updatedSupervisors = res.supervisors || []
+          updatedSubLeaders = res.subLeaders || []
+        } else if (res && res.error) {
+          errorMsg = res.error
+        }
+      } catch (e: any) {
+        console.warn("Server action failed, trying REST API fallback...", e)
+      }
+
+      // 2. Fallback REST API
+      if (!success) {
+        try {
+          const res = await fetch("/api/admin/groups/members", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              groupId: group.id,
+              supervisorIds: supIds,
+              subLeaderIds: subIds
+            })
+          })
+          const data = await res.json()
+          if (data && data.success) {
+            success = true
+            updatedSupervisors = data.supervisors || []
+            updatedSubLeaders = data.subLeaders || []
+          } else {
+            errorMsg = data?.error || "Error al actualizar líderes."
+          }
+        } catch (apiErr: any) {
+          errorMsg = apiErr?.message || "Error de red al guardar líderes."
+        }
+      }
+
+      setIsPending(false)
+      if (success) {
+        const finalSupervisors = updatedSupervisors.length > 0 
+          ? updatedSupervisors 
+          : supIds.map(id => userMap.get(id)).filter(Boolean)
+        const finalSubLeaders = updatedSubLeaders.length > 0 
+          ? updatedSubLeaders 
+          : subIds.map(id => userMap.get(id)).filter(Boolean)
+
+        onLeadersUpdated?.(group.id, finalSupervisors, finalSubLeaders)
+        onClose()
+      } else {
+        setErrorMessage(errorMsg || "No fue posible actualizar los líderes del grupo.")
+      }
+    })
+  }
+
+  if (!mounted) return null
+
+  return createPortal(
+    <div 
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: "100vw",
+        height: "100vh",
+        zIndex: 9999999,
+        backgroundColor: "rgba(0, 0, 0, 0.8)",
+        backdropFilter: "blur(14px)",
+        WebkitBackdropFilter: "blur(14px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "1.25rem",
+        animation: "fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)"
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isPending) onClose()
+      }}
+    >
+      <div 
+        style={{
+          width: "min(760px, 95vw)",
+          maxHeight: "92vh",
+          backgroundColor: "#0d1527",
+          border: "1px solid rgba(245, 158, 11, 0.3)",
+          borderRadius: "1.5rem",
+          boxShadow: "0 25px 60px -15px rgba(0, 0, 0, 0.85), 0 0 35px rgba(245, 158, 11, 0.12)",
+          display: "flex",
+          flexDirection: "column",
+          position: "relative",
+          overflow: "hidden"
+        }}
+      >
+        {/* Accent top line */}
+        <div style={{ height: 4, background: "linear-gradient(90deg, #f59e0b, #8b5cf6, transparent)" }} />
+
+        {/* Modal Header */}
+        <div 
+          style={{ 
+            padding: "1.5rem 1.75rem 1.25rem", 
+            borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+            background: "linear-gradient(90deg, rgba(245, 158, 11, 0.08), transparent)",
+            display: "flex", 
+            justifyContent: "space-between", 
+            alignItems: "center" 
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.875rem" }}>
+            <div 
+              style={{ 
+                width: 46, 
+                height: 46, 
+                borderRadius: "0.95rem", 
+                backgroundColor: "rgba(245, 158, 11, 0.18)",
+                border: "1.5px solid rgba(245, 158, 11, 0.4)",
+                display: "flex", 
+                alignItems: "center", 
+                justifyContent: "center",
+                color: "#f59e0b",
+                boxShadow: "0 4px 16px rgba(245, 158, 11, 0.2)"
+              }}
+            >
+              <Crown size={24} />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#ffffff", letterSpacing: "-0.01em", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span>Líderes de {group.name}</span>
+                {group.icon && <span style={{ fontSize: "1.1rem" }}>{group.icon}</span>}
+              </h3>
+              <p style={{ margin: "0.2rem 0 0", fontSize: "0.8rem", color: "#94a3b8" }}>
+                Asigna supervisores y sub-líderes responsables de la gestión y permisos del equipo
+              </p>
+            </div>
+          </div>
+          <button 
+            type="button"
+            onClick={onClose} 
+            disabled={isPending}
+            className="btn btn-surface" 
+            style={{ 
+              padding: "0.5rem", 
+              borderRadius: "50%", 
+              color: "#94a3b8",
+              backgroundColor: "rgba(255, 255, 255, 0.05)" 
+            }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Selected Leadership Summary Strip */}
+        <div 
+          style={{ 
+            padding: "1rem 1.75rem", 
+            borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+            backgroundColor: "rgba(10, 17, 38, 0.6)",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gap: "0.75rem"
+          }}
+        >
+          {/* Supervisors Section */}
+          <div 
+            style={{ 
+              padding: "0.75rem 0.85rem", 
+              borderRadius: "0.85rem", 
+              backgroundColor: "rgba(245, 158, 11, 0.06)", 
+              border: "1px solid rgba(245, 158, 11, 0.2)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.4rem"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#f59e0b", textTransform: "uppercase", letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                <Crown size={13} /> Líderes Principales ({selectedSupervisors.length})
+              </span>
+            </div>
+            {selectedSupervisors.length === 0 ? (
+              <span style={{ fontSize: "0.75rem", color: "#64748b", fontStyle: "italic" }}>
+                Ningún líder principal asignado
+              </span>
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", maxHeight: "85px", overflowY: "auto" }}>
+                {selectedSupervisors.map(sup => (
+                  <div 
+                    key={sup.id}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.4rem",
+                      padding: "0.25rem 0.55rem 0.25rem 0.35rem",
+                      borderRadius: "9999px",
+                      backgroundColor: "rgba(245, 158, 11, 0.15)",
+                      border: "1px solid rgba(245, 158, 11, 0.35)",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      color: "#fef3c7"
+                    }}
+                  >
+                    <Avatar user={sup} size={18} />
+                    <span style={{ maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {sup.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSupervisor(sup.id)}
+                      title="Quitar de líderes"
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        marginLeft: "0.15rem",
+                        color: "#f59e0b",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center"
+                      }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Sub-Leaders Section */}
+          <div 
+            style={{ 
+              padding: "0.75rem 0.85rem", 
+              borderRadius: "0.85rem", 
+              backgroundColor: "rgba(139, 92, 246, 0.06)", 
+              border: "1px solid rgba(139, 92, 246, 0.2)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.4rem"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                <Shield size={13} /> Sub-Líderes ({selectedSubLeaders.length})
+              </span>
+            </div>
+            {selectedSubLeaders.length === 0 ? (
+              <span style={{ fontSize: "0.75rem", color: "#64748b", fontStyle: "italic" }}>
+                Ningún sub-líder asignado
+              </span>
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", maxHeight: "85px", overflowY: "auto" }}>
+                {selectedSubLeaders.map(sub => (
+                  <div 
+                    key={sub.id}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.4rem",
+                      padding: "0.25rem 0.55rem 0.25rem 0.35rem",
+                      borderRadius: "9999px",
+                      backgroundColor: "rgba(139, 92, 246, 0.15)",
+                      border: "1px solid rgba(139, 92, 246, 0.35)",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      color: "#ede9fe"
+                    }}
+                  >
+                    <Avatar user={sub} size={18} />
+                    <span style={{ maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {sub.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSubLeader(sub.id)}
+                      title="Quitar de sub-líderes"
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        marginLeft: "0.15rem",
+                        color: "#a78bfa",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center"
+                      }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Search & Filter Bar */}
+        <div style={{ padding: "1rem 1.75rem 0.5rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          {/* Search Input */}
+          <div style={{ position: "relative", width: "100%" }}>
+            <Search 
+              size={18} 
+              style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} 
+            />
+            <input 
+              className="input" 
+              placeholder="Buscar colaborador por nombre, correo, cargo o rol..." 
+              value={search} 
+              onChange={e => setSearch(e.target.value)}
+              autoFocus
+              style={{ 
+                width: "100%",
+                padding: "0.75rem 2.5rem 0.75rem 2.85rem",
+                borderRadius: "0.85rem",
+                fontSize: "0.88rem",
+                fontWeight: 600,
+                backgroundColor: "rgba(15, 23, 42, 0.7)",
+                border: "1px solid rgba(255, 255, 255, 0.12)",
+                color: "#ffffff"
+              }} 
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                style={{ position: "absolute", right: "0.85rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#94a3b8", cursor: "pointer", padding: 0 }}
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
+          {/* Filter Tabs */}
+          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => setFilterMode("leadership")}
+              style={{
+                padding: "0.35rem 0.75rem",
+                borderRadius: "9999px",
+                fontSize: "0.75rem",
+                fontWeight: 700,
+                border: filterMode === "leadership" ? "1px solid #f59e0b" : "1px solid rgba(255, 255, 255, 0.08)",
+                backgroundColor: filterMode === "leadership" ? "rgba(245, 158, 11, 0.18)" : "transparent",
+                color: filterMode === "leadership" ? "#f59e0b" : "#94a3b8",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem",
+                transition: "all 0.15s"
+              }}
+            >
+              <Crown size={12} />
+              <span>Roles de Liderazgo</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFilterMode("group_members")}
+              style={{
+                padding: "0.35rem 0.75rem",
+                borderRadius: "9999px",
+                fontSize: "0.75rem",
+                fontWeight: 700,
+                border: filterMode === "group_members" ? "1px solid hsl(var(--primary))" : "1px solid rgba(255, 255, 255, 0.08)",
+                backgroundColor: filterMode === "group_members" ? "hsl(var(--primary) / 0.2)" : "transparent",
+                color: filterMode === "group_members" ? "hsl(var(--primary))" : "#94a3b8",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem",
+                transition: "all 0.15s"
+              }}
+            >
+              <Users size={12} />
+              <span>Integrantes del Grupo ({group.members?.length || 0})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFilterMode("all")}
+              style={{
+                padding: "0.35rem 0.75rem",
+                borderRadius: "9999px",
+                fontSize: "0.75rem",
+                fontWeight: 700,
+                border: filterMode === "all" ? "1px solid rgba(255, 255, 255, 0.3)" : "1px solid rgba(255, 255, 255, 0.08)",
+                backgroundColor: filterMode === "all" ? "rgba(255, 255, 255, 0.1)" : "transparent",
+                color: filterMode === "all" ? "#ffffff" : "#94a3b8",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem",
+                transition: "all 0.15s"
+              }}
+            >
+              <span>Todos los usuarios ({allUsers.length})</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Error notification if any */}
+        {errorMessage && (
+          <div 
+            style={{ 
+              margin: "0 1.75rem", 
+              padding: "0.65rem 0.85rem", 
+              borderRadius: "0.75rem", 
+              backgroundColor: "rgba(239, 68, 68, 0.15)",
+              border: "1px solid rgba(239, 68, 68, 0.3)",
+              color: "#f87171",
+              fontSize: "0.82rem",
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem"
+            }}
+          >
+            <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
+        {/* Candidates List (Scrollable) */}
+        <div 
+          style={{ 
+            flex: 1, 
+            overflowY: "auto", 
+            padding: "0.75rem 1.75rem 1.25rem",
+            display: "flex", 
+            flexDirection: "column", 
+            gap: "0.5rem",
+            minHeight: "220px",
+            maxHeight: "360px"
+          }}
+        >
+          {candidateUsers.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "2.5rem 1rem", color: "#94a3b8" }}>
+              <Search size={32} style={{ opacity: 0.3, margin: "0 auto 0.5rem", display: "block" }} />
+              <p style={{ margin: 0, fontWeight: 700, fontSize: "0.9rem" }}>No se encontraron colaboradores</p>
+              <p style={{ margin: "0.25rem 0 0", fontSize: "0.8rem", color: "#64748b" }}>Prueba cambiando la búsqueda o seleccionando la pestaña "Todos".</p>
+            </div>
+          ) : (
+            candidateUsers.map(u => {
+              const isSupervisor = selectedSupervisorIds.has(u.id)
+              const isSubLeader = selectedSubLeaderIds.has(u.id)
+              const roleColor = ROLE_COLORS[u.role] || "hsl(var(--primary))"
+
+              return (
+                <div 
+                  key={u.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.85rem",
+                    padding: "0.65rem 0.85rem",
+                    borderRadius: "0.85rem",
+                    backgroundColor: isSupervisor 
+                      ? "rgba(245, 158, 11, 0.1)" 
+                      : isSubLeader 
+                      ? "rgba(139, 92, 246, 0.1)" 
+                      : "rgba(255, 255, 255, 0.03)",
+                    border: isSupervisor 
+                      ? "1px solid rgba(245, 158, 11, 0.35)" 
+                      : isSubLeader 
+                      ? "1px solid rgba(139, 92, 246, 0.35)" 
+                      : "1px solid rgba(255, 255, 255, 0.06)",
+                    transition: "all 0.15s"
+                  }}
+                >
+                  {/* Avatar */}
+                  <Avatar user={u} size={36} />
+
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 700, fontSize: "0.88rem", color: "#f8fafc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {u.name}
+                      </span>
+                      {u.position && (
+                        <span 
+                          style={{ 
+                            fontSize: "0.68rem", 
+                            fontWeight: 700, 
+                            color: "#94a3b8", 
+                            backgroundColor: "rgba(255, 255, 255, 0.06)",
+                            padding: "0.1rem 0.45rem",
+                            borderRadius: "9999px"
+                          }}
+                        >
+                          {u.position}
+                        </span>
+                      )}
+                      <span 
+                        style={{ 
+                          fontSize: "0.68rem", 
+                          fontWeight: 800, 
+                          color: roleColor, 
+                          backgroundColor: `${roleColor}18`,
+                          border: `1px solid ${roleColor}35`,
+                          padding: "0.1rem 0.45rem",
+                          borderRadius: "9999px"
+                        }}
+                      >
+                        {u.role}
+                      </span>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginTop: "0.2rem" }}>
+                      <span style={{ fontSize: "0.75rem", color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {u.email}
+                      </span>
+                      {u.project?.name && (
+                        <span style={{ fontSize: "0.68rem", color: "#64748b" }}>
+                          · {u.project.name}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Role Assignment Actions */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexShrink: 0 }}>
+                    {isSupervisor ? (
+                      <>
+                        <span 
+                          style={{ 
+                            fontSize: "0.72rem", 
+                            fontWeight: 800, 
+                            color: "#f59e0b", 
+                            backgroundColor: "rgba(245, 158, 11, 0.18)",
+                            border: "1px solid rgba(245, 158, 11, 0.4)",
+                            padding: "0.3rem 0.6rem",
+                            borderRadius: "0.5rem",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.3rem"
+                          }}
+                        >
+                          <Crown size={12} />
+                          <span>Líder</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleAssignSubLeader(u.id)}
+                          title="Cambiar a Sub-Líder"
+                          style={{
+                            padding: "0.3rem 0.55rem",
+                            borderRadius: "0.5rem",
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                            color: "#a78bfa",
+                            backgroundColor: "rgba(139, 92, 246, 0.12)",
+                            border: "1px solid rgba(139, 92, 246, 0.25)",
+                            cursor: "pointer"
+                          }}
+                        >
+                          A Sub-Líder
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSupervisor(u.id)}
+                          title="Quitar rol de líder"
+                          style={{
+                            padding: "0.3rem 0.55rem",
+                            borderRadius: "0.5rem",
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                            color: "#ef4444",
+                            backgroundColor: "rgba(239, 68, 68, 0.1)",
+                            border: "1px solid rgba(239, 68, 68, 0.25)",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Quitar
+                        </button>
+                      </>
+                    ) : isSubLeader ? (
+                      <>
+                        <span 
+                          style={{ 
+                            fontSize: "0.72rem", 
+                            fontWeight: 800, 
+                            color: "#a78bfa", 
+                            backgroundColor: "rgba(139, 92, 246, 0.18)",
+                            border: "1px solid rgba(139, 92, 246, 0.4)",
+                            padding: "0.3rem 0.6rem",
+                            borderRadius: "0.5rem",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.3rem"
+                          }}
+                        >
+                          <Shield size={12} />
+                          <span>Sub-Líder</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleAssignSupervisor(u.id)}
+                          title="Promover a Líder Principal"
+                          style={{
+                            padding: "0.3rem 0.55rem",
+                            borderRadius: "0.5rem",
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                            color: "#f59e0b",
+                            backgroundColor: "rgba(245, 158, 11, 0.12)",
+                            border: "1px solid rgba(245, 158, 11, 0.25)",
+                            cursor: "pointer"
+                          }}
+                        >
+                          A Líder
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSubLeader(u.id)}
+                          title="Quitar rol de sub-líder"
+                          style={{
+                            padding: "0.3rem 0.55rem",
+                            borderRadius: "0.5rem",
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                            color: "#ef4444",
+                            backgroundColor: "rgba(239, 68, 68, 0.1)",
+                            border: "1px solid rgba(239, 68, 68, 0.25)",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Quitar
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleAssignSupervisor(u.id)}
+                          style={{
+                            padding: "0.35rem 0.7rem",
+                            borderRadius: "0.55rem",
+                            fontSize: "0.75rem",
+                            fontWeight: 800,
+                            color: "#f59e0b",
+                            backgroundColor: "rgba(245, 158, 11, 0.12)",
+                            border: "1px solid rgba(245, 158, 11, 0.3)",
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.3rem",
+                            transition: "all 0.15s"
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.backgroundColor = "rgba(245, 158, 11, 0.22)"}
+                          onMouseLeave={e => e.currentTarget.style.backgroundColor = "rgba(245, 158, 11, 0.12)"}
+                        >
+                          <Crown size={12} />
+                          <span>+ Líder</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAssignSubLeader(u.id)}
+                          style={{
+                            padding: "0.35rem 0.7rem",
+                            borderRadius: "0.55rem",
+                            fontSize: "0.75rem",
+                            fontWeight: 800,
+                            color: "#a78bfa",
+                            backgroundColor: "rgba(139, 92, 246, 0.12)",
+                            border: "1px solid rgba(139, 92, 246, 0.3)",
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.3rem",
+                            transition: "all 0.15s"
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.backgroundColor = "rgba(139, 92, 246, 0.22)"}
+                          onMouseLeave={e => e.currentTarget.style.backgroundColor = "rgba(139, 92, 246, 0.12)"}
+                        >
+                          <Shield size={12} />
+                          <span>+ Sub-Líder</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+
+        {/* Modal Sticky Footer */}
+        <div 
+          style={{ 
+            padding: "1rem 1.75rem", 
+            borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+            backgroundColor: "rgba(10, 17, 38, 0.95)",
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "space-between",
+            gap: "1rem" 
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "#94a3b8" }}>
+              Total seleccionados:
+            </span>
+            <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#f59e0b" }}>
+              👑 {selectedSupervisorIds.size} Líder(es)
+            </span>
+            <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#a78bfa" }}>
+              🛡️ {selectedSubLeaderIds.size} Sub-Líder(es)
+            </span>
+          </div>
+
+          <div style={{ display: "flex", gap: "0.75rem" }}>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isPending}
+              className="btn btn-surface"
+              style={{ padding: "0.65rem 1.25rem", borderRadius: "0.75rem", fontSize: "0.85rem", fontWeight: 700 }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isPending}
+              style={{
+                padding: "0.65rem 1.5rem",
+                borderRadius: "0.75rem",
+                fontSize: "0.85rem",
+                fontWeight: 800,
+                color: "#ffffff",
+                background: "linear-gradient(135deg, #f59e0b, #d97706)",
+                border: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                cursor: isPending ? "not-allowed" : "pointer",
+                boxShadow: "0 4px 18px rgba(245, 158, 11, 0.35)",
+                opacity: isPending ? 0.7 : 1
+              }}
+            >
+              {isPending ? (
+                <>
+                  <span style={{ animation: "spin 1s linear infinite" }}>⚙️</span>
+                  <span>Guardando liderazgo...</span>
+                </>
+              ) : (
+                <>
+                  <Check size={16} />
+                  <span>Guardar Liderazgo</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+// =========================================================================
 // PANEL PARA CREAR GRUPO
 // =========================================================================
 function CreateGroupPanel({ allUsers }: { allUsers: any[] }) {
@@ -1166,7 +2084,8 @@ function GroupCard({
   onRequestDeleteGroup,
   onRequestRemoveMember,
   onRequestRemoveMultiple,
-  onMembersAdded
+  onMembersAdded,
+  onLeadersUpdated
 }: { 
   group: any
   allUsers: any[]
@@ -1175,9 +2094,11 @@ function GroupCard({
   onRequestRemoveMember: (group: any, member: any) => void
   onRequestRemoveMultiple: (group: any, members: any[]) => void
   onMembersAdded?: (groupId: string, userIds: string[]) => void
+  onLeadersUpdated?: (groupId: string, supervisors: any[], subLeaders: any[]) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showLeaderModal, setShowLeaderModal] = useState(false)
   const [multiSelectMode, setMultiSelectMode] = useState(false)
   const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set())
 
@@ -1248,6 +2169,15 @@ function GroupCard({
           allUsers={allUsers} 
           onClose={() => setShowAddModal(false)} 
           onMembersAdded={onMembersAdded}
+        />
+      )}
+
+      {showLeaderModal && (
+        <ManageLeadersModal 
+          group={group} 
+          allUsers={allUsers} 
+          onClose={() => setShowLeaderModal(false)} 
+          onLeadersUpdated={onLeadersUpdated}
         />
       )}
 
@@ -1376,6 +2306,32 @@ function GroupCard({
                 <>
                   <button 
                     type="button"
+                    onClick={() => setShowLeaderModal(true)} 
+                    style={{ 
+                      padding: "0.45rem", 
+                      borderRadius: "0.6rem", 
+                      color: "#f59e0b", 
+                      border: "1px solid rgba(245, 158, 11, 0.3)", 
+                      backgroundColor: "rgba(245, 158, 11, 0.1)",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      transition: "all 0.15s"
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor = "rgba(245, 158, 11, 0.22)"
+                      e.currentTarget.style.borderColor = "rgba(245, 158, 11, 0.5)"
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.backgroundColor = "rgba(245, 158, 11, 0.1)"
+                      e.currentTarget.style.borderColor = "rgba(245, 158, 11, 0.3)"
+                    }}
+                    title="Asignar y gestionar líderes del grupo"
+                  >
+                    <Crown size={14} />
+                  </button>
+                  <button 
+                    type="button"
                     onClick={() => setEditing(true)} 
                     style={{ 
                       padding: "0.45rem", 
@@ -1494,36 +2450,130 @@ function GroupCard({
                     <span>Sub-Líderes ({subLeadersCount})</span>
                   </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setViewBothLeaders(!viewBothLeaders)}
-                  title={viewBothLeaders ? "Ver en pestañas" : "Ver ambos a la vez"}
-                  style={{
-                    padding: "0.35rem 0.55rem",
-                    borderRadius: "0.5rem",
-                    fontSize: "0.68rem",
-                    fontWeight: 700,
-                    border: viewBothLeaders ? "1px solid hsl(var(--primary) / 0.4)" : "1px solid rgba(255, 255, 255, 0.08)",
-                    backgroundColor: viewBothLeaders ? "hsl(var(--primary) / 0.15)" : "transparent",
-                    color: viewBothLeaders ? "#ffffff" : "#94a3b8",
-                    cursor: "pointer",
-                    whiteSpace: "nowrap"
-                  }}
-                >
-                  {viewBothLeaders ? "Pestañas" : "Ver ambos"}
-                </button>
+                <div style={{ display: "flex", gap: "0.3rem", alignItems: "center" }}>
+                  <button
+                    type="button"
+                    onClick={() => setViewBothLeaders(!viewBothLeaders)}
+                    title={viewBothLeaders ? "Ver en pestañas" : "Ver ambos a la vez"}
+                    style={{
+                      padding: "0.35rem 0.55rem",
+                      borderRadius: "0.5rem",
+                      fontSize: "0.68rem",
+                      fontWeight: 700,
+                      border: viewBothLeaders ? "1px solid hsl(var(--primary) / 0.4)" : "1px solid rgba(255, 255, 255, 0.08)",
+                      backgroundColor: viewBothLeaders ? "hsl(var(--primary) / 0.15)" : "transparent",
+                      color: viewBothLeaders ? "#ffffff" : "#94a3b8",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap"
+                    }}
+                  >
+                    {viewBothLeaders ? "Pestañas" : "Ver ambos"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowLeaderModal(true)}
+                    title="Gestionar líderes y sub-líderes"
+                    style={{
+                      padding: "0.35rem 0.65rem",
+                      borderRadius: "0.5rem",
+                      fontSize: "0.68rem",
+                      fontWeight: 800,
+                      border: "1px solid rgba(245, 158, 11, 0.35)",
+                      backgroundColor: "rgba(245, 158, 11, 0.12)",
+                      color: "#f59e0b",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.3rem",
+                      whiteSpace: "nowrap"
+                    }}
+                  >
+                    <Crown size={12} />
+                    <span>Gestionar</span>
+                  </button>
+                </div>
               </div>
             ) : supervisorsCount > 0 ? (
-              <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "hsl(var(--primary))", textTransform: "uppercase", letterSpacing: "0.06em", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                <Crown size={14} /> Líderes de Equipo ({supervisorsCount})
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+                <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "hsl(var(--primary))", textTransform: "uppercase", letterSpacing: "0.06em", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                  <Crown size={14} /> Líderes de Equipo ({supervisorsCount})
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowLeaderModal(true)}
+                  title="Gestionar líderes"
+                  style={{
+                    padding: "0.25rem 0.65rem",
+                    borderRadius: "0.5rem",
+                    fontSize: "0.7rem",
+                    fontWeight: 800,
+                    border: "1px solid rgba(245, 158, 11, 0.35)",
+                    backgroundColor: "rgba(245, 158, 11, 0.12)",
+                    color: "#f59e0b",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.3rem"
+                  }}
+                >
+                  <Crown size={12} />
+                  <span>Gestionar</span>
+                </button>
               </div>
             ) : subLeadersCount > 0 ? (
-              <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.06em", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                <Shield size={14} /> Sub-Líderes de Equipo ({subLeadersCount})
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+                <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.06em", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                  <Shield size={14} /> Sub-Líderes de Equipo ({subLeadersCount})
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowLeaderModal(true)}
+                  title="Gestionar líderes"
+                  style={{
+                    padding: "0.25rem 0.65rem",
+                    borderRadius: "0.5rem",
+                    fontSize: "0.7rem",
+                    fontWeight: 800,
+                    border: "1px solid rgba(245, 158, 11, 0.35)",
+                    backgroundColor: "rgba(245, 158, 11, 0.12)",
+                    color: "#f59e0b",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.3rem"
+                  }}
+                >
+                  <Crown size={12} />
+                  <span>Gestionar</span>
+                </button>
               </div>
             ) : (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.75rem", color: "#64748b", fontStyle: "italic" }}>
-                <Shield size={14} /> Sin líderes asignados
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", padding: "0.2rem 0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.75rem", color: "#64748b", fontStyle: "italic" }}>
+                  <Shield size={14} /> Sin líderes asignados
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowLeaderModal(true)}
+                  style={{
+                    padding: "0.35rem 0.75rem",
+                    borderRadius: "0.6rem",
+                    fontSize: "0.72rem",
+                    fontWeight: 800,
+                    color: "#f59e0b",
+                    backgroundColor: "rgba(245, 158, 11, 0.15)",
+                    border: "1px solid rgba(245, 158, 11, 0.35)",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.35rem",
+                    boxShadow: "0 2px 10px rgba(245, 158, 11, 0.15)",
+                    transition: "all 0.2s"
+                  }}
+                >
+                  <Crown size={13} />
+                  <span>Asignar Líderes</span>
+                </button>
               </div>
             )}
 
@@ -2209,6 +3259,25 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
     router.refresh()
   }
 
+  // Handle leaders updated optimistically
+  const handleLeadersUpdated = (groupId: string, supervisors: any[], subLeaders: any[]) => {
+    setLocalGroups(prev => prev.map(g => {
+      if (g.id === groupId) {
+        return {
+          ...g,
+          supervisors,
+          subLeaders
+        }
+      }
+      return g
+    }))
+    setToastMessage({
+      type: "success",
+      text: "Líderes del grupo actualizados correctamente. 👑"
+    })
+    router.refresh()
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem", position: "relative" }}>
       {/* Toast Notification Banner */}
@@ -2499,6 +3568,7 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
               onRequestRemoveMember={handleRequestRemoveMember}
               onRequestRemoveMultiple={handleRequestRemoveMultiple}
               onMembersAdded={handleMembersAdded}
+              onLeadersUpdated={handleLeadersUpdated}
             />
           ))}
         </div>
