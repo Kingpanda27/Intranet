@@ -278,8 +278,16 @@ export function VacationForm({
   const [makeupEndTime, setMakeupEndTime] = useState("")
 
   // Incidencias de Teletrabajo / IT
-  const [incidentDateTime, setIncidentDateTime] = useState(getInitialIncidentDateTime)
-  const [incidentDuration, setIncidentDuration] = useState("1-2 horas")
+  const [incidentDate, setIncidentDate] = useState(() => {
+    const d = new Date()
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, "0")
+    const day = String(d.getDate()).padStart(2, "0")
+    return `${y}-${m}-${day}`
+  })
+  const [incidentStartTime, setIncidentStartTime] = useState("")
+  const [incidentEndTime, setIncidentEndTime] = useState("")
+  const [incidentExactHours, setIncidentExactHours] = useState("")
   const [incidentContext, setIncidentContext] = useState("")
   const [incidentNeedsItReview, setIncidentNeedsItReview] = useState(false)
   
@@ -325,6 +333,39 @@ export function VacationForm({
       setHoursRequested(hours > 0 ? String(hours) : "0")
     }
   }, [exitTime, returnTime, requestType])
+
+  // Auto-calcular cantidad de horas exactas para incidencias de teletrabajo
+  useEffect(() => {
+    if (incidentStartTime && incidentEndTime) {
+      const [startH, startM] = incidentStartTime.split(':').map(Number)
+      const [endH, endM] = incidentEndTime.split(':').map(Number)
+      
+      let startMinutes = startH * 60 + startM
+      let endMinutes = endH * 60 + endM
+      
+      if (endMinutes < startMinutes) {
+        endMinutes += 24 * 60
+      }
+      
+      const diffMinutes = endMinutes - startMinutes
+      const hours = Math.round((diffMinutes / 60) * 10) / 10
+      const hrs = Math.floor(diffMinutes / 60)
+      const mins = diffMinutes % 60
+      
+      let label = ""
+      if (hrs > 0 && mins > 0) {
+        label = `${hrs}h ${mins}m (${hours} hrs)`
+      } else if (hrs > 0) {
+        label = `${hrs} hr${hrs > 1 ? 's' : ''}`
+      } else {
+        label = `${mins} min`
+      }
+      
+      setIncidentExactHours(diffMinutes > 0 ? label : "--")
+    } else {
+      setIncidentExactHours("")
+    }
+  }, [incidentStartTime, incidentEndTime])
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -535,12 +576,25 @@ export function VacationForm({
     }
 
     if (isRemoteIncident) {
-      formData.set("incidentDateTime", incidentDateTime)
-      formData.set("incidentDuration", incidentDuration)
+      if (!incidentDate) {
+        setMessage({ type: "error", text: "Debes seleccionar la fecha de la falla." })
+        setLoading(false)
+        return
+      }
+      if (!incidentStartTime || !incidentEndTime) {
+        setMessage({ type: "error", text: "Debes ingresar la hora en que empezó y la hora en que terminó la falla." })
+        setLoading(false)
+        return
+      }
+
+      formData.set("incidentDate", incidentDate)
+      formData.set("incidentStartTime", incidentStartTime)
+      formData.set("incidentEndTime", incidentEndTime)
+      formData.set("incidentExactHours", incidentExactHours)
+      formData.set("startDate", `${incidentDate}T${incidentStartTime}`)
+      formData.set("endDate", `${incidentDate}T${incidentEndTime}`)
       formData.set("incidentContext", incidentContext)
       formData.set("incidentNeedsItReview", incidentNeedsItReview ? "true" : "false")
-      formData.set("startDate", incidentDateTime)
-      formData.set("endDate", incidentDateTime)
     } else if (requestType === "PERMISSION") {
       formData.set("specialType", specialType)
       if (specialType === "HOURS") {
@@ -583,6 +637,9 @@ export function VacationForm({
         setMakeupDate("")
         setMakeupStartTime("")
         setMakeupEndTime("")
+        setIncidentStartTime("")
+        setIncidentEndTime("")
+        setIncidentExactHours("")
         setIncidentContext("")
         setIncidentNeedsItReview(false)
         setTargetUserId("")
@@ -1201,18 +1258,26 @@ export function VacationForm({
               </div>
             </div>
 
-            {/* Fecha/Hora de la Falla y Tiempo Estimado */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1.25rem" }}>
+            {/* Fecha de la Falla (Izquierda) y Horario Exacto con Cálculo de Horas (Derecha) */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr", gap: "1.25rem", alignItems: "flex-start" }} className="remote-incident-time-grid">
+              <style dangerouslySetInnerHTML={{__html: `
+                @media (max-width: 768px) {
+                  .remote-incident-time-grid {
+                    grid-template-columns: 1fr !important;
+                  }
+                }
+              `}} />
+              {/* Columna Izquierda: Fecha de la Falla */}
               <div>
                 <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>
-                  Fecha y Hora de la Falla *
+                  Fecha de la Falla *
                 </label>
                 <input 
-                  type="datetime-local" 
-                  name="incidentDateTime" 
+                  type="date" 
+                  name="incidentDate" 
                   required 
-                  value={incidentDateTime} 
-                  onChange={(e) => setIncidentDateTime(e.target.value)} 
+                  value={incidentDate} 
+                  onChange={(e) => setIncidentDate(e.target.value)} 
                   style={{ 
                     fontSize: "15px", 
                     borderRadius: "0.75rem", 
@@ -1226,30 +1291,79 @@ export function VacationForm({
                 />
               </div>
 
+              {/* Columna Derecha: Hora en que Empezó, Hora en que Terminó y Horas Exactas */}
               <div>
-                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>
-                  Tiempo Estimado de Interrupción *
-                </label>
-                <select 
-                  name="incidentDuration" 
-                  value={incidentDuration} 
-                  onChange={(e) => setIncidentDuration(e.target.value)}
-                  style={{ 
-                    fontSize: "15px", 
-                    borderRadius: "0.75rem", 
-                    padding: "0.85rem 1rem", 
-                    width: "100%",
-                    backgroundColor: "#0f172a",
-                    border: "1px solid #334155",
-                    color: "#f8fafc",
-                    cursor: "pointer"
-                  }}
-                >
-                  <option value="1-2 horas">1-2 horas (Corta duración)</option>
-                  <option value="Medio turno">Medio turno (3 a 4 horas)</option>
-                  <option value="Turno completo">Turno completo (Jornada completa)</option>
-                  <option value="Indefinido">Indefinido (En espera de solución de proveedor)</option>
-                </select>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.15fr", gap: "0.75rem" }}>
+                  <div>
+                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0", whiteSpace: "nowrap" }}>
+                      Hora Inicio *
+                    </label>
+                    <input 
+                      type="time" 
+                      name="incidentStartTime" 
+                      required 
+                      value={incidentStartTime} 
+                      onChange={(e) => setIncidentStartTime(e.target.value)} 
+                      style={{ 
+                        fontSize: "15px", 
+                        borderRadius: "0.75rem", 
+                        padding: "0.85rem 0.75rem", 
+                        width: "100%",
+                        backgroundColor: "#0f172a",
+                        border: "1px solid #334155",
+                        color: "#f8fafc",
+                        colorScheme: "dark"
+                      }} 
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0", whiteSpace: "nowrap" }}>
+                      Hora Término *
+                    </label>
+                    <input 
+                      type="time" 
+                      name="incidentEndTime" 
+                      required 
+                      value={incidentEndTime} 
+                      onChange={(e) => setIncidentEndTime(e.target.value)} 
+                      style={{ 
+                        fontSize: "15px", 
+                        borderRadius: "0.75rem", 
+                        padding: "0.85rem 0.75rem", 
+                        width: "100%",
+                        backgroundColor: "#0f172a",
+                        border: "1px solid #334155",
+                        color: "#f8fafc",
+                        colorScheme: "dark"
+                      }} 
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0", whiteSpace: "nowrap" }}>
+                      Horas Exactas
+                    </label>
+                    <input 
+                      type="text" 
+                      name="incidentExactHours"
+                      readOnly
+                      value={incidentExactHours || "--"} 
+                      style={{ 
+                        fontSize: "14px", 
+                        borderRadius: "0.75rem", 
+                        padding: "0.85rem 0.75rem", 
+                        width: "100%",
+                        backgroundColor: "rgba(15, 23, 42, 0.8)",
+                        border: incidentExactHours && incidentExactHours !== "--" ? "1px solid #f97316" : "1px solid #334155",
+                        color: incidentExactHours && incidentExactHours !== "--" ? "#fb923c" : "#94a3b8",
+                        fontWeight: 700,
+                        cursor: "not-allowed",
+                        textAlign: "center"
+                      }} 
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 

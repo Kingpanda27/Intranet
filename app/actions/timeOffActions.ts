@@ -132,6 +132,10 @@ export async function createTimeOffRequest(formData: FormData) {
   const startDateStr = formData.get("startDate") as string
   const endDateStr = formData.get("endDate") as string
   const leaveTime = formData.get("leaveTime") as string // Para salida temprana
+  const incidentDate = formData.get("incidentDate") as string | null
+  const incidentStartTime = formData.get("incidentStartTime") as string | null
+  const incidentEndTime = formData.get("incidentEndTime") as string | null
+  const incidentExactHours = formData.get("incidentExactHours") as string | null
   const incidentDateTime = formData.get("incidentDateTime") as string | null
   const incidentDuration = formData.get("incidentDuration") as string | null
   const incidentContext = formData.get("incidentContext") as string | null
@@ -143,9 +147,14 @@ export async function createTimeOffRequest(formData: FormData) {
   let endDate: Date
 
   if (isRemoteIncident) {
-    const rawDate = incidentDateTime || startDateStr || new Date().toISOString()
-    startDate = new Date(rawDate)
-    endDate = new Date(rawDate)
+    if (incidentDate && incidentStartTime) {
+      startDate = new Date(`${incidentDate}T${incidentStartTime}`)
+      endDate = incidentEndTime ? new Date(`${incidentDate}T${incidentEndTime}`) : new Date(startDate)
+    } else {
+      const rawDate = incidentDateTime || startDateStr || new Date().toISOString()
+      startDate = new Date(rawDate)
+      endDate = new Date(rawDate)
+    }
   } else {
     startDate = new Date(startDateStr)
     endDate = endDateStr ? new Date(endDateStr) : new Date(startDate)
@@ -161,8 +170,12 @@ export async function createTimeOffRequest(formData: FormData) {
   let reason = rawReason
 
   if (isRemoteIncident) {
+    const timeDetail = incidentStartTime && incidentEndTime
+      ? `Horario exacto: ${incidentStartTime} a ${incidentEndTime}${incidentExactHours && incidentExactHours !== "--" ? ` (${incidentExactHours})` : ""}`
+      : incidentDuration ? `Duración estimada: ${incidentDuration}` : null
+
     const details = [
-      incidentDuration ? `Duración estimada: ${incidentDuration}` : null,
+      timeDetail,
       incidentContext ? `Detalle/Proveedor: ${incidentContext}` : null,
       incidentNeedsItReview ? `Requiere reemplazo/revisión de equipo por IT: Sí` : null,
       rawReason.trim() ? `Motivo/Notas: ${rawReason.trim()}` : null
@@ -393,7 +406,10 @@ export async function createTimeOffRequest(formData: FormData) {
 
       let timeDetails = `Inicio: ${startDateStr}`
       if (isRemoteIncident) {
-        timeDetails = `Fecha y hora de inicio de falla: ${incidentDateTime || startDateStr || "Hoy"}\nDuración estimada: ${incidentDuration || "No especificada"}`
+        const timeStr = incidentStartTime && incidentEndTime 
+          ? `Horario: ${incidentStartTime} a ${incidentEndTime} (Total: ${incidentExactHours && incidentExactHours !== "--" ? incidentExactHours : "Calculado"})\n`
+          : (incidentDuration ? `Duración estimada: ${incidentDuration}\n` : "")
+        timeDetails = `Fecha de la falla: ${incidentDate || startDateStr || "Hoy"}\n${timeStr}`
       } else if (type === "EARLY_LEAVE") {
         timeDetails = `Fecha: ${startDateStr}\nHora de salida: ${leaveTime}`
       } else {
