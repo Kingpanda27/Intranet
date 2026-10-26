@@ -5,6 +5,11 @@ import { authOptions } from '@/lib/auth';
 
 export async function GET() {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    }
+
     const tickets = await prisma.supportTicket.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
@@ -17,7 +22,7 @@ export async function GET() {
     return NextResponse.json({ success: true, tickets });
   } catch (error: any) {
     console.error("[API Tickets GET Error]:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Error interno al recuperar tickets" }, { status: 500 });
   }
 }
 

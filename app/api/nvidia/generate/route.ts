@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server';
 import { generateNvidiaResponse } from '@/lib/supportAiLlamaService';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
 
 export async function POST(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
+
   try {
     const { prompt, model } = await req.json();
     if (!prompt) {
@@ -13,8 +20,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[API NVIDIA Generate Error]:", error);
     return NextResponse.json({
-      error: 'Failed to generate response with NVIDIA AI',
-      details: error.message
+      error: 'Error al generar respuesta con NVIDIA AI'
     }, { status: 500 });
   }
 }

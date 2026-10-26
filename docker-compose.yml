@@ -8,9 +8,9 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=mysql://root:[REDACTED_SECRET]@mysql:3306/intranet
-      - REDIS_URL=redis://redis:6379
-      - NEXTAUTH_URL=https://intranet.telecomnetworks.org
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-https://intranet.telecomnetworks.org}
     env_file:
       - .env.local
     volumes:
@@ -25,8 +25,8 @@ services:
     container_name: telecom_mysql
     restart: unless-stopped
     environment:
-      - MYSQL_ROOT_PASSWORD=[REDACTED_SECRET]
-      - MYSQL_DATABASE=intranet
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-intranet}
     ports:
       - "3306:3306"
     volumes:

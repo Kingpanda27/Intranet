@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server';
 import { generateOllamaResponse, generateNvidiaResponse } from '@/lib/supportAiLlamaService';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
 
 export async function POST(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
+
   try {
     const { prompt, model, host, provider, systemPrompt } = await req.json();
     if (!prompt) {
@@ -32,8 +39,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[API AI Generate Error]:", error);
     return NextResponse.json({
-      error: 'Failed to generate AI response',
-      details: error.message
+      error: 'Error al generar respuesta de IA'
     }, { status: 500 });
   }
 }

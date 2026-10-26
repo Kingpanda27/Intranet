@@ -13,13 +13,8 @@ export async function middleware(request: NextRequest) {
   })
   const { pathname } = request.nextUrl
 
-  // Proteger endpoints de API que no sean /api/auth o motores de IA de soporte
-  if (
-    pathname.startsWith('/api') &&
-    !pathname.startsWith('/api/auth') &&
-    !pathname.startsWith('/api/ollama') &&
-    !pathname.startsWith('/api/nvidia')
-  ) {
+  // Proteger todos los endpoints de API excepto /api/auth (NextAuth endpoints)
+  if (pathname.startsWith('/api') && !pathname.startsWith('/api/auth')) {
     if (!token) {
       return new NextResponse(JSON.stringify({ error: "No autenticado" }), {
         status: 401,
@@ -46,8 +41,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  const superadminEmail = (process.env.SUPERADMIN_EMAIL || 'ireyes@tnoutsourcing.com').toLowerCase().trim()
   const userEmail = ((token as any)?.email || '').toLowerCase().trim()
-  if (userEmail === 'ireyes@tnoutsourcing.com' || (token as any)?.isSuperAdmin) {
+  if (userEmail === superadminEmail || (token as any)?.isSuperAdmin) {
     return NextResponse.next()
   }
 

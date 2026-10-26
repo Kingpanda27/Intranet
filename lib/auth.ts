@@ -78,10 +78,11 @@ export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   callbacks: {
     async signIn({ user, account, profile }) {
-      console.log("=== NEXTAUTH SIGNIN CALLBACK ===");
-      console.log("Provider:", account?.provider);
-      console.log("User Email:", user?.email);
-      console.log("Profile OID:", (profile as any)?.oid || (profile as any)?.sub);
+      if (process.env.NODE_ENV === "development") {
+        console.log("=== NEXTAUTH SIGNIN CALLBACK ===");
+        console.log("Provider:", account?.provider);
+        console.log("User Email:", user?.email);
+      }
       
       try {
         // 1. Manejo de autenticación corporativa Microsoft Entra ID
@@ -238,6 +239,6 @@ export const authOptions: NextAuthOptions = {
     signIn: "/",
     error: "/",
   },
-  debug: true,
+  debug: process.env.NODE_ENV === "development",
   secret: process.env.NEXTAUTH_SECRET,
 }

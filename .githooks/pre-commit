@@ -1,0 +1,45 @@
+#!/bin/sh
+# ==============================================================================
+# Git Pre-Commit Hook: Automated Secret Scanner & Blocker
+# ==============================================================================
+# Para activar estos hooks en tu repositorio local, ejecuta:
+#   git config core.hooksPath .githooks
+# ==============================================================================
+
+echo "🔍 [AppSec Hook] Escaneando archivos staged en busca de secretos y credenciales..."
+
+# 1. Verificar si se está intentando commitear un archivo de entorno sensible
+STAGED_ENV_FILES=$(git diff --cached --name-only | grep -E '^\.env(\..+)?$' | grep -v '^\.env\.example$')
+if [ -n "$STAGED_ENV_FILES" ]; then
+    echo "❌ BLOQUEADO POR SEGURIDAD: Se detectó un archivo de entorno real en el commit:"
+    echo "$STAGED_ENV_FILES"
+    echo "Los archivos .env contienen credenciales privadas y no deben commitearse."
+    echo "Ejecuta: git reset HEAD $STAGED_ENV_FILES"
+    exit 1
+fi
+
+# 2. Verificar archivos de llaves o certificados privados
+STAGED_KEY_FILES=$(git diff --cached --name-only | grep -E '\.(pem|key|p12|pfx|sql)$|id_rsa|id_ed25519')
+if [ -n "$STAGED_KEY_FILES" ]; then
+    echo "❌ BLOQUEADO POR SEGURIDAD: Archivo sensible/certificado detectado:"
+    echo "$STAGED_KEY_FILES"
+    exit 1
+fi
+
+# 3. Escaneo de patrones de secretos en el diff staged (excluyendo .env.example y la definición del hook)
+DIFF_CONTENT=$(git diff --cached -U0 -- . ':(exclude).env.example' ':(exclude).githooks/*')
+
+# Patrones críticos: Claves privadas, Tokens de API, Conexiones de Base de Datos
+PATTERNS="BEGIN (RSA|OPENSSH|DSA|EC)? ?PRIVATE KEY|AKIA[0-9A-Z]{16}|ghp_[a-zA-Z0-9]{36}|nvapi-[A-Za-z0-9_-]{20,}|mysql://[^:]+:[^@]+@|postgres://[^:]+:[^@]+@|password:\s*[\"'][^\"']{5,}[\"']"
+
+MATCHES=$(echo "$DIFF_CONTENT" | grep -E "^\+" | grep -E "$PATTERNS")
+
+if [ -n "$MATCHES" ]; then
+    echo "❌ BLOQUEADO POR SEGURIDAD: Se detectaron posibles credenciales o secretos en los cambios:"
+    echo "$MATCHES" | head -n 5
+    echo "Por favor, extrae las credenciales hacia variables de entorno antes de commitear."
+    exit 1
+fi
+
+echo "✅ [AppSec Hook] Verificación de secretos superada exitosamente."
+exit 0

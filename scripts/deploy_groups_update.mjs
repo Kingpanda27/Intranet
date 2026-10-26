@@ -2,15 +2,27 @@ import { NodeSSH } from 'node-ssh';
 import path from 'path';
 import fs from 'fs';
 
+// Cargar variables de entorno locales si existen
+if (fs.existsSync('.env.local')) {
+  process.loadEnvFile('.env.local');
+} else if (fs.existsSync('.env')) {
+  process.loadEnvFile('.env');
+}
+
 const ssh = new NodeSSH();
 
 async function main() {
-  const host = '192.168.80.241';
-  const username = 'root';
-  const password = '[REDACTED_SECRET]';
+  const host = process.env.REMOTE_HOST || '192.168.80.241';
+  const username = process.env.REMOTE_USER || 'root';
+  const password = process.env.REMOTE_PASSWORD;
+
+  if (!password) {
+    console.error("❌ ERROR DE SEGURIDAD: Debes definir la variable de entorno REMOTE_PASSWORD para conectar por SSH.");
+    process.exit(1);
+  }
 
   console.log("===============================================================");
-  console.log("  DESPLIEGUE DE GESTIÓN DE GRUPOS Y ROLES A 192.168.80.241     ");
+  console.log(`  DESPLIEGUE DE GESTIÓN DE GRUPOS Y ROLES A ${host}     `);
   console.log("===============================================================");
 
   console.log(`\n[1/4] Conectando por SSH a ${host}...`);

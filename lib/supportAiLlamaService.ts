@@ -131,7 +131,7 @@ export async function generateOllamaResponse(
     }
   }
 
-  let ollamaHost = host || process.env.OLLAMA_HOST || 'http://192.168.50.233:11434';
+  let ollamaHost = host || process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
   const selectedModel = model || 'llama3.2:latest';
 
   ollamaHost = ollamaHost.trim();

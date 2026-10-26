@@ -1,5 +1,13 @@
 import mysql from "mysql2/promise";
 import { PrismaClient } from "@prisma/client";
+import fs from "fs";
+
+// Cargar variables de entorno locales si existen
+if (fs.existsSync('.env.local')) {
+  process.loadEnvFile('.env.local');
+} else if (fs.existsSync('.env')) {
+  process.loadEnvFile('.env');
+}
 
 const prisma = new PrismaClient();
 
@@ -117,13 +125,23 @@ async function main() {
   console.log("=================================================");
 
   // 1. Connect to read-only external database
+  const host = process.env.DESKTIME_DB_HOST || "192.168.60.230";
+  const user = process.env.DESKTIME_DB_USER || "mbertozzo";
+  const password = process.env.DESKTIME_DB_PASSWORD;
+  const database = process.env.DESKTIME_DB_NAME || "wfm_platform";
+
+  if (!password) {
+    console.error("❌ ERROR DE SEGURIDAD: Debes definir la variable de entorno DESKTIME_DB_PASSWORD.");
+    process.exit(1);
+  }
+
   const extDb = await mysql.createConnection({
-    host: "192.168.60.230",
-    user: "mbertozzo",
-    password: "[REDACTED_SECRET]",
-    database: "wfm_platform"
+    host,
+    user,
+    password,
+    database
   });
-  console.log("✓ Conexión exitosa a base de datos externa (wfm_platform) en modo SOLO LECTURA.");
+  console.log(`✓ Conexión exitosa a base de datos externa (${database} en ${host}) en modo SOLO LECTURA.`);
 
   // 2. Fetch all unique groups from desktime_employee_data
   const [extGroups] = await extDb.query(`
