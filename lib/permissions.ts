@@ -80,7 +80,7 @@ const ROLE_PERMISSIONS: Record<Role, Set<Permission>> = {
     "hr:manage"
   ]),
   MANAGER: new Set([
-    "users:view_all",
+    "users:create", "users:edit", "users:view_all",
     "users:role:request",
     "documents:create", "documents:read",
     "posts:delete", "posts:feature",

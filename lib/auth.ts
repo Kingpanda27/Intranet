@@ -169,12 +169,9 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
-        // 2. Manejo de autenticación local Credentials
+        // 2. Manejo de autenticación local Credentials (usuarios creados en base de datos)
         if (account?.provider === "credentials") {
-          if (user.email && user.email.toLowerCase().trim().endsWith("@tnoutsourcing.com")) {
-            return true
-          }
-          return false
+          return Boolean(user && user.email)
         }
 
         console.error("Provider no coincide:", account?.provider);

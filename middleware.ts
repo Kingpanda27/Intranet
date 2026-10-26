@@ -79,7 +79,7 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/acceso-denegado', request.url))
       }
     } else if (!isITConfigUI) {
-      const allowedAdminRoles = ['IT_MANAGER', 'TECHNOLOGY_ADMIN', 'TECHNOLOGY', 'HR']
+      const allowedAdminRoles = ['IT_MANAGER', 'TECHNOLOGY_ADMIN', 'TECHNOLOGY', 'HR', 'MANAGER']
       if (!allowedAdminRoles.includes(role)) {
         return NextResponse.redirect(new URL('/acceso-denegado', request.url))
       }

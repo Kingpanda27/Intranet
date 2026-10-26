@@ -24,6 +24,7 @@ export function Sidebar() {
   const hasDashboardAccess = canAccessApprovalsPanel(user)
   const isITConfigAccess = canAccessITConfig(user)
   const isTechnology = isMasterAdmin || user?.role === "TECHNOLOGY" || user?.role === "IT_MANAGER" || user?.role === "TECHNOLOGY_ADMIN" || user?.role === "HR"
+  const canManageUsers = isTechnology || user?.role === "MANAGER"
   const canViewAudit = canViewAuditLogs(user)
   const isEmployeeOnly = !isMasterAdmin && (user?.role === "USER" || user?.role === "AGENT")
 
@@ -113,7 +114,7 @@ export function Sidebar() {
           </Link>
         )}
 
-        {isTechnology && (
+        {canManageUsers && (
           <Link href="/admin/users" onClick={() => closeSupportChat()} className={getLinkClass("/admin/users")}>
             <Settings size={18} />
             <span>Gestión de Usuarios</span>

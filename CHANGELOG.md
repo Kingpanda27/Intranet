@@ -4,6 +4,18 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y este proyecto se adhiere a [Semantic Versioning (SemVer)](https://semver.org/lang/es/).
 
+## [1.2.5] - 2026-10-26
+
+### Added
+- **Flexibilización de Dominio de Correo para Creación de Usuarios (`userActions.ts`, `auth.ts`, `permissions.ts`, `UserManager.tsx`):**
+  - **Soporte de Cualquier Dominio para Creadores Autorizados:** Permite que el Administrador Maestro (Ivan Reyes), personal de Tecnología (`TECHNOLOGY`, `IT_MANAGER`, `TECHNOLOGY_ADMIN`), y `MANAGER` puedan crear usuarios con cualquier correo electrónico válido (p. ej. Gmail, Outlook, dominios externos o de contratistas), eliminando el bloqueo forzado de `@tnoutsourcing.com`.
+  - **Habilitación de Gestión de Usuarios para Managers:**
+    - Otorgamiento de permisos `users:create` y `users:edit` al rol `MANAGER` en `lib/permissions.ts`.
+    - Habilitación del panel de creación de usuarios en `UserManager.tsx` para el rol `MANAGER`.
+    - Habilitación del enlace de navegación *Gestión de Usuarios* en `Sidebar.tsx` y pase perimetral en `middleware.ts`.
+  - **Autenticación Multi-Dominio:** Actualización del callback `signIn` en `lib/auth.ts` para permitir el inicio de sesión con credenciales a cualquier usuario verificado y activo en la base de datos sin restricción de sufijo de dominio.
+  - **Alineación de UX:** Actualización del formulario de creación en `UserManager.tsx` a *CORREO ELECTRÓNICO* con placeholder `usuario@correo.com`.
+
 ## [1.2.4] - 2026-10-26
 
 ### Added

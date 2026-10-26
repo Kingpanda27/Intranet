@@ -220,8 +220,8 @@ function CreateUserPanel() {
               <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="Juan Pérez" style={{ fontSize: "0.85rem" }} />
             </div>
             <div>
-              <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, marginBottom: "0.35rem", color: "hsl(var(--muted-foreground))" }}>CORREO CORPORATIVO</label>
-              <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="juan@tnoutsourcing.com" style={{ fontSize: "0.85rem" }} />
+              <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, marginBottom: "0.35rem", color: "hsl(var(--muted-foreground))" }}>CORREO ELECTRÓNICO</label>
+              <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="usuario@correo.com" style={{ fontSize: "0.85rem" }} />
             </div>
             <div>
               <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, marginBottom: "0.35rem", color: "hsl(var(--muted-foreground))" }}>ROL ASIGNADO</label>
@@ -816,6 +816,8 @@ export function UserManager({
   const [deleteModalError, setDeleteModalError] = useState<string | null>(null)
 
   const isTech = currentUserRole === "TECHNOLOGY" || currentUserRole === "TECHNOLOGY_ADMIN" || currentUserRole === "IT_MANAGER"
+  const isManager = currentUserRole === "MANAGER"
+  const canCreate = isTech || isManager || currentUserRole === "HR" || currentUserRole === "CEO" || currentUserRole === "SUPERADMIN"
 
   const filtered = users.filter(u => {
     const matchesSearch = (u.name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()))
@@ -894,11 +896,11 @@ export function UserManager({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
       <style dangerouslySetInnerHTML={{ __html: USER_ACTIONS_STYLES }} />
-      {/* Paneles de Creación solo visibles para Tecnología */}
-      {isTech && (
+      {/* Paneles de Creación: Creación individual para Tecnología, Managers y Administradores; Carga masiva para Tecnología */}
+      {canCreate && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: "1.25rem" }}>
           <CreateUserPanel />
-          <BulkUploadPanel />
+          {isTech && <BulkUploadPanel />}
         </div>
       )}
 

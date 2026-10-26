@@ -81,19 +81,24 @@ export async function getAllUsers() {
 }
 
 export async function createUser(formData: FormData) {
+  let currentUser: any
   try {
-    await requirePermission("users:create")
+    currentUser = await requirePermission("users:create")
   } catch (err: any) {
     return { error: err.message || "Acceso denegado" }
   }
-
 
   const name = formData.get("name") as string
   const email = formData.get("email") as string
   const role = formData.get("role") as string
 
   if (!name?.trim() || !email?.trim()) return { error: "Nombre y correo son obligatorios." }
-  if (!email.endsWith("@tnoutsourcing.com")) return { error: "El correo debe ser @tnoutsourcing.com" }
+
+  const cleanEmail = email.trim().toLowerCase()
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(cleanEmail)) {
+    return { error: "Por favor ingresa un correo electrónico válido." }
+  }
 
   const validRoles = ["USER", "SUPERVISOR", "MANAGER", "HR", "TECHNOLOGY", "IT_MANAGER", "NO_ROLE"]
   if (!validRoles.includes(role)) return { error: "Rol inválido." }
