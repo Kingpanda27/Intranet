@@ -8,6 +8,15 @@ import { revalidatePath } from "next/cache"
 import { saveFile } from "./fileActions"
 import { extractTextFromDocument } from "@/app/lib/documentParser"
 import { generateNvidiaResponse } from "@/lib/supportAiLlamaService"
+import { isTechnologyStaff } from "@/lib/authorizationRoles"
+
+function isTechRole(userOrRole: any): boolean {
+  if (typeof userOrRole === "object" && userOrRole !== null) {
+    return isTechnologyStaff(userOrRole)
+  }
+  const r = (userOrRole || "").toString().toUpperCase().trim()
+  return r === "TECHNOLOGY" || r === "IT_MANAGER" || r === "TECHNOLOGY_ADMIN" || r === "ADMIN" || r === "CEO" || r === "SUPERADMIN"
+}
 
 function isValidOllamaUrl(urlStr: string): boolean {
   try {
@@ -206,39 +215,49 @@ export async function summarizeDocument(documentId: string) {
   const session = await getServerSession(authOptions)
   if (!session || !session.user) return { error: "No autorizado" }
 
+  let prompt = ""
   try {
     const doc = await prisma.document.findUnique({ where: { id: documentId } })
     if (!doc || !doc.url) return { error: "Documento no encontrado" }
 
     const configs = await (prisma as any).ollamaConfig.findMany();
     const globalConfig = configs.find((c: any) => c.isGlobal) || configs[0];
-    if (!globalConfig) return { error: "No hay configuración de Ollama" }
+    if (!globalConfig && !process.env.NVIDIA_API_KEY) return { error: "No hay configuración de IA disponible" }
 
     const content = await extractTextFromDocument(doc.url, 10000)
     if (!content) return { error: "No se pudo extraer texto del documento" }
 
-    const prompt = `Por favor, genera un resumen ejecutivo y los puntos más importantes del siguiente documento corporativo. 
+    prompt = `Por favor, genera un resumen ejecutivo y los puntos más importantes del siguiente documento corporativo. 
 Título: ${doc.title}
 Contenido: ${content}
 
 Devuelve el resultado en formato Markdown corto y conciso.`
 
-    const response = await fetch(`${globalConfig.url}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: globalConfig.modelName,
-        prompt,
-        stream: false
+    if (globalConfig) {
+      const response = await fetch(`${globalConfig.url}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: globalConfig.modelName,
+          prompt,
+          stream: false
+        })
       })
-    })
 
-    if (!response.ok) throw new Error("Ollama api error")
-    
-    const data = await response.json()
-    return { success: true, summary: data.response }
-  } catch (e: any) {
+      if (response.ok) {
+        const data = await response.json()
+        return { success: true, summary: data.response }
+      }
+    }
+
     if (process.env.NVIDIA_API_KEY) {
+      const nvidiaResp = await generateNvidiaResponse(prompt)
+      return { success: true, summary: nvidiaResp }
+    }
+
+    throw new Error("Ollama api error")
+  } catch (e: any) {
+    if (prompt && process.env.NVIDIA_API_KEY) {
       try {
         const nvidiaResp = await generateNvidiaResponse(prompt)
         return { success: true, summary: nvidiaResp }
@@ -254,10 +273,11 @@ export async function generateTextWithAI(promptType: "POST" | "RECOGNITION", use
   const session = await getServerSession(authOptions)
   if (!session || !session.user) return { error: "No autorizado" }
 
+  let fullPrompt = ""
   try {
     const configs = await (prisma as any).ollamaConfig.findMany();
     const globalConfig = configs.find((c: any) => c.isGlobal) || configs[0];
-    if (!globalConfig) return { error: "No hay configuración de Ollama" }
+    if (!globalConfig && !process.env.NVIDIA_API_KEY) return { error: "No hay configuración de IA disponible" }
 
     let systemPrompt = ""
     if (promptType === "POST") {
@@ -266,24 +286,33 @@ export async function generateTextWithAI(promptType: "POST" | "RECOGNITION", use
       systemPrompt = `Eres un asistente de Recursos Humanos. El usuario quiere dar un reconocimiento (Kudo) a un compañero. Toma su idea y redacta un mensaje de reconocimiento motivador, profesional y breve (1 o 2 párrafos). No agregues preámbulos, solo devuelve el texto final.`
     }
 
-    const fullPrompt = `${systemPrompt}\n\nIdea del usuario: ${userPrompt}\nTexto final:`
+    fullPrompt = `${systemPrompt}\n\nIdea del usuario: ${userPrompt}\nTexto final:`
 
-    const response = await fetch(`${globalConfig.url}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: globalConfig.modelName,
-        prompt: fullPrompt,
-        stream: false
+    if (globalConfig) {
+      const response = await fetch(`${globalConfig.url}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: globalConfig.modelName,
+          prompt: fullPrompt,
+          stream: false
+        })
       })
-    })
 
-    if (!response.ok) throw new Error("Ollama api error")
-    
-    const data = await response.json()
-    return { success: true, generatedText: data.response }
-  } catch (e: any) {
+      if (response.ok) {
+        const data = await response.json()
+        return { success: true, generatedText: data.response }
+      }
+    }
+
     if (process.env.NVIDIA_API_KEY) {
+      const nvidiaResp = await generateNvidiaResponse(fullPrompt)
+      return { success: true, generatedText: nvidiaResp }
+    }
+
+    throw new Error("Ollama api error")
+  } catch (e: any) {
+    if (fullPrompt && process.env.NVIDIA_API_KEY) {
       try {
         const nvidiaResp = await generateNvidiaResponse(fullPrompt)
         return { success: true, generatedText: nvidiaResp }
@@ -299,10 +328,11 @@ export async function generateDailySummary() {
   const session = await getServerSession(authOptions)
   if (!session || !session.user) return { error: "No autorizado" }
 
+  let prompt = ""
   try {
     const configs = await (prisma as any).ollamaConfig.findMany();
     const globalConfig = configs.find((c: any) => c.isGlobal) || configs[0];
-    if (!globalConfig) return { error: "No hay configuración de Ollama" }
+    if (!globalConfig && !process.env.NVIDIA_API_KEY) return { error: "No hay configuración de IA disponible" }
 
     // Fetch context data
     const posts = await prisma.post.findMany({
@@ -317,7 +347,7 @@ export async function generateDailySummary() {
       select: { title: true }
     })
 
-    let prompt = `Eres el asistente corporativo de la intranet. Genera un resumen breve, profesional y motivador (máximo 2 párrafos) de las novedades del día. 
+    prompt = `Eres el asistente corporativo de la intranet. Genera un resumen breve, profesional y motivador (máximo 2 párrafos) de las novedades del día. 
 Aquí tienes los datos recientes:
 Publicaciones recientes:
 ${posts.map(p => `- ${p.author.name}: ${p.content.substring(0, 50)}...`).join('\n')}
@@ -327,22 +357,31 @@ ${docs.map(d => `- ${d.title}`).join('\n')}
 
 Escribe un resumen en primera persona del plural (nosotros) de forma natural, sin decir "Aquí tienes los datos" o "Publicaciones recientes". Dirígete al equipo en tono corporativo pero amigable.`
 
-    const response = await fetch(`${globalConfig.url}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: globalConfig.modelName,
-        prompt: prompt,
-        stream: false
+    if (globalConfig) {
+      const response = await fetch(`${globalConfig.url}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: globalConfig.modelName,
+          prompt: prompt,
+          stream: false
+        })
       })
-    })
 
-    if (!response.ok) throw new Error("Ollama api error")
-    
-    const data = await response.json()
-    return { success: true, summary: data.response }
-  } catch (e: any) {
+      if (response.ok) {
+        const data = await response.json()
+        return { success: true, summary: data.response }
+      }
+    }
+
     if (process.env.NVIDIA_API_KEY) {
+      const nvidiaResp = await generateNvidiaResponse(prompt)
+      return { success: true, summary: nvidiaResp }
+    }
+
+    throw new Error("Ollama api error")
+  } catch (e: any) {
+    if (prompt && process.env.NVIDIA_API_KEY) {
       try {
         const nvidiaResp = await generateNvidiaResponse(prompt)
         return { success: true, summary: nvidiaResp }

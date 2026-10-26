@@ -4,6 +4,15 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y este proyecto se adhiere a [Semantic Versioning (SemVer)](https://semver.org/lang/es/).
 
+## [1.2.8] - 2026-10-26
+
+### Added
+- **Reactivación y Conexión de TN Assistant a NVIDIA NIM API (`app/api/chat/route.ts`):**
+  - **Integración con NVIDIA NIM como Motor Principal:** Conexión de alta velocidad hacia el modelo `meta/llama-3.2-11b-vision-instruct` de NVIDIA Cloud API mediante streaming SSE, resolviendo la caída del servicio por falta de conectividad hacia el servidor local de Ollama.
+  - **Tolerancia a Fallos y Fallback Automático:** Si la API de NVIDIA experimenta intermitencia, conmuta automáticamente hacia Ollama local si este vuelve a estar disponible, evitando caídas inesperadas en el chat corporativo.
+  - **Búsqueda Semántica de Colaboradores y Vacaciones (RAG Context):** Detección automática de nombres y apellidos en las preguntas de los colaboradores (ej. *"¿Cuántas vacaciones le quedan a Johan?"*), consultando en tiempo real la base de datos para responder con exactitud el balance de días disponibles, cargo y departamento.
+  - **Corrección de Alcances y Variables en Acciones de IA (`ollamaActions.ts`):** Corrección de importación de roles autorizados de tecnología y gestión de variables para resúmenes de documentos y Kudos con IA.
+
 ## [1.2.7] - 2026-10-26
 
 ### Added
