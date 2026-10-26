@@ -22,7 +22,7 @@ async function main() {
   }
 
   console.log("===============================================================");
-  console.log(`    DESPLIEGUE A PRODUCCIÓN - INTRANET v1.2.8 (${host}) `);
+  console.log(`    DESPLIEGUE A PRODUCCIÓN - INTRANET v1.2.9 (${host}) `);
   console.log("===============================================================");
 
   // 1. Conectar SSH
@@ -31,7 +31,7 @@ async function main() {
   console.log("✓ Conectado exitosamente.");
 
   // 2. Archivos a transferir
-  console.log("\n[2/5] Transfiriendo archivos de la versión 1.2.8...");
+  console.log("\n[2/5] Transfiriendo archivos de la versión 1.2.9...");
   const filesToTransfer = [
     { local: 'package.json', remote: '/var/www/html/package.json' },
     { local: 'CHANGELOG.md', remote: '/var/www/html/CHANGELOG.md' },

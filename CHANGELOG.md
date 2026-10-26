@@ -4,6 +4,18 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y este proyecto se adhiere a [Semantic Versioning (SemVer)](https://semver.org/lang/es/).
 
+## [1.2.9] - 2026-10-26
+
+### Added
+- **Motor de Búsqueda Integral en Toda la Aplicación y Autorización Maestra para TN Assistant (`app/api/chat/route.ts`):**
+  - **Reconocimiento del Administrador Maestro:** Integración de `isCEO(session.user)` en el prompt del sistema. El asistente ahora reconoce a Iván Reyes (CEO / Administrador Maestro) con nivel de acceso global irrestricto, respondiendo con datos corporativos completos y eliminando respuestas evasivas de *"contacta a Recursos Humanos o a tu supervisor"*.
+  - **Búsqueda Multi-Tabla Exhaustiva en la Base de Datos:**
+    - **Compatibilidad con MySQL:** Corrección del error de validación de Prisma (`mode: insensitive`) incompatible con el dialecto MySQL, permitiendo que la búsqueda de colaboradores (`User`) encuentre de manera infalible a cualquier persona por nombre o apellido.
+    - **Búsqueda de Colaboradores e Historial:** Extrae en tiempo real nombre completo, cargo/posición, departamento/grupo, balance de vacaciones (`vacationBalance`) y el historial de solicitudes recientes (`TimeOffRequest`).
+    - **Búsqueda de Grupos y Liderazgo:** Incluye detalles de grupos (`Project`), cantidad de miembros, supervisores y sub-líderes.
+    - **Búsqueda de Publicaciones y Novedades:** Consulta las publicaciones recientes del muro (`Post`) para responder preguntas sobre comunicados y noticias corporativas.
+    - **Búsqueda de Eventos y Documentos:** Consulta eventos programados (`CalendarEvent`) y búsqueda semántica en documentos (`Document`).
+
 ## [1.2.8] - 2026-10-26
 
 ### Added

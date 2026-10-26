@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { semanticSearch } from '@/app/actions/embeddingActions';
+import { isCEO } from '@/lib/authorizationRoles';
 
 export const maxDuration = 60;
 
@@ -14,6 +15,7 @@ export async function POST(req: Request) {
 
     const currentUserId = (session.user as any).id;
     const currentUserName = (session.user as any).name || "Empleado";
+    const isMasterAdmin = isCEO(session.user as any);
 
     const body = await req.json();
     const messages = body.messages || [];
@@ -26,68 +28,133 @@ export async function POST(req: Request) {
       select: { name: true, role: true, vacationBalance: true, position: true, project: { select: { name: true } } }
     });
 
-    // 2. Búsqueda inteligente de colaboradores consultados (por nombre o apellido en la pregunta)
-    let queriedUsersContext = "";
-    const cleanWords = lastUserMessage
+    // 2. Extraer términos de búsqueda de la pregunta (sin palabras vacías)
+    const searchTerms = lastUserMessage
       .replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s]/g, " ")
       .split(/\s+/)
       .filter((w: string) => w.length >= 3 && ![
         "cuantas", "cuántas", "cuanto", "cuánto", "quedan", "quedna", "tiene", "dias", "días",
         "para", "del", "las", "los", "una", "uno", "que", "por", "favor", "hola", "buenas",
         "vacacion", "vacaciones", "permiso", "permisos", "como", "cómo", "esta", "está",
-        "donde", "dónde", "quien", "quién"
+        "donde", "dónde", "quien", "quién", "saber", "dime", "puedes", "informacion", "información",
+        "sobre", "todo", "toda", "todos", "todas"
       ].includes(w.toLowerCase()));
 
-    if (cleanWords.length > 0) {
+    // 3. BÚSQUEDA MULTI-TABLA EN TODA LA APLICACIÓN
+
+    // A) Colaboradores y Empleados (compatible con MySQL, sin 'mode: insensitive')
+    let queriedUsersContext = "";
+    if (searchTerms.length > 0) {
       try {
         const matchedUsers = await prisma.user.findMany({
           where: {
-            OR: cleanWords.map((word: string) => ({
-              name: { contains: word, mode: 'insensitive' }
-            }))
+            OR: searchTerms.flatMap((w: string) => [
+              { name: { contains: w } },
+              { email: { contains: w } },
+              { position: { contains: w } }
+            ])
           },
           select: {
+            id: true,
             name: true,
             email: true,
             role: true,
             position: true,
             vacationBalance: true,
-            project: { select: { name: true } }
+            project: { select: { name: true } },
+            requests: {
+              take: 3,
+              orderBy: { createdAt: 'desc' },
+              select: {
+                type: true,
+                status: true,
+                startDate: true,
+                endDate: true,
+                requestedDays: true,
+                reason: true
+              }
+            }
           },
-          take: 5
+          take: 8
         });
 
         if (matchedUsers.length > 0) {
-          queriedUsersContext = "\n\nInformación de Colaboradores Consultados:\n" + 
-            matchedUsers.map(u => `- ${u.name} | Depto/Grupo: ${u.project?.name || 'Sin asignación'} | Cargo: ${u.position || u.role} | Balance de Vacaciones Disponibles: ${u.vacationBalance ?? 0} días | Email: ${u.email}`).join("\n");
+          queriedUsersContext = "\n\nColaboradores Encontrados en la Base de Datos:\n" + 
+            matchedUsers.map(u => {
+              const reqsStr = u.requests && u.requests.length > 0 
+                ? u.requests.map(r => `[${r.type} - Estado: ${r.status}, Del ${new Date(r.startDate).toLocaleDateString("es-ES")} al ${new Date(r.endDate).toLocaleDateString("es-ES")}, Motivo: ${r.reason}]`).join("; ")
+                : "Sin solicitudes registradas";
+              return `- ${u.name} | Cargo: ${u.position || u.role} | Rol: ${u.role} | Departamento/Grupo: ${u.project?.name || 'Sin Asignación'} | Balance de Vacaciones: ${u.vacationBalance ?? 0} días disponibles | Email: ${u.email} | Historial de Solicitudes: ${reqsStr}`;
+            }).join("\n");
         }
       } catch (err) {
         console.warn("[TN Assistant] Error querying matched users:", err);
       }
     }
 
-    // 3. Directorio de empleados si se consulta por equipo o personal
-    let directoryContext = "";
-    if (userQuery.includes("quien") || userQuery.includes("quién") || userQuery.includes("empleado") || userQuery.includes("equipo") || userQuery.includes("líder") || userQuery.includes("lider") || userQuery.includes("supervisor") || userQuery.includes("directorio") || userQuery.includes("contacto")) {
-      const users = await prisma.user.findMany({
-        select: { name: true, role: true, position: true, email: true, vacationBalance: true, project: { select: { name: true } } },
-        take: 15
+    // B) Grupos y Campañas Corporativas
+    let groupsContext = "";
+    try {
+      const isGroupQuery = userQuery.includes("grupo") || userQuery.includes("campaña") || userQuery.includes("campana") || userQuery.includes("departamento") || userQuery.includes("equipo");
+      const groups = await prisma.project.findMany({
+        select: {
+          name: true,
+          description: true,
+          supervisors: { select: { name: true } },
+          subLeaders: { select: { name: true } },
+          _count: { select: { members: true } }
+        },
+        take: isGroupQuery ? 15 : 6
       });
-      directoryContext = "\n\nDirectorio de Empleados:\n" + users.map(u => `- ${u.name} (${u.position || u.role}) - Depto: ${u.project?.name || 'Sin asignación'}, Vacaciones: ${u.vacationBalance ?? 0} días, Email: ${u.email}`).join("\n");
+      if (groups.length > 0) {
+        groupsContext = "\n\nGrupos y Campañas Corporativas:\n" + groups.map(g => {
+          const leaders = [...g.supervisors.map(s => `Supervisor: ${s.name}`), ...g.subLeaders.map(sl => `Sub-Líder: ${sl.name}`)].join(", ") || "Sin líder asignado";
+          return `- Grupo: ${g.name} (${g._count.members} integrantes) | Liderazgo: ${leaders} | ${g.description || ''}`;
+        }).join("\n");
+      }
+    } catch (e) {}
+
+    // C) Directorio General
+    let directoryContext = "";
+    if (userQuery.includes("quien") || userQuery.includes("quién") || userQuery.includes("empleado") || userQuery.includes("directorio") || userQuery.includes("personal") || userQuery.includes("contacto")) {
+      try {
+        const users = await prisma.user.findMany({
+          select: { name: true, role: true, position: true, email: true, vacationBalance: true, project: { select: { name: true } } },
+          take: 20
+        });
+        directoryContext = "\n\nDirectorio General de Empleados:\n" + users.map(u => `- ${u.name} (${u.position || u.role}) - Depto: ${u.project?.name || 'General'}, Vacaciones: ${u.vacationBalance ?? 0} días, Email: ${u.email}`).join("\n");
+      } catch (e) {}
     }
 
-    // 4. Próximos eventos de la empresa
+    // D) Eventos y Calendario
     let eventsContext = "";
     if (userQuery.includes("evento") || userQuery.includes("calendario") || userQuery.includes("semana") || userQuery.includes("reunión") || userQuery.includes("reunion") || userQuery.includes("actividad")) {
-      const events = await prisma.calendarEvent.findMany({
-        where: { startDate: { gte: new Date() } },
-        orderBy: { startDate: 'asc' },
-        take: 5
-      });
-      eventsContext = "\n\nPróximos Eventos:\n" + (events.length > 0 ? events.map(e => `- ${e.title} (${new Date(e.startDate).toLocaleDateString("es-ES")})`).join("\n") : "No hay eventos próximos agendados.");
+      try {
+        const events = await prisma.calendarEvent.findMany({
+          where: { startDate: { gte: new Date() } },
+          orderBy: { startDate: 'asc' },
+          take: 5
+        });
+        eventsContext = "\n\nPróximos Eventos:\n" + (events.length > 0 ? events.map(e => `- ${e.title} (${new Date(e.startDate).toLocaleDateString("es-ES")})`).join("\n") : "No hay eventos próximos agendados.");
+      } catch (e) {}
     }
 
-    // 5. Documentos internos (RAG semántico)
+    // E) Publicaciones del Muro de Noticias
+    let postsContext = "";
+    if (userQuery.includes("noticia") || userQuery.includes("publicacion") || userQuery.includes("publicación") || userQuery.includes("post") || userQuery.includes("muro") || userQuery.includes("comunicado")) {
+      try {
+        const posts = await prisma.post.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: 4,
+          select: { content: true, createdAt: true, author: { select: { name: true } } }
+        });
+        if (posts.length > 0) {
+          postsContext = "\n\nPublicaciones Recientes del Muro:\n" + posts.map(p => `- [${p.author?.name || 'Anónimo'}]: ${p.content} (${new Date(p.createdAt).toLocaleDateString("es-ES")})`).join("\n");
+        }
+      } catch (e) {}
+    }
+
+    // F) Documentos y Políticas Internas (RAG)
     let docsContext = "";
     if (userQuery.includes("documento") || userQuery.includes("manual") || userQuery.includes("politica") || userQuery.includes("política") || userQuery.includes("reglamento") || userQuery.includes("proceso") || userQuery.includes("onboarding")) {
       try {
@@ -98,47 +165,53 @@ export async function POST(req: Request) {
       } catch (e) {}
     }
 
-    // 6. Ausencias del día de hoy
+    // G) Ausencias del Día de Hoy
     let absentsContext = "";
     if (userQuery.includes("ausente") || userQuery.includes("vacaciones") || userQuery.includes("permiso") || userQuery.includes("falto") || userQuery.includes("faltó") || userQuery.includes("quien no vino")) {
-      const today = new Date();
-      const startOfDay = new Date(today);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(today);
-      endOfDay.setHours(23, 59, 59, 999);
-      const absents = await prisma.timeOffRequest.findMany({
-        where: { status: "APPROVED", startDate: { lte: endOfDay }, endDate: { gte: startOfDay } },
-        include: { user: { select: { name: true } } }
-      });
-      absentsContext = "\n\nEmpleados Ausentes Hoy:\n" + (absents.length > 0 ? absents.map(a => `- ${a.user.name} (${a.type})`).join("\n") : "No hay empleados ausentes hoy.");
+      try {
+        const today = new Date();
+        const startOfDay = new Date(today);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(today);
+        endOfDay.setHours(23, 59, 59, 999);
+        const absents = await prisma.timeOffRequest.findMany({
+          where: { status: "APPROVED", startDate: { lte: endOfDay }, endDate: { gte: startOfDay } },
+          include: { user: { select: { name: true } } }
+        });
+        absentsContext = "\n\nEmpleados Ausentes Hoy:\n" + (absents.length > 0 ? absents.map(a => `- ${a.user.name} (${a.type})`).join("\n") : "No hay empleados ausentes hoy.");
+      } catch (e) {}
     }
 
-    const generalPolicyContext = `\n\nPolíticas de Vacaciones y Permisos de Telecom Networks:
-- Vacaciones anuales: Los colaboradores acumulan y disfrutan de días de vacaciones según su tiempo en la empresa y el balance registrado en el sistema.
-- Solicitudes: Se realizan a través del módulo de 'Vacaciones y Permisos' de la intranet.
-- Permisos: Incluyen reposición de horas, permisos especiales (horas/días), salidas tempranas e incidencias de soporte remoto.`;
+    const generalPolicyContext = `\n\nPolíticas de Vacaciones de Telecom Networks:
+- Vacaciones anuales: Todo colaborador tiene derecho a vacaciones pagadas acumuladas según su tiempo y balance registrado en el sistema (usualmente 14 días laborables por año).
+- Solicitudes: Se gestionan desde el módulo 'Vacaciones y Permisos'.`;
 
     const systemPrompt = `Eres TN Assistant, el asistente corporativo inteligente de la intranet de Telecom Networks (TN).
 
 <user_profile>
-Empleado actual consultando: ${currentUserName} (${userObj?.position || userObj?.role || 'Empleado'}, Depto: ${userObj?.project?.name || 'General'})
+Usuario consultando: ${currentUserName}
+Nivel de Autorización: ${isMasterAdmin ? "ADMINISTRADOR MAESTRO / CEO / ACCESO TOTAL ILIMITADO" : userObj?.role || 'Empleado'}
+Departamento: ${userObj?.project?.name || 'General'}
 Vacaciones Disponibles de ${currentUserName}: ${userObj?.vacationBalance ?? 0} días
 </user_profile>
 
 <retrieved_context>
 ${queriedUsersContext}
+${groupsContext}
 ${directoryContext}
 ${eventsContext}
+${postsContext}
 ${docsContext}
 ${absentsContext}
 ${generalPolicyContext}
 </retrieved_context>
 
-Instrucciones:
-- Responde siempre en español con tono amable, claro, empático y profesional.
-- Si el usuario pregunta por el balance de vacaciones de una persona específica (ej. Johan u otro colaborador), revisa la sección <retrieved_context> y responde con su balance exacto de días disponibles.
-- Si la persona no aparece en la información disponible, indícalo cortésmente y sugiere contactar a Recursos Humanos o a su supervisor.
-- Sé conciso, directo y útil en tus respuestas.`;
+Instrucciones Obligatorias:
+- Responde siempre en español con tono profesional, ejecutivo, claro y conciso.
+- ${isMasterAdmin ? `Estás hablando con Iván Reyes, Administrador Maestro y CEO de la empresa. Él tiene autorización absoluta para consultar y conocer cualquier dato de cualquier empleado, grupo, solicitud o registro. NUNCA le digas que contacte a Recursos Humanos ni a un supervisor; dale la respuesta directa, completa y con las cifras exactas registradas en <retrieved_context>.` : `Responde cordialmente con los datos corporativos autorizados.`}
+- Si el usuario pregunta por el balance de vacaciones de una persona (ej. Johan Taveras u otro colaborador), revisa la sección <retrieved_context> y responde con su nombre completo, cargo, departamento y sus días de vacaciones disponibles.
+- Si una persona o dato no se encuentra en la base de datos tras la búsqueda, aclara el nombre exacto que buscaste y sugiere verificar el nombre en el directorio.
+- Sé directo y evita rodeos.`;
 
     const formattedMessages = messages.map((m: any) => ({
       role: m.role === 'system' ? 'system' : m.role === 'assistant' ? 'assistant' : 'user',
@@ -199,9 +272,7 @@ Instrucciones:
                         if (textChunk) {
                           controller.enqueue(encoder.encode(textChunk));
                         }
-                      } catch (e) {
-                        // Ignorar líneas parciales o no-JSON
-                      }
+                      } catch (e) {}
                     }
                   }
                 }
@@ -220,7 +291,6 @@ Instrucciones:
         } else {
           const errText = await response.text();
           console.warn(`[TN Assistant] NVIDIA NIM failed (${response.status}):`, errText);
-          // Fall through to Ollama if configured
         }
       } catch (nvidiaErr) {
         console.warn("[TN Assistant] NVIDIA NIM connection error, attempting fallback to Ollama:", nvidiaErr);
