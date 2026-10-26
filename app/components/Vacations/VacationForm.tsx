@@ -18,27 +18,199 @@ import {
   Users,
   UserCheck,
   Search,
-  X
+  X,
+  WifiOff,
+  ZapOff,
+  Laptop,
+  ShieldAlert,
+  RotateCcw,
+  ChevronDown,
+  ChevronUp,
+  AlertOctagon,
+  Check,
+  Info
 } from "lucide-react"
 import { createTimeOffRequest } from "@/app/actions/timeOffActions"
 import { useTheme } from "@/app/Providers"
 import { MIN_VACATION_DAYS } from "@/lib/vacationPolicy"
 
-const REQUEST_TYPES = [
-  { id: "VACATION", label: "Vacaciones", sub: "Días libres anuales", color: "hsl(var(--primary))", bg: "hsl(var(--primary) / 0.08)", border: "1px solid hsl(var(--primary))", icon: CalendarDays },
-  { id: "PERMISSION", label: "Permiso Especial", sub: "Causas justificadas", color: "#a855f7", bg: "rgba(168, 85, 247, 0.08)", border: "1px solid #a855f7", icon: CheckCircle },
-  { id: "HOURS_MAKEUP", label: "Reposición de Horas", sub: "Recuperar tiempo ausente", color: "#06b6d4", bg: "rgba(6, 182, 212, 0.08)", border: "1px solid #06b6d4", icon: Clock },
-  { id: "EARLY_LEAVE", label: "Salir Temprano", sub: "Horas específicas", color: "#f97316", bg: "rgba(249, 115, 22, 0.08)", border: "1px solid #f97316", icon: Clock },
-  { id: "SICK_LEAVE", label: "Enfermedad", sub: "Licencia médica corta", color: "#ef4444", bg: "rgba(239, 68, 68, 0.08)", border: "1px solid #ef4444", icon: Stethoscope },
-  { id: "MEDICAL_LEAVE", label: "Licencia Médica", sub: "Incapacidad oficial", color: "#dc2626", bg: "rgba(220, 38, 38, 0.08)", border: "1px solid #dc2626", icon: HeartPulse },
-  { id: "MATERNITY_LEAVE", label: "Maternidad", sub: "Pre y post natal", color: "#ec4899", bg: "rgba(236, 72, 153, 0.08)", border: "1px solid #ec4899", icon: Baby },
-  { id: "PATERNITY_LEAVE", label: "Paternidad", sub: "Nacimiento de hijo", color: "#3b82f6", bg: "rgba(59, 130, 246, 0.08)", border: "1px solid #3b82f6", icon: Baby },
-  { id: "BEREAVEMENT_LEAVE", label: "Fallecimiento", sub: "Fallecimiento familiar", color: "#4b5563", bg: "rgba(75, 85, 99, 0.08)", border: "1px solid #4b5563", icon: HeartHandshake }
+export type CategoryId = "ALL" | "LEAVE" | "HEALTH_FAMILY" | "REMOTE_IT"
+
+export interface CategoryTab {
+  id: CategoryId
+  label: string
+  badge?: string
+}
+
+export const CATEGORIES: CategoryTab[] = [
+  { id: "ALL", label: "Todas" },
+  { id: "LEAVE", label: "Tiempo Libre" },
+  { id: "HEALTH_FAMILY", label: "Salud y Familia" },
+  { id: "REMOTE_IT", label: "Incidencias Remoto / IT", badge: "Urgente" }
+]
+
+export interface RequestTypeItem {
+  id: string
+  label: string
+  sub: string
+  color: string
+  category: "LEAVE" | "HEALTH_FAMILY" | "REMOTE_IT"
+  icon: any
+  isFrequent: boolean
+  frequentOrder: number
+  remoteContextLabel?: string
+  remoteContextPlaceholder?: string
+  hasHardwareReviewToggle?: boolean
+}
+
+export const REQUEST_TYPES: RequestTypeItem[] = [
+  // 1. Vacaciones - Azul eléctrico (#3b82f6)
+  {
+    id: "VACATION",
+    label: "Vacaciones",
+    sub: "Días libres anuales remunerados",
+    color: "#3b82f6",
+    category: "LEAVE",
+    icon: CalendarDays,
+    isFrequent: true,
+    frequentOrder: 1
+  },
+  // 2. Permiso Especial - Índigo (#6366f1)
+  {
+    id: "PERMISSION",
+    label: "Permiso Especial",
+    sub: "Causas justificadas por horas o día",
+    color: "#6366f1",
+    category: "LEAVE",
+    icon: CheckCircle,
+    isFrequent: true,
+    frequentOrder: 2
+  },
+  // 3. Salir Temprano - Ámbar (#f59e0b)
+  {
+    id: "EARLY_LEAVE",
+    label: "Salir Temprano",
+    sub: "Horas específicas de salida anticipada",
+    color: "#f59e0b",
+    category: "LEAVE",
+    icon: Clock,
+    isFrequent: true,
+    frequentOrder: 3
+  },
+  // 4. Reposición de Horas - Turquesa / Teal (#14b8a6)
+  {
+    id: "HOURS_MAKEUP",
+    label: "Reposición de Horas",
+    sub: "Recuperar tiempo ausente previamente",
+    color: "#14b8a6",
+    category: "LEAVE",
+    icon: RotateCcw,
+    isFrequent: true,
+    frequentOrder: 4
+  },
+  // 5. Enfermedad (corta) - Esmeralda (#10b981)
+  {
+    id: "SICK_LEAVE",
+    label: "Enfermedad (corta)",
+    sub: "Afección médica o reposo breve",
+    color: "#10b981",
+    category: "HEALTH_FAMILY",
+    icon: Stethoscope,
+    isFrequent: true,
+    frequentOrder: 5
+  },
+  // 6. Falla de Internet - Naranja advertencia (#f97316)
+  {
+    id: "REMOTE_INTERNET",
+    label: "Falla de Internet",
+    sub: "Caída o fallo de conexión local de red",
+    color: "#f97316",
+    category: "REMOTE_IT",
+    icon: WifiOff,
+    isFrequent: true,
+    frequentOrder: 6,
+    remoteContextLabel: "Proveedor de Internet (ISP) *",
+    remoteContextPlaceholder: "Ej: Claro Dominicana, Altice, Starlink, etc."
+  },
+  // 7. Licencia Médica Oficial - Rosa / Carmesí (#f43f5e)
+  {
+    id: "MEDICAL_LEAVE",
+    label: "Licencia Médica Oficial",
+    sub: "Incapacidad médica formal certificada",
+    color: "#f43f5e",
+    category: "HEALTH_FAMILY",
+    icon: HeartPulse,
+    isFrequent: false,
+    frequentOrder: 7
+  },
+  // 8. Maternidad / Paternidad - Fucsia (#ec4899)
+  {
+    id: "MATERNITY_PATERNITY",
+    label: "Maternidad / Paternidad",
+    sub: "Pre/post natal o nacimiento familiar",
+    color: "#ec4899",
+    category: "HEALTH_FAMILY",
+    icon: Baby,
+    isFrequent: false,
+    frequentOrder: 8
+  },
+  // 9. Fallecimiento / Duelo - Violeta / Púrpura suave (#8b5cf6)
+  {
+    id: "BEREAVEMENT_LEAVE",
+    label: "Fallecimiento / Duelo",
+    sub: "Duelo familiar de primer/segundo grado",
+    color: "#8b5cf6",
+    category: "HEALTH_FAMILY",
+    icon: HeartHandshake,
+    isFrequent: false,
+    frequentOrder: 9
+  },
+  // 10. Corte de Energía Eléctrica - Amarillo relámpago (#eab308)
+  {
+    id: "REMOTE_POWER",
+    label: "Corte de Energía Eléctrica",
+    sub: "Interrupción de suministro o baterías",
+    color: "#eab308",
+    category: "REMOTE_IT",
+    icon: ZapOff,
+    isFrequent: false,
+    frequentOrder: 10,
+    remoteContextLabel: "Empresa Distribuidora Eléctrica *",
+    remoteContextPlaceholder: "Ej: Edeeste, Edesur, Edenorte, falla en inversor..."
+  },
+  // 11. Avería de Hardware / PC - Rojo alerta (#ef4444)
+  {
+    id: "REMOTE_HARDWARE",
+    label: "Avería de Hardware / PC",
+    sub: "Fallo físico de computadora o periféricos",
+    color: "#ef4444",
+    category: "REMOTE_IT",
+    icon: Laptop,
+    isFrequent: false,
+    frequentOrder: 11,
+    remoteContextLabel: "Componente o Dispositivo Afectado *",
+    remoteContextPlaceholder: "Ej: Laptop no enciende, cargador dañado, monitor...",
+    hasHardwareReviewToggle: true
+  },
+  // 12. Fallo de VPN / Accesos - Púrpura eléctrico (#a855f7)
+  {
+    id: "REMOTE_VPN",
+    label: "Fallo de VPN / Accesos",
+    sub: "Bloqueo de túnel VPN, MFA o cuentas",
+    color: "#a855f7",
+    category: "REMOTE_IT",
+    icon: ShieldAlert,
+    isFrequent: false,
+    frequentOrder: 12,
+    remoteContextLabel: "Herramienta o Acceso Afectado *",
+    remoteContextPlaceholder: "Ej: FortiClient VPN, credenciales de dominio, Intranet..."
+  }
 ]
 
 const DOCUMENT_GUIDELINES: Record<string, string[]> = {
   SICK_LEAVE: ["Certificado médico", "Incapacidad médica", "Constancia médica"],
   MEDICAL_LEAVE: ["Certificado médico", "Incapacidad médica", "Licencia médica oficial"],
+  MATERNITY_PATERNITY: ["Certificado de maternidad", "Acta de nacimiento", "Certificación hospitalaria"],
   MATERNITY_LEAVE: ["Certificado médico", "Documento de maternidad emitido por el centro médico"],
   PATERNITY_LEAVE: ["Acta de nacimiento", "Certificación hospitalaria", "Documento justificativo correspondiente"],
   BEREAVEMENT_LEAVE: ["Acta de defunción", "Documento justificativo emitido por autoridad competente"],
@@ -50,6 +222,16 @@ export interface EmployeeOption {
   email: string | null
   vacationBalance: number
   project?: { name: string } | null
+}
+
+const getInitialIncidentDateTime = () => {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  const h = String(d.getHours()).padStart(2, "0")
+  const min = String(d.getMinutes()).padStart(2, "0")
+  return `${y}-${m}-${day}T${h}:${min}`
 }
 
 export function VacationForm({ 
@@ -68,7 +250,16 @@ export function VacationForm({
   const { theme } = useTheme()
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error", text: string } | null>(null)
+  
+  // Categoría activa y estado colapsable
+  const [selectedCategory, setSelectedCategory] = useState<CategoryId>("ALL")
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  // Tipo de solicitud activa
   const [requestType, setRequestType] = useState<string>("VACATION")
+  const [hoveredCardId, setHoveredCardId] = useState<string | null>(null)
+
+  // Fechas y horas estándar
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [leaveTime, setLeaveTime] = useState("")
@@ -85,6 +276,12 @@ export function VacationForm({
   const [makeupDate, setMakeupDate] = useState("")
   const [makeupStartTime, setMakeupStartTime] = useState("")
   const [makeupEndTime, setMakeupEndTime] = useState("")
+
+  // Incidencias de Teletrabajo / IT
+  const [incidentDateTime, setIncidentDateTime] = useState(getInitialIncidentDateTime)
+  const [incidentDuration, setIncidentDuration] = useState("1-2 horas")
+  const [incidentContext, setIncidentContext] = useState("")
+  const [incidentNeedsItReview, setIncidentNeedsItReview] = useState(false)
   
   // Solicitar en nombre de otro empleado (para Managers/Supervisores)
   const [onBehalf, setOnBehalf] = useState(false)
@@ -96,7 +293,21 @@ export function VacationForm({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const employeeDropdownRef = useRef<HTMLDivElement>(null)
 
-  // Auto-calcular cantidad de horas al cambiar HORA INICIO u HORA FINAL
+  // Subida de archivos
+  const [file, setFile] = useState<File | null>(null)
+  const [dragActive, setDragActive] = useState(false)
+  const [fileError, setFileError] = useState<string | null>(null)
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const selectedEmployee = employees.find(e => e.id === targetUserId)
+  const effectiveBalance = (onBehalf && selectedEmployee) ? selectedEmployee.vacationBalance : balance
+
+  // Identificar si la tarjeta seleccionada es de Incidencia Remota
+  const activeTypeItem = REQUEST_TYPES.find(t => t.id === requestType) || REQUEST_TYPES[0]
+  const isRemoteIncident = activeTypeItem.category === "REMOTE_IT"
+
+  // Auto-calcular cantidad de horas al cambiar HORA INICIO u HORA FINAL en permisos especiales
   useEffect(() => {
     if (requestType === "PERMISSION" && exitTime && returnTime) {
       const [startH, startM] = exitTime.split(':').map(Number)
@@ -124,16 +335,6 @@ export function VacationForm({
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
-
-  // File upload state
-  const [file, setFile] = useState<File | null>(null)
-  const [dragActive, setDragActive] = useState(false)
-  const [fileError, setFileError] = useState<string | null>(null)
-  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const selectedEmployee = employees.find(e => e.id === targetUserId)
-  const effectiveBalance = (onBehalf && selectedEmployee) ? selectedEmployee.vacationBalance : balance
 
   // Fecha actual dinámica del sistema y regla de 25 días de anticipación
   const now = new Date()
@@ -245,6 +446,27 @@ export function VacationForm({
 
   const requestedDays = calculateDays()
 
+  // Manejar cambio de pestañas de categoría
+  const handleCategoryChange = (catId: CategoryId) => {
+    setSelectedCategory(catId)
+    if (catId !== "ALL") {
+      const firstInCat = REQUEST_TYPES.find(t => t.category === catId)
+      const currentInCat = REQUEST_TYPES.find(t => t.id === requestType && t.category === catId)
+      if (firstInCat && !currentInCat) {
+        setRequestType(firstInCat.id)
+      }
+    }
+  }
+
+  // Filtrado de tarjetas a mostrar según categoría y estado colapsable
+  const displayedTypes = REQUEST_TYPES.filter((t) => {
+    if (selectedCategory === "ALL") {
+      if (isExpanded) return true
+      return t.isFrequent // Las 6 más frecuentes
+    }
+    return t.category === selectedCategory
+  })
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLoading(true)
@@ -256,6 +478,7 @@ export function VacationForm({
       return
     }
 
+    // Validaciones específicas para Vacaciones
     if (requestType === "VACATION" && !onBehalf && startDate) {
       const [sY, sM, sD] = startDate.split('-').map(Number)
       const selectedStart = new Date(sY, sM - 1, sD)
@@ -270,21 +493,18 @@ export function VacationForm({
       }
     }
 
-    // Validación de mínimo de días (política empresarial - legislación dominicana)
     if (requestType === "VACATION") {
       const currentBalance = effectiveBalance
       if (currentBalance >= MIN_VACATION_DAYS) {
-        // Saldo suficiente: exigir el mínimo
         if (requestedDays < MIN_VACATION_DAYS) {
           setMessage({
             type: "error",
-            text: `Las solicitudes de vacaciones deben ser de un mínimo de ${MIN_VACATION_DAYS} días laborables consecutivos, de acuerdo con la política de la empresa. Si únicamente te quedan menos de ${MIN_VACATION_DAYS} días disponibles, el sistema permitirá solicitarlos automáticamente.`
+            text: `Las solicitudes de vacaciones deben ser de un mínimo de ${MIN_VACATION_DAYS} días laborables consecutivos, de acuerdo con la política de la empresa.`
           })
           setLoading(false)
           return
         }
       } else {
-        // Saldo menor al mínimo: solo se permite solicitar la totalidad
         if (requestedDays !== currentBalance) {
           setMessage({
             type: "error",
@@ -296,6 +516,7 @@ export function VacationForm({
       }
     }
 
+    // Documentación requerida
     const isDocumentRequired = !!DOCUMENT_GUIDELINES[requestType]
     if (isDocumentRequired && !file) {
       setMessage({ type: "error", text: "La documentación de respaldo es obligatoria para este tipo de solicitud." })
@@ -313,7 +534,14 @@ export function VacationForm({
       formData.set("autoApprove", autoApprove ? "true" : "false")
     }
 
-    if (requestType === "PERMISSION") {
+    if (isRemoteIncident) {
+      formData.set("incidentDateTime", incidentDateTime)
+      formData.set("incidentDuration", incidentDuration)
+      formData.set("incidentContext", incidentContext)
+      formData.set("incidentNeedsItReview", incidentNeedsItReview ? "true" : "false")
+      formData.set("startDate", incidentDateTime)
+      formData.set("endDate", incidentDateTime)
+    } else if (requestType === "PERMISSION") {
       formData.set("specialType", specialType)
       if (specialType === "HOURS") {
         formData.set("exitTime", exitTime)
@@ -337,9 +565,11 @@ export function VacationForm({
       } else {
         setMessage({ 
           type: "success", 
-          text: onBehalf 
-            ? `Solicitud enviada exitosamente para ${selectedEmployee?.name || "el empleado"}.`
-            : "Solicitud enviada correctamente." 
+          text: isRemoteIncident
+            ? "Reporte de incidencia enviado con éxito a tu supervisor y soporte IT."
+            : onBehalf 
+              ? `Solicitud enviada exitosamente para ${selectedEmployee?.name || "el empleado"}.`
+              : "Solicitud enviada correctamente." 
         })
         setStartDate("")
         setEndDate("")
@@ -353,6 +583,8 @@ export function VacationForm({
         setMakeupDate("")
         setMakeupStartTime("")
         setMakeupEndTime("")
+        setIncidentContext("")
+        setIncidentNeedsItReview(false)
         setTargetUserId("")
         setSearchTerm("")
         setOnBehalf(false)
@@ -360,39 +592,79 @@ export function VacationForm({
       }
     } catch (err: any) {
       setLoading(false)
-      setMessage({ type: "error", text: "Error inesperado al enviar" })
+      setMessage({ type: "error", text: "Error inesperado al enviar la solicitud." })
     }
   }
 
   return (
-    <div className="card glass animate-in" style={{ height: "fit-content", padding: "0", overflow: "visible", borderRadius: "1.25rem", border: "1px solid hsl(var(--border) / 0.8)", position: "relative", zIndex: 10 }}>
-      {/* Header */}
+    <div 
+      className="card glass animate-in" 
+      style={{ 
+        height: "fit-content", 
+        padding: "0", 
+        overflow: "visible", 
+        borderRadius: "1.25rem", 
+        border: "1px solid #1e293b", 
+        backgroundColor: "#0b0f19",
+        boxShadow: "0 20px 40px -15px rgba(0, 0, 0, 0.7)",
+        position: "relative", 
+        zIndex: 10 
+      }}
+    >
+      {/* Header Corporativo Moderno */}
       <div style={{
         padding: "1.5rem 1.75rem",
-        background: "linear-gradient(135deg, hsl(var(--primary) / 0.12), hsl(var(--primary) / 0.04))",
-        borderBottom: "1px solid hsl(var(--primary) / 0.15)",
-        display: "flex", alignItems: "center", gap: "0.875rem",
+        background: "linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98))",
+        borderBottom: "1px solid #1e293b",
+        display: "flex", 
+        alignItems: "center", 
+        justifyContent: "space-between",
         borderTopLeftRadius: "1.25rem",
-        borderTopRightRadius: "1.25rem"
+        borderTopRightRadius: "1.25rem",
+        flexWrap: "wrap",
+        gap: "1rem"
       }}>
-        <div style={{
-          background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.7))",
-          borderRadius: "0.75rem", padding: "0.5rem",
-          boxShadow: "0 4px 12px hsl(var(--primary) / 0.3)"
-        }}>
-          <CalendarDays size={18} color="white" />
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <div style={{
+            background: "linear-gradient(135deg, #3b82f6, #1d4ed8)",
+            borderRadius: "0.875rem", 
+            padding: "0.65rem",
+            boxShadow: "0 6px 16px rgba(59, 130, 246, 0.35)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
+          }}>
+            <CalendarDays size={22} color="#ffffff" />
+          </div>
+          <div>
+            <h2 style={{ fontSize: "1.35rem", fontWeight: 800, margin: 0, color: "#f8fafc", letterSpacing: "-0.02em" }}>
+              Nueva Solicitud
+            </h2>
+            <p style={{ margin: "0.2rem 0 0 0", fontSize: "14px", color: "#94a3b8" }}>
+              {onBehalf ? "Registrando solicitud a nombre de un empleado" : "Selecciona el tipo de gestión y completa los detalles requeridos"}
+            </p>
+          </div>
         </div>
-        <div>
-          <h2 style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>
-            Nueva Solicitud
-          </h2>
-          <p style={{ margin: 0, fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
-            {onBehalf ? "Registrando solicitud a nombre de un empleado" : "Completa los detalles para procesar tu tiempo libre"}
-          </p>
+
+        {/* Badge identificador rápido */}
+        <div style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.5rem",
+          padding: "0.4rem 0.85rem",
+          borderRadius: "9999px",
+          backgroundColor: `${activeTypeItem.color}15`,
+          border: `1px solid ${activeTypeItem.color}40`,
+          color: activeTypeItem.color,
+          fontSize: "13px",
+          fontWeight: 700
+        }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: activeTypeItem.color }} />
+          <span>{activeTypeItem.label}</span>
         </div>
       </div>
       
-      <form onSubmit={handleSubmit} style={{ padding: "1.75rem", display: "flex", flexDirection: "column", gap: "1.5rem", overflow: "visible" }}>
+      <form onSubmit={handleSubmit} style={{ padding: "1.75rem", display: "flex", flexDirection: "column", gap: "1.75rem", overflow: "visible" }}>
         
         <input type="hidden" name="projectName" value={projectName || ""} />
         <input type="hidden" name="type" value={requestType} />
@@ -400,58 +672,59 @@ export function VacationForm({
         {/* Control On-Behalf para Managers / Supervisores */}
         {canCreateForOthers && employees.length > 0 && (
           <div className="animate-in" style={{
-            padding: "1.15rem",
-            borderRadius: "0.875rem",
-            backgroundColor: "hsl(var(--primary) / 0.04)",
-            border: "1px solid hsl(var(--primary) / 0.2)",
+            padding: "1.25rem",
+            borderRadius: "1rem",
+            backgroundColor: "rgba(30, 41, 59, 0.4)",
+            border: "1px solid rgba(59, 130, 246, 0.25)",
             display: "flex",
             flexDirection: "column",
-            gap: "0.85rem",
+            gap: "1rem",
             position: "relative",
             zIndex: 50
           }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 800, fontSize: "0.75rem", color: "hsl(var(--primary))", textTransform: "uppercase" }}>
-                <Users size={16} />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 700, fontSize: "14px", color: "#60a5fa", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+                <Users size={17} />
                 <span>Modo de Registro Administrado</span>
               </div>
-              <span style={{ fontSize: "0.68rem", backgroundColor: "hsl(var(--primary) / 0.1)", color: "hsl(var(--primary))", padding: "0.2rem 0.5rem", borderRadius: "0.5rem", fontWeight: 700 }}>
+              <span style={{ fontSize: "12px", backgroundColor: "rgba(59, 130, 246, 0.15)", color: "#93c5fd", padding: "0.25rem 0.65rem", borderRadius: "9999px", fontWeight: 700, border: "1px solid rgba(59, 130, 246, 0.3)" }}>
                 Supervisión / IT / RRHH
               </span>
             </div>
 
-            <div style={{ display: "flex", gap: "1.25rem" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", cursor: "pointer", fontWeight: !onBehalf ? 700 : 500 }}>
+            <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", fontSize: "15px", cursor: "pointer", fontWeight: !onBehalf ? 700 : 500, color: !onBehalf ? "#f8fafc" : "#94a3b8" }}>
                 <input 
                   type="radio" 
                   name="onBehalfMode" 
                   checked={!onBehalf} 
                   onChange={() => { setOnBehalf(false); setTargetUserId(""); setSearchTerm(""); }} 
+                  style={{ width: "17px", height: "17px", accentColor: "#3b82f6" }}
                 />
                 <span>Para mí mismo</span>
               </label>
 
-              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", cursor: "pointer", fontWeight: onBehalf ? 700 : 500, color: onBehalf ? "hsl(var(--primary))" : "inherit" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", fontSize: "15px", cursor: "pointer", fontWeight: onBehalf ? 700 : 500, color: onBehalf ? "#60a5fa" : "#94a3b8" }}>
                 <input 
                   type="radio" 
                   name="onBehalfMode" 
                   checked={onBehalf} 
                   onChange={() => setOnBehalf(true)} 
+                  style={{ width: "17px", height: "17px", accentColor: "#3b82f6" }}
                 />
                 <span>Registrar en nombre de un empleado</span>
               </label>
             </div>
 
             {onBehalf && (
-              <div className="animate-in" style={{ display: "flex", flexDirection: "column", gap: "0.85rem", marginTop: "0.25rem", borderTop: "1px solid hsl(var(--primary) / 0.15)", paddingTop: "0.85rem" }}>
-                {/* Autocompletado buscador de empleados */}
+              <div className="animate-in" style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "0.25rem", borderTop: "1px solid rgba(51, 65, 85, 0.5)", paddingTop: "1rem" }}>
                 <div ref={employeeDropdownRef} style={{ position: "relative" }}>
-                  <label style={{ display: "block", marginBottom: "0.4rem", fontWeight: 800, fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", textTransform: "uppercase" }}>
+                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 600, fontSize: "15px", color: "#e2e8f0" }}>
                     Buscar o Seleccionar Empleado *
                   </label>
 
                   <div style={{ display: "flex", alignItems: "center", position: "relative" }}>
-                    <Search size={16} style={{ position: "absolute", left: "1rem", color: "hsl(var(--muted-foreground))", pointerEvents: "none" }} />
+                    <Search size={18} style={{ position: "absolute", left: "1.1rem", color: "#94a3b8", pointerEvents: "none" }} />
                     <input
                       type="text"
                       className="input"
@@ -464,13 +737,14 @@ export function VacationForm({
                         setIsDropdownOpen(true)
                       }}
                       style={{
-                        fontSize: "0.875rem",
+                        fontSize: "15px",
                         borderRadius: "0.75rem",
-                        padding: "0.75rem 2.5rem 0.75rem 2.5rem",
+                        padding: "0.85rem 2.75rem 0.85rem 3rem",
                         width: "100%",
                         fontWeight: 600,
-                        border: selectedEmployee ? "2px solid hsl(var(--primary))" : "1px solid hsl(var(--primary) / 0.4)",
-                        backgroundColor: selectedEmployee ? "hsl(var(--primary) / 0.05)" : "hsl(var(--surface))"
+                        border: selectedEmployee ? "2px solid #3b82f6" : "1px solid #334155",
+                        backgroundColor: "#0f172a",
+                        color: "#f8fafc"
                       }}
                     />
                     {(selectedEmployee || searchTerm) && (
@@ -483,16 +757,16 @@ export function VacationForm({
                         }}
                         style={{
                           position: "absolute",
-                          right: "0.75rem",
+                          right: "0.85rem",
                           background: "none",
                           border: "none",
-                          color: "hsl(var(--muted-foreground))",
+                          color: "#94a3b8",
                           cursor: "pointer",
-                          padding: "0.25rem"
+                          padding: "0.35rem"
                         }}
                         title="Limpiar búsqueda"
                       >
-                        <X size={16} />
+                        <X size={18} />
                       </button>
                     )}
                   </div>
@@ -502,16 +776,16 @@ export function VacationForm({
                     <div 
                       style={{
                         position: "absolute",
-                        top: "calc(100% + 0.35rem)",
+                        top: "calc(100% + 0.45rem)",
                         left: 0,
                         right: 0,
-                        maxHeight: "260px",
+                        maxHeight: "280px",
                         overflowY: "auto",
-                        backgroundColor: "#111827",
+                        backgroundColor: "#0f172a",
                         color: "#f8fafc",
-                        border: "1px solid hsl(var(--primary) / 0.4)",
+                        border: "1px solid #3b82f6",
                         borderRadius: "0.875rem",
-                        boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.1)",
+                        boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.95)",
                         zIndex: 9999,
                         padding: "0.5rem",
                         display: "flex",
@@ -529,61 +803,53 @@ export function VacationForm({
                               setIsDropdownOpen(false)
                             }}
                             style={{
-                              padding: "0.75rem 0.85rem",
+                              padding: "0.85rem 1rem",
                               borderRadius: "0.65rem",
                               cursor: "pointer",
                               display: "flex",
                               justifyContent: "space-between",
                               alignItems: "center",
                               transition: "all 0.15s ease",
-                              backgroundColor: targetUserId === emp.id ? "hsl(var(--primary) / 0.15)" : "hsl(var(--muted) / 0.3)",
-                              border: "1px solid hsl(var(--border) / 0.4)"
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = "hsl(var(--primary) / 0.15)"
-                              e.currentTarget.style.borderColor = "hsl(var(--primary) / 0.4)"
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = targetUserId === emp.id ? "hsl(var(--primary) / 0.15)" : "hsl(var(--muted) / 0.3)"
-                              e.currentTarget.style.borderColor = "hsl(var(--border) / 0.4)"
+                              backgroundColor: targetUserId === emp.id ? "rgba(59, 130, 246, 0.2)" : "rgba(30, 41, 59, 0.5)",
+                              border: targetUserId === emp.id ? "1px solid #3b82f6" : "1px solid rgba(51, 65, 85, 0.4)"
                             }}
                           >
-                            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
                               <div style={{
-                                width: "34px",
-                                height: "34px",
+                                width: "38px",
+                                height: "38px",
                                 borderRadius: "50%",
-                                backgroundColor: "hsl(var(--primary) / 0.18)",
-                                color: "hsl(var(--primary))",
+                                backgroundColor: "rgba(59, 130, 246, 0.2)",
+                                color: "#60a5fa",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
                                 fontWeight: 800,
-                                fontSize: "0.85rem",
+                                fontSize: "15px",
                                 flexShrink: 0
                               }}>
                                 {(emp.name || emp.email || "U").charAt(0).toUpperCase()}
                               </div>
                               <div>
-                                <div style={{ fontSize: "0.875rem", fontWeight: 700, color: "hsl(var(--foreground))", lineHeight: 1.2 }}>
+                                <div style={{ fontSize: "15px", fontWeight: 700, color: "#f8fafc", lineHeight: 1.2 }}>
                                   {emp.name || emp.email}
                                 </div>
-                                {emp.email && <div style={{ fontSize: "0.72rem", color: "hsl(var(--muted-foreground))", marginTop: "0.15rem" }}>{emp.email}</div>}
+                                {emp.email && <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "0.2rem" }}>{emp.email}</div>}
                               </div>
                             </div>
-                            <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.15rem" }}>
+                            <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.2rem" }}>
                               <span style={{ 
-                                fontSize: "0.72rem", 
+                                fontSize: "13px", 
                                 fontWeight: 800, 
-                                backgroundColor: "hsl(var(--primary) / 0.12)", 
-                                color: "hsl(var(--primary))",
-                                padding: "0.2rem 0.5rem",
-                                borderRadius: "0.4rem"
+                                backgroundColor: "rgba(59, 130, 246, 0.2)", 
+                                color: "#93c5fd",
+                                padding: "0.25rem 0.6rem",
+                                borderRadius: "0.5rem"
                               }}>
                                 {emp.vacationBalance} días
                               </span>
                               {emp.project?.name && (
-                                <div style={{ fontSize: "0.65rem", color: "hsl(var(--muted-foreground))", fontWeight: 600 }}>
+                                <div style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 600 }}>
                                   {emp.project.name}
                                 </div>
                               )}
@@ -591,7 +857,7 @@ export function VacationForm({
                           </div>
                         ))
                       ) : (
-                        <div style={{ padding: "1rem", fontSize: "0.85rem", color: "hsl(var(--muted-foreground))", textAlign: "center", fontWeight: 600 }}>
+                        <div style={{ padding: "1.25rem", fontSize: "14px", color: "#94a3b8", textAlign: "center", fontWeight: 600 }}>
                           No se encontraron empleados coincidentes.
                         </div>
                       )}
@@ -600,21 +866,21 @@ export function VacationForm({
                 </div>
 
                 {selectedEmployee && (
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "hsl(var(--surface))", padding: "0.75rem 1rem", borderRadius: "0.75rem", border: "1px solid hsl(var(--border))" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <UserCheck size={16} color="hsl(var(--primary))" />
-                      <span style={{ fontSize: "0.8rem", fontWeight: 700 }}>Empleado: {selectedEmployee.name}</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#0f172a", padding: "0.85rem 1.15rem", borderRadius: "0.75rem", border: "1px solid #334155" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                      <UserCheck size={18} color="#3b82f6" />
+                      <span style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc" }}>Empleado: {selectedEmployee.name}</span>
                     </div>
-                    <span style={{ fontSize: "1.1rem", fontWeight: 800, color: "#10b981" }}>{selectedEmployee.vacationBalance} <span style={{ fontSize: "0.75rem" }}>días disponibles</span></span>
+                    <span style={{ fontSize: "15px", fontWeight: 800, color: "#10b981" }}>{selectedEmployee.vacationBalance} <span style={{ fontSize: "13px" }}>días disponibles</span></span>
                   </div>
                 )}
 
-                <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", fontSize: "0.8rem", cursor: "pointer", color: "hsl(var(--foreground))", fontWeight: 600 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "14px", cursor: "pointer", color: "#e2e8f0", fontWeight: 600 }}>
                   <input
                     type="checkbox"
                     checked={autoApprove}
                     onChange={(e) => setAutoApprove(e.target.checked)}
-                    style={{ width: "16px", height: "16px", accentColor: "hsl(var(--primary))" }}
+                    style={{ width: "18px", height: "18px", accentColor: "#3b82f6" }}
                   />
                   <span>Aprobar automáticamente e impactar el saldo (Recomendado para ausencias ya tomadas)</span>
                 </label>
@@ -623,76 +889,201 @@ export function VacationForm({
           </div>
         )}
 
-        {/* Type selection */}
+        {/* 1. Selector de Categorías (Pills / Segmented Tabs) */}
         <div>
-          <label style={{ display: "block", marginBottom: "0.75rem", fontWeight: 800, fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-            Tipo de Solicitud
-          </label>
-          <style>
-            {`
-              .type-card-hover:hover {
-                transform: translateY(-2px);
-                border-color: hsl(var(--border));
-              }
-            `}
-          </style>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.85rem", flexWrap: "wrap", gap: "0.5rem" }}>
+            <label style={{ margin: 0, fontWeight: 700, fontSize: "15px", color: "#e2e8f0", letterSpacing: "0.02em", textTransform: "uppercase" }}>
+              Categoría de Solicitud
+            </label>
+            <span style={{ fontSize: "13px", color: "#94a3b8" }}>
+              Mostrando {displayedTypes.length} de {REQUEST_TYPES.length} opciones
+            </span>
+          </div>
+
+          <div style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.5rem",
+            padding: "0.35rem",
+            borderRadius: "0.875rem",
+            backgroundColor: "#0f172a",
+            border: "1px solid #1e293b"
+          }}>
+            {CATEGORIES.map((cat) => {
+              const isSelected = selectedCategory === cat.id
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => handleCategoryChange(cat.id)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.6rem",
+                    padding: "0.65rem 1.15rem",
+                    borderRadius: "0.65rem",
+                    fontSize: "14px",
+                    fontWeight: isSelected ? 700 : 600,
+                    cursor: "pointer",
+                    transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+                    border: isSelected ? "1px solid rgba(99, 102, 241, 0.5)" : "1px solid transparent",
+                    backgroundColor: isSelected ? "#1e293b" : "transparent",
+                    color: isSelected ? "#ffffff" : "#94a3b8",
+                    boxShadow: isSelected ? "0 4px 12px rgba(0, 0, 0, 0.4)" : "none"
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.color = "#f8fafc"
+                      e.currentTarget.style.backgroundColor = "rgba(30, 41, 59, 0.5)"
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.color = "#94a3b8"
+                      e.currentTarget.style.backgroundColor = "transparent"
+                    }
+                  }}
+                >
+                  <span>{cat.label}</span>
+                  {cat.badge && (
+                    <span style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.35rem",
+                      padding: "0.2rem 0.55rem",
+                      borderRadius: "9999px",
+                      fontSize: "11px",
+                      fontWeight: 800,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.04em",
+                      backgroundColor: "rgba(239, 68, 68, 0.2)",
+                      color: "#f87171",
+                      border: "1px solid rgba(239, 68, 68, 0.35)"
+                    }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#ef4444" }} />
+                      {cat.badge}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* 2 & 3. Cuadrícula de Tarjetas con Identidad Visual Única */}
+        <div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.85rem" }}>
+            <label style={{ margin: 0, fontWeight: 700, fontSize: "15px", color: "#e2e8f0", letterSpacing: "0.02em", textTransform: "uppercase" }}>
+              Tipo de Gestión Específica
+            </label>
+          </div>
+
           <div style={{ 
             display: "grid", 
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", 
-            gap: "0.75rem", 
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", 
+            gap: "0.85rem", 
             width: "100%"
           }}>
-            {REQUEST_TYPES.map((t) => {
+            {displayedTypes.map((t) => {
               const IconComponent = t.icon
-              const isActive = requestType === t.id
+              const isSelected = requestType === t.id
+              const isHovered = hoveredCardId === t.id
+
               return (
                 <button
                   type="button"
                   key={t.id}
                   onClick={() => setRequestType(t.id)}
-                  className={isActive ? "" : "type-card-hover"}
+                  onMouseEnter={() => setHoveredCardId(t.id)}
+                  onMouseLeave={() => setHoveredCardId(null)}
                   style={{
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "flex-start",
-                    gap: "0.5rem",
-                    padding: "1rem",
+                    gap: "0.6rem",
+                    padding: "1.1rem 1.15rem",
                     borderRadius: "0.875rem",
-                    border: isActive ? t.border : "1px solid hsl(var(--border) / 0.6)",
-                    backgroundColor: isActive ? t.bg : "hsl(var(--surface))",
+                    border: isSelected 
+                      ? `2px solid ${t.color}` 
+                      : isHovered 
+                        ? `1px solid ${t.color}88` 
+                        : "1px solid rgba(51, 65, 85, 0.6)",
+                    backgroundColor: isSelected 
+                      ? "rgba(30, 41, 59, 0.95)" 
+                      : isHovered 
+                        ? "rgba(30, 41, 59, 0.7)" 
+                        : "rgba(17, 24, 39, 0.7)",
+                    backgroundImage: isSelected ? `radial-gradient(circle at top right, ${t.color}22, transparent 70%)` : "none",
                     cursor: "pointer",
                     textAlign: "left",
-                    transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
-                    boxShadow: isActive ? `0 4px 12px ${t.color}22` : "0 2px 5px rgba(0,0,0,0.02)",
+                    transition: "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
+                    transform: (isHovered && !isSelected) ? "translateY(-3px)" : "none",
+                    boxShadow: isSelected 
+                      ? `0 12px 28px -4px ${t.color}40, 0 4px 12px -2px ${t.color}25` 
+                      : isHovered 
+                        ? `0 10px 22px -4px ${t.color}22` 
+                        : "0 2px 6px rgba(0,0,0,0.25)",
                     position: "relative",
                     outline: "none"
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", width: "100%" }}>
-                    <div style={{ 
-                      backgroundColor: isActive ? t.color : "hsl(var(--muted))", 
-                      color: isActive ? "white" : "hsl(var(--muted-foreground))",
-                      padding: "0.35rem",
-                      borderRadius: "0.5rem",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      transition: "all 0.2s"
-                    }}>
-                      <IconComponent size={16} />
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: "0.5rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", minWidth: 0 }}>
+                      <div style={{ 
+                        backgroundColor: isSelected ? t.color : `${t.color}22`, 
+                        color: isSelected ? "#ffffff" : t.color,
+                        width: "38px",
+                        height: "38px",
+                        borderRadius: "0.65rem",
+                        display: "flex", 
+                        alignItems: "center", 
+                        justifyContent: "center",
+                        flexShrink: 0,
+                        transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+                        boxShadow: isSelected ? `0 4px 12px ${t.color}60` : "none"
+                      }}>
+                        <IconComponent size={20} />
+                      </div>
+                      
+                      <span style={{ 
+                        fontWeight: 700, 
+                        fontSize: "17px", 
+                        color: "#f8fafc",
+                        lineHeight: 1.25,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap"
+                      }}>
+                        {t.label}
+                      </span>
                     </div>
-                    <span style={{ 
-                      fontWeight: 700, 
-                      fontSize: "0.8rem", 
-                      color: isActive ? t.color : "hsl(var(--foreground))",
-                      lineHeight: 1.2
-                    }}>
-                      {t.label}
-                    </span>
+
+                    {/* Indicador de seleccionado */}
+                    {isSelected && (
+                      <div style={{
+                        width: "20px",
+                        height: "20px",
+                        borderRadius: "50%",
+                        backgroundColor: t.color,
+                        color: "#ffffff",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                        boxShadow: `0 2px 8px ${t.color}66`
+                      }}>
+                        <Check size={12} strokeWidth={3} />
+                      </div>
+                    )}
                   </div>
+
                   <span style={{ 
-                    fontSize: "0.65rem", 
-                    color: "hsl(var(--muted-foreground))", 
-                    marginTop: "0.25rem",
-                    lineHeight: 1.3 
+                    fontSize: "13.5px", 
+                    fontWeight: 500,
+                    color: "#cbd5e1", 
+                    lineHeight: 1.4,
+                    display: "block",
+                    width: "100%"
                   }}>
                     {t.sub}
                   </span>
@@ -700,27 +1091,74 @@ export function VacationForm({
               )
             })}
           </div>
+
+          {/* Botón interactivo: Mostrar más / Mostrar menos (Solo en la pestaña "Todas") */}
+          {selectedCategory === "ALL" && (
+            <button
+              type="button"
+              onClick={() => setIsExpanded(!isExpanded)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.5rem",
+                padding: "0.85rem 1.5rem",
+                borderRadius: "0.75rem",
+                backgroundColor: "rgba(30, 41, 59, 0.6)",
+                border: "1px dashed rgba(148, 163, 184, 0.35)",
+                color: "#cbd5e1",
+                fontSize: "14px",
+                fontWeight: 700,
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                width: "100%",
+                marginTop: "1rem"
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "rgba(30, 41, 59, 0.95)"
+                e.currentTarget.style.borderColor = "#3b82f6"
+                e.currentTarget.style.color = "#ffffff"
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "rgba(30, 41, 59, 0.6)"
+                e.currentTarget.style.borderColor = "rgba(148, 163, 184, 0.35)"
+                e.currentTarget.style.color = "#cbd5e1"
+              }}
+            >
+              {isExpanded ? (
+                <>
+                  <ChevronUp size={18} />
+                  <span>Mostrar menos ↑</span>
+                </>
+              ) : (
+                <>
+                  <ChevronDown size={18} />
+                  <span>Mostrar más incidencias (6) ↓</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
 
-        {/* Dynamic Warning Banner for Guidelines */}
+        {/* Dynamic Warning Banner for Medical & Family Guidelines */}
         {DOCUMENT_GUIDELINES[requestType] && (
           <div className="animate-in" style={{
-            padding: "1rem",
+            padding: "1.15rem 1.25rem",
             borderRadius: "0.875rem",
-            backgroundColor: "hsl(var(--primary) / 0.05)",
-            border: "1px solid hsl(var(--primary) / 0.12)",
+            backgroundColor: `${activeTypeItem.color}10`,
+            border: `1px solid ${activeTypeItem.color}35`,
             display: "flex",
             flexDirection: "column",
-            gap: "0.35rem"
+            gap: "0.5rem"
           }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 800, fontSize: "0.8rem", color: "hsl(var(--primary))" }}>
-              <Paperclip size={14} />
-              <span>Documentación de Respaldo Requerida</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 700, fontSize: "15px", color: activeTypeItem.color }}>
+              <Paperclip size={18} />
+              <span>Documentación de Respaldo Obligatoria</span>
             </div>
-            <p style={{ margin: 0, fontSize: "0.72rem", color: "hsl(var(--muted-foreground))", lineHeight: 1.4 }}>
-              Es obligatorio adjuntar uno de los siguientes documentos de respaldo:
+            <p style={{ margin: 0, fontSize: "14px", color: "#e2e8f0", lineHeight: 1.5 }}>
+              Para procesar esta solicitud es obligatorio adjuntar al menos uno de los siguientes justificantes oficiales:
             </p>
-            <ul style={{ margin: "0.25rem 0 0 1.25rem", padding: 0, fontSize: "0.72rem", color: "hsl(var(--muted-foreground))", lineHeight: 1.5 }}>
+            <ul style={{ margin: "0.25rem 0 0 1.25rem", padding: 0, fontSize: "13.5px", color: "#cbd5e1", lineHeight: 1.6 }}>
               {DOCUMENT_GUIDELINES[requestType].map((doc, idx) => (
                 <li key={idx}>{doc}</li>
               ))}
@@ -728,160 +1166,328 @@ export function VacationForm({
           </div>
         )}
 
-        {/* Campos Condicionales de Permiso Especial */}
-        {requestType === "PERMISSION" && (
-          <div className="animate-in" style={{ display: "flex", flexDirection: "column", gap: "1rem", border: "1px solid hsl(var(--border)/0.5)", padding: "1rem", borderRadius: "0.875rem", backgroundColor: "hsl(var(--surface))" }}>
-            <div className="animate-in" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
+        {/* 4. Formulario Reactivo y Dinámico (UX Condicional) */}
+
+        {/* CASO A: Incidencia de Teletrabajo / IT */}
+        {isRemoteIncident ? (
+          <div className="animate-in" style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "1.25rem",
+            padding: "1.35rem",
+            borderRadius: "1rem",
+            backgroundColor: "rgba(30, 41, 59, 0.4)",
+            border: `1px solid ${activeTypeItem.color}40`,
+            borderLeft: `4px solid ${activeTypeItem.color}`
+          }}>
+            {/* Banner de Prioridad Operativa */}
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.85rem",
+              padding: "0.9rem 1.15rem",
+              borderRadius: "0.75rem",
+              backgroundColor: "rgba(249, 115, 22, 0.12)",
+              border: "1px solid rgba(249, 115, 22, 0.3)"
+            }}>
+              <AlertOctagon size={22} color="#f97316" style={{ flexShrink: 0 }} />
               <div>
-                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 800, fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", letterSpacing: "0.06em" }}>HORA INICIO</label>
-                <input type="time" className="input" required value={exitTime} onChange={(e) => setExitTime(e.target.value)} style={{ fontSize: "0.875rem", borderRadius: "0.75rem", padding: "0.75rem 1rem", colorScheme: theme === "dark" ? "dark" : "light" }} />
+                <div style={{ fontSize: "15px", fontWeight: 700, color: "#f8fafc" }}>
+                  Reporte Prioritario de Teletrabajo
+                </div>
+                <div style={{ fontSize: "13.5px", color: "#cbd5e1", marginTop: "0.15rem" }}>
+                  Esta incidencia técnica se notificará inmediatamente para justificar la interrupción de labores. No aplica la regla de 25 días.
+                </div>
               </div>
+            </div>
+
+            {/* Fecha/Hora de la Falla y Tiempo Estimado */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1.25rem" }}>
               <div>
-                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 800, fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", letterSpacing: "0.06em" }}>HORA FINAL</label>
-                <input type="time" className="input" required value={returnTime} onChange={(e) => setReturnTime(e.target.value)} style={{ fontSize: "0.875rem", borderRadius: "0.75rem", padding: "0.75rem 1rem", colorScheme: theme === "dark" ? "dark" : "light" }} />
-              </div>
-              <div>
-                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 800, fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", letterSpacing: "0.06em" }}>CANTIDAD HORAS</label>
+                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>
+                  Fecha y Hora de la Falla *
+                </label>
                 <input 
-                  type="text" 
-                  readOnly 
-                  className="input" 
-                  value={hoursRequested ? `${hoursRequested} hrs` : "--"} 
+                  type="datetime-local" 
+                  name="incidentDateTime" 
+                  required 
+                  value={incidentDateTime} 
+                  onChange={(e) => setIncidentDateTime(e.target.value)} 
                   style={{ 
-                    fontSize: "0.875rem", 
+                    fontSize: "15px", 
                     borderRadius: "0.75rem", 
-                    padding: "0.75rem 1rem", 
-                    backgroundColor: "hsl(var(--muted) / 0.25)", 
-                    cursor: "not-allowed",
-                    fontWeight: 800,
-                    color: "hsl(var(--primary))",
-                    border: "1px solid hsl(var(--border) / 0.6)"
+                    padding: "0.85rem 1rem", 
+                    width: "100%",
+                    backgroundColor: "#0f172a",
+                    border: "1px solid #334155",
+                    color: "#f8fafc",
+                    colorScheme: "dark"
                   }} 
                 />
               </div>
-            </div>
-          </div>
-        )}
 
-        {/* Campos Condicionales de Reposición de Horas */}
-        {requestType === "HOURS_MAKEUP" && (
-          <div className="animate-in" style={{ display: "flex", flexDirection: "column", gap: "1.25rem", border: "1px solid hsl(var(--border)/0.5)", padding: "1.25rem", borderRadius: "0.875rem", backgroundColor: "hsl(var(--surface))" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
               <div>
-                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 800, fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", letterSpacing: "0.06em" }}>FECHA AUSENCIA ORIGINAL</label>
-                <input type="date" className="input" required value={absenceDate} onChange={(e) => setAbsenceDate(e.target.value)} style={{ fontSize: "0.875rem", borderRadius: "0.75rem", padding: "0.75rem 1rem" }} />
-              </div>
-              <div>
-                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 800, fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", letterSpacing: "0.06em" }}>CANTIDAD DE HORAS A REPONER</label>
-                <input type="number" step="0.5" min="0.5" className="input" placeholder="Ej: 4" required value={hoursToMakeUp} onChange={(e) => setHoursToMakeUp(e.target.value)} style={{ fontSize: "0.875rem", borderRadius: "0.75rem", padding: "0.75rem 1rem" }} />
-              </div>
-            </div>
-
-            <div style={{ borderTop: "1px solid hsl(var(--border)/0.3)", paddingTop: "1rem" }}>
-              <label style={{ display: "block", marginBottom: "0.75rem", fontWeight: 800, fontSize: "0.75rem", color: "hsl(var(--primary))", letterSpacing: "0.02em" }}>
-                Propuesta de Recuperación de Horas
-              </label>
-              <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "1rem" }}>
-                <div>
-                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 800, fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", letterSpacing: "0.06em" }}>FECHA PROPUESTA</label>
-                  <input type="date" className="input" required value={makeupDate} onChange={(e) => setMakeupDate(e.target.value)} style={{ fontSize: "0.875rem", borderRadius: "0.75rem", padding: "0.75rem 1rem" }} />
-                </div>
-                <div>
-                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 800, fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", letterSpacing: "0.06em" }}>HORA INICIO</label>
-                  <input type="time" className="input" required value={makeupStartTime} onChange={(e) => setMakeupStartTime(e.target.value)} style={{ fontSize: "0.875rem", borderRadius: "0.75rem", padding: "0.75rem 1rem" }} />
-                </div>
-                <div>
-                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 800, fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", letterSpacing: "0.06em" }}>HORA FINAL</label>
-                  <input type="time" className="input" required value={makeupEndTime} onChange={(e) => setMakeupEndTime(e.target.value)} style={{ fontSize: "0.875rem", borderRadius: "0.75rem", padding: "0.75rem 1rem" }} />
-                </div>
+                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>
+                  Tiempo Estimado de Interrupción *
+                </label>
+                <select 
+                  name="incidentDuration" 
+                  value={incidentDuration} 
+                  onChange={(e) => setIncidentDuration(e.target.value)}
+                  style={{ 
+                    fontSize: "15px", 
+                    borderRadius: "0.75rem", 
+                    padding: "0.85rem 1rem", 
+                    width: "100%",
+                    backgroundColor: "#0f172a",
+                    border: "1px solid #334155",
+                    color: "#f8fafc",
+                    cursor: "pointer"
+                  }}
+                >
+                  <option value="1-2 horas">1-2 horas (Corta duración)</option>
+                  <option value="Medio turno">Medio turno (3 a 4 horas)</option>
+                  <option value="Turno completo">Turno completo (Jornada completa)</option>
+                  <option value="Indefinido">Indefinido (En espera de solución de proveedor)</option>
+                </select>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Fechas de Solicitud Estándar */}
-        {requestType !== "HOURS_MAKEUP" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            <div style={{ display: "grid", gridTemplateColumns: requestType === "PERMISSION" ? "1fr" : "1fr 1fr", gap: "1rem" }}>
+            {/* Campo Contextual Dinámico según la tarjeta */}
+            {activeTypeItem.remoteContextLabel && (
               <div>
-                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 800, fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", letterSpacing: "0.06em" }}>
-                  {requestType === "EARLY_LEAVE" || requestType === "PERMISSION" ? "FECHA" : "FECHA INICIO"}
+                <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>
+                  {activeTypeItem.remoteContextLabel}
                 </label>
                 <input 
-                  name="startDate" 
-                  type="date" 
-                  className="input" 
+                  type="text" 
+                  name="incidentContext" 
                   required 
-                  min={requestType === "VACATION" && !onBehalf ? minVacationNoticeStr : undefined}
-                  value={startDate} 
-                  onChange={(e) => setStartDate(e.target.value)} 
-                  style={{ fontSize: "0.875rem", borderRadius: "0.75rem", padding: "0.75rem 1rem", border: isVacationNoticeInsufficient ? "1.5px solid #ef4444" : undefined }} 
+                  placeholder={activeTypeItem.remoteContextPlaceholder} 
+                  value={incidentContext} 
+                  onChange={(e) => setIncidentContext(e.target.value)} 
+                  style={{ 
+                    fontSize: "15px", 
+                    borderRadius: "0.75rem", 
+                    padding: "0.85rem 1rem", 
+                    width: "100%",
+                    backgroundColor: "#0f172a",
+                    border: "1px solid #334155",
+                    color: "#f8fafc"
+                  }} 
                 />
               </div>
-              {requestType === "EARLY_LEAVE" ? (
-                <div key="leave-time">
-                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 800, fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", letterSpacing: "0.06em" }}>HORA DE SALIDA</label>
-                  <input name="leaveTime" type="time" className="input" required value={leaveTime} onChange={(e) => setLeaveTime(e.target.value)} style={{ fontSize: "0.875rem", borderRadius: "0.75rem", padding: "0.75rem 1rem", colorScheme: theme === "dark" ? "dark" : "light" }} />
-                </div>
-              ) : requestType === "PERMISSION" ? null : (
-                <div key="end-date">
-                  <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 800, fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", letterSpacing: "0.06em" }}>FECHA FIN</label>
-                  <input name="endDate" type="date" className="input" required value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ fontSize: "0.875rem", borderRadius: "0.75rem", padding: "0.75rem 1rem" }} />
-                </div>
-              )}
-            </div>
+            )}
 
-            {requestType === "VACATION" && !onBehalf && (
-              <div style={{ padding: "0.6rem 0.85rem", borderRadius: "0.625rem", backgroundColor: isVacationNoticeInsufficient ? "rgba(239, 68, 68, 0.1)" : "hsl(var(--primary) / 0.08)", border: isVacationNoticeInsufficient ? "1px solid rgba(239, 68, 68, 0.3)" : "1px solid hsl(var(--primary) / 0.2)", display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem" }}>
-                {isVacationNoticeInsufficient ? <AlertTriangle size={14} color="#ef4444" /> : <Clock size={14} color="hsl(var(--primary))" />}
-                <span style={{ color: isVacationNoticeInsufficient ? "#ef4444" : "hsl(var(--foreground))", fontWeight: 600 }}>
-                  {isVacationNoticeInsufficient 
-                    ? `No se pueden solicitar vacaciones para esta fecha. Deben solicitarse con al menos 25 días de anticipación (Fecha mínima permitida: ${minVacationNoticeDate.toLocaleDateString("es-DO", { day: "numeric", month: "long", year: "numeric" })}).`
-                    : `Norma de la empresa: Las vacaciones deben solicitarse con un mínimo de 25 días de anticipación (Fecha mínima disponible: ${minVacationNoticeDate.toLocaleDateString("es-DO", { day: "numeric", month: "long", year: "numeric" })}).`
-                  }
-                </span>
+            {/* Toggle Condicional para Avería de Hardware/PC */}
+            {activeTypeItem.hasHardwareReviewToggle && (
+              <div style={{
+                padding: "1rem 1.25rem",
+                borderRadius: "0.75rem",
+                backgroundColor: incidentNeedsItReview ? "rgba(239, 68, 68, 0.15)" : "rgba(15, 23, 42, 0.6)",
+                border: incidentNeedsItReview ? "1px solid #ef4444" : "1px solid #334155",
+                transition: "all 0.2s ease"
+              }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.85rem", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    name="incidentNeedsItReview"
+                    checked={incidentNeedsItReview}
+                    onChange={(e) => setIncidentNeedsItReview(e.target.checked)}
+                    style={{ width: "20px", height: "20px", accentColor: "#ef4444" }}
+                  />
+                  <div>
+                    <div style={{ fontSize: "15px", fontWeight: 700, color: "#f8fafc" }}>
+                      Requiere reemplazo o revisión de equipo por IT
+                    </div>
+                    <div style={{ fontSize: "13.5px", color: "#cbd5e1", marginTop: "0.2rem" }}>
+                      Marca esta casilla si tu PC, laptop o cargador sufrió daño que amerita entrega de equipo de relevo o servicio técnico presencial.
+                    </div>
+                  </div>
+                </label>
               </div>
             )}
           </div>
-        )}
-
-        {/* Warning / Summary */}
-        {requestType === "VACATION" && requestedDays > 0 && (
-          <div className="animate-in" style={{ 
-            padding: "1rem 1.25rem", 
-            borderRadius: "0.875rem", 
-            backgroundColor: requestedDays > effectiveBalance ? "rgba(239, 68, 68, 0.08)" : "hsl(var(--primary) / 0.06)", 
-            border: requestedDays > effectiveBalance ? "1px solid rgba(239, 68, 68, 0.2)" : "1px solid hsl(var(--primary) / 0.15)",
-            display: "flex", gap: "0.75rem", alignItems: "flex-start"
-          }}>
-            <div style={{ marginTop: "0.1rem" }}>
-              {requestedDays > effectiveBalance ? <AlertTriangle size={18} color="#ef4444" /> : <CheckCircle size={18} color="hsl(var(--primary))" />}
-            </div>
-            {requestedDays > effectiveBalance ? (
-              <div style={{ flex: 1 }}>
-                <p style={{ margin: 0, fontSize: "0.85rem", color: "#ef4444", fontWeight: 700 }}>Balance insuficiente</p>
-                <p style={{ margin: "0.25rem 0 0 0", fontSize: "0.75rem", color: "rgba(239, 68, 68, 0.8)", lineHeight: 1.4 }}>
-                  {onBehalf ? `El empleado dispone de ${effectiveBalance} días laborales e intentas solicitar ${requestedDays}.` : `Estás solicitando ${requestedDays} días laborales, pero solo dispones de ${effectiveBalance}.`}
-                </p>
-              </div>
-            ) : (
-              <div style={{ flex: 1 }}>
-                <p style={{ margin: 0, fontSize: "0.85rem", color: "hsl(var(--foreground))", fontWeight: 700 }}>Resumen de Solicitud</p>
-                <p style={{ margin: "0.25rem 0 0 0", fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", lineHeight: 1.4 }}>
-                  Días hábiles solicitados: <strong style={{ color: "hsl(var(--foreground))" }}>{requestedDays}</strong>. Saldo proyectado restante: <strong style={{ color: "hsl(var(--foreground))" }}>{effectiveBalance - requestedDays}</strong> días.
-                </p>
+        ) : (
+          /* CASO B: Vacaciones o Permisos Programados */
+          <>
+            {/* Campos Condicionales de Permiso Especial por Horas */}
+            {requestType === "PERMISSION" && (
+              <div className="animate-in" style={{ display: "flex", flexDirection: "column", gap: "1.25rem", border: "1px solid #334155", padding: "1.25rem", borderRadius: "0.875rem", backgroundColor: "rgba(30, 41, 59, 0.35)" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem" }}>
+                  <div>
+                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>HORA INICIO</label>
+                    <input type="time" className="input" required value={exitTime} onChange={(e) => setExitTime(e.target.value)} style={{ fontSize: "15px", borderRadius: "0.75rem", padding: "0.85rem 1rem", backgroundColor: "#0f172a", border: "1px solid #334155", color: "#f8fafc", colorScheme: "dark" }} />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>HORA FINAL</label>
+                    <input type="time" className="input" required value={returnTime} onChange={(e) => setReturnTime(e.target.value)} style={{ fontSize: "15px", borderRadius: "0.75rem", padding: "0.85rem 1rem", backgroundColor: "#0f172a", border: "1px solid #334155", color: "#f8fafc", colorScheme: "dark" }} />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>CANTIDAD HORAS</label>
+                    <input 
+                      type="text" 
+                      readOnly 
+                      className="input" 
+                      value={hoursRequested ? `${hoursRequested} hrs` : "--"} 
+                      style={{ 
+                        fontSize: "15px", 
+                        borderRadius: "0.75rem", 
+                        padding: "0.85rem 1rem", 
+                        backgroundColor: "rgba(15, 23, 42, 0.8)", 
+                        cursor: "not-allowed",
+                        fontWeight: 800,
+                        color: "#818cf8",
+                        border: "1px solid #334155"
+                      }} 
+                    />
+                  </div>
+                </div>
               </div>
             )}
-          </div>
+
+            {/* Campos Condicionales de Reposición de Horas */}
+            {requestType === "HOURS_MAKEUP" && (
+              <div className="animate-in" style={{ display: "flex", flexDirection: "column", gap: "1.25rem", border: "1px solid #334155", padding: "1.25rem", borderRadius: "0.875rem", backgroundColor: "rgba(30, 41, 59, 0.35)" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem" }}>
+                  <div>
+                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>FECHA AUSENCIA ORIGINAL</label>
+                    <input type="date" className="input" required value={absenceDate} onChange={(e) => setAbsenceDate(e.target.value)} style={{ fontSize: "15px", borderRadius: "0.75rem", padding: "0.85rem 1rem", backgroundColor: "#0f172a", border: "1px solid #334155", color: "#f8fafc", colorScheme: "dark" }} />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>CANTIDAD DE HORAS A REPONER</label>
+                    <input type="number" step="0.5" min="0.5" className="input" placeholder="Ej: 4" required value={hoursToMakeUp} onChange={(e) => setHoursToMakeUp(e.target.value)} style={{ fontSize: "15px", borderRadius: "0.75rem", padding: "0.85rem 1rem", backgroundColor: "#0f172a", border: "1px solid #334155", color: "#f8fafc" }} />
+                  </div>
+                </div>
+
+                <div style={{ borderTop: "1px solid #334155", paddingTop: "1rem" }}>
+                  <label style={{ display: "block", marginBottom: "0.75rem", fontWeight: 700, fontSize: "15px", color: "#2dd4bf" }}>
+                    Propuesta de Recuperación de Horas
+                  </label>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem" }}>
+                    <div>
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>FECHA PROPUESTA</label>
+                      <input type="date" className="input" required value={makeupDate} onChange={(e) => setMakeupDate(e.target.value)} style={{ fontSize: "15px", borderRadius: "0.75rem", padding: "0.85rem 1rem", backgroundColor: "#0f172a", border: "1px solid #334155", color: "#f8fafc", colorScheme: "dark" }} />
+                    </div>
+                    <div>
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>HORA INICIO</label>
+                      <input type="time" className="input" required value={makeupStartTime} onChange={(e) => setMakeupStartTime(e.target.value)} style={{ fontSize: "15px", borderRadius: "0.75rem", padding: "0.85rem 1rem", backgroundColor: "#0f172a", border: "1px solid #334155", color: "#f8fafc", colorScheme: "dark" }} />
+                    </div>
+                    <div>
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>HORA FINAL</label>
+                      <input type="time" className="input" required value={makeupEndTime} onChange={(e) => setMakeupEndTime(e.target.value)} style={{ fontSize: "15px", borderRadius: "0.75rem", padding: "0.85rem 1rem", backgroundColor: "#0f172a", border: "1px solid #334155", color: "#f8fafc", colorScheme: "dark" }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Fechas de Solicitud Estándar */}
+            {requestType !== "HOURS_MAKEUP" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div style={{ display: "grid", gridTemplateColumns: requestType === "PERMISSION" ? "1fr" : "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.25rem" }}>
+                  <div>
+                    <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>
+                      {requestType === "EARLY_LEAVE" || requestType === "PERMISSION" ? "FECHA" : "FECHA INICIO *"}
+                    </label>
+                    <input 
+                      name="startDate" 
+                      type="date" 
+                      className="input" 
+                      required 
+                      min={requestType === "VACATION" && !onBehalf ? minVacationNoticeStr : undefined}
+                      value={startDate} 
+                      onChange={(e) => setStartDate(e.target.value)} 
+                      style={{ 
+                        fontSize: "15px", 
+                        borderRadius: "0.75rem", 
+                        padding: "0.85rem 1rem", 
+                        border: isVacationNoticeInsufficient ? "1.5px solid #ef4444" : "1px solid #334155",
+                        backgroundColor: "#0f172a",
+                        color: "#f8fafc",
+                        colorScheme: "dark"
+                      }} 
+                    />
+                  </div>
+
+                  {requestType === "EARLY_LEAVE" ? (
+                    <div key="leave-time">
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>HORA DE SALIDA *</label>
+                      <input name="leaveTime" type="time" className="input" required value={leaveTime} onChange={(e) => setLeaveTime(e.target.value)} style={{ fontSize: "15px", borderRadius: "0.75rem", padding: "0.85rem 1rem", backgroundColor: "#0f172a", border: "1px solid #334155", color: "#f8fafc", colorScheme: "dark" }} />
+                    </div>
+                  ) : requestType === "PERMISSION" ? null : (
+                    <div key="end-date">
+                      <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>FECHA FIN *</label>
+                      <input name="endDate" type="date" className="input" required value={endDate} onChange={(e) => setEndDate(e.target.value)} style={{ fontSize: "15px", borderRadius: "0.75rem", padding: "0.85rem 1rem", backgroundColor: "#0f172a", border: "1px solid #334155", color: "#f8fafc", colorScheme: "dark" }} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Alerta de Norma de la Empresa: 25 días de anticipación */}
+                {requestType === "VACATION" && !onBehalf && (
+                  <div style={{ 
+                    padding: "0.85rem 1.15rem", 
+                    borderRadius: "0.75rem", 
+                    backgroundColor: isVacationNoticeInsufficient ? "rgba(239, 68, 68, 0.15)" : "rgba(59, 130, 246, 0.12)", 
+                    border: isVacationNoticeInsufficient ? "1px solid rgba(239, 68, 68, 0.4)" : "1px solid rgba(59, 130, 246, 0.3)", 
+                    display: "flex", 
+                    alignItems: "flex-start", 
+                    gap: "0.75rem", 
+                    fontSize: "14px" 
+                  }}>
+                    {isVacationNoticeInsufficient ? <AlertTriangle size={18} color="#ef4444" style={{ flexShrink: 0, marginTop: "0.1rem" }} /> : <Clock size={18} color="#60a5fa" style={{ flexShrink: 0, marginTop: "0.1rem" }} />}
+                    <span style={{ color: isVacationNoticeInsufficient ? "#fca5a5" : "#e2e8f0", fontWeight: 500, lineHeight: 1.5 }}>
+                      {isVacationNoticeInsufficient 
+                        ? `No se pueden solicitar vacaciones para esta fecha. Deben solicitarse con al menos 25 días de anticipación (Fecha mínima permitida: ${minVacationNoticeDate.toLocaleDateString("es-DO", { day: "numeric", month: "long", year: "numeric" })}).`
+                        : `Norma de la empresa: Las vacaciones deben solicitarse con un mínimo de 25 días de anticipación (Fecha mínima disponible: ${minVacationNoticeDate.toLocaleDateString("es-DO", { day: "numeric", month: "long", year: "numeric" })}).`
+                      }
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Resumen de Días Solicitados para Vacaciones */}
+            {requestType === "VACATION" && requestedDays > 0 && (
+              <div className="animate-in" style={{ 
+                padding: "1.15rem 1.35rem", 
+                borderRadius: "0.875rem", 
+                backgroundColor: requestedDays > effectiveBalance ? "rgba(239, 68, 68, 0.12)" : "rgba(59, 130, 246, 0.1)", 
+                border: requestedDays > effectiveBalance ? "1px solid rgba(239, 68, 68, 0.35)" : "1px solid rgba(59, 130, 246, 0.3)",
+                display: "flex", 
+                gap: "0.85rem", 
+                alignItems: "flex-start"
+              }}>
+                <div style={{ marginTop: "0.1rem" }}>
+                  {requestedDays > effectiveBalance ? <AlertTriangle size={20} color="#ef4444" /> : <CheckCircle size={20} color="#3b82f6" />}
+                </div>
+                {requestedDays > effectiveBalance ? (
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontSize: "15px", color: "#f87171", fontWeight: 700 }}>Balance insuficiente</p>
+                    <p style={{ margin: "0.3rem 0 0 0", fontSize: "14px", color: "#fca5a5", lineHeight: 1.5 }}>
+                      {onBehalf ? `El empleado dispone de ${effectiveBalance} días laborales e intentas solicitar ${requestedDays}.` : `Estás solicitando ${requestedDays} días laborales, pero solo dispones de ${effectiveBalance}.`}
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontSize: "15px", color: "#f8fafc", fontWeight: 700 }}>Resumen de Solicitud</p>
+                    <p style={{ margin: "0.3rem 0 0 0", fontSize: "14px", color: "#cbd5e1", lineHeight: 1.5 }}>
+                      Días hábiles solicitados: <strong style={{ color: "#ffffff" }}>{requestedDays}</strong>. Saldo proyectado restante: <strong style={{ color: "#34d399" }}>{effectiveBalance - requestedDays}</strong> días.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
 
-        {/* Drag & Drop Upload Zone */}
+        {/* Zona de Documentación Adjunta (Drag & Drop) */}
         <div>
-          <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 800, fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+          <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>
             Documentación de Soporte {DOCUMENT_GUIDELINES[requestType] ? (
-              <span style={{ color: "#ef4444" }}>* (Obligatorio)</span>
+              <span style={{ color: "#f87171" }}>* (Obligatorio)</span>
             ) : (
-              <span style={{ color: "hsl(var(--muted-foreground))", fontWeight: 600, textTransform: "none" }}>(Opcional)</span>
+              <span style={{ color: "#94a3b8", fontWeight: 500 }}>(Opcional)</span>
             )}
           </label>
           
@@ -893,15 +1499,15 @@ export function VacationForm({
             onClick={() => fileInputRef.current?.click()}
             style={{
               border: dragActive 
-                ? "2px dashed hsl(var(--primary))" 
+                ? "2px dashed #3b82f6" 
                 : DOCUMENT_GUIDELINES[requestType] && !file 
-                  ? "2px dashed rgba(239, 68, 68, 0.4)" 
-                  : "2px dashed hsl(var(--border) / 0.8)",
+                  ? "2px dashed rgba(239, 68, 68, 0.5)" 
+                  : "2px dashed #334155",
               backgroundColor: dragActive 
-                ? "hsl(var(--primary) / 0.04)" 
+                ? "rgba(59, 130, 246, 0.08)" 
                 : DOCUMENT_GUIDELINES[requestType] && !file 
-                  ? "rgba(239, 68, 68, 0.02)" 
-                  : "hsl(var(--surface) / 0.5)",
+                  ? "rgba(239, 68, 68, 0.04)" 
+                  : "#0f172a",
               padding: "1.5rem",
               borderRadius: "0.875rem",
               textAlign: "center",
@@ -927,20 +1533,20 @@ export function VacationForm({
             {file ? (
               <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: "1rem", textAlign: "left" }}>
                 {filePreviewUrl ? (
-                  <div style={{ width: 44, height: 44, borderRadius: "0.5rem", overflow: "hidden", border: "1px solid hsl(var(--border))", flexShrink: 0 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: "0.65rem", overflow: "hidden", border: "1px solid #334155", flexShrink: 0 }}>
                     <img src={filePreviewUrl} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   </div>
                 ) : (
-                  <div style={{ width: 44, height: 44, borderRadius: "0.5rem", backgroundColor: "hsl(var(--primary) / 0.08)", display: "flex", alignItems: "center", justifyContent: "center", color: "hsl(var(--primary))", flexShrink: 0 }}>
-                    <FileText size={20} />
+                  <div style={{ width: 48, height: 48, borderRadius: "0.65rem", backgroundColor: "rgba(59, 130, 246, 0.15)", display: "flex", alignItems: "center", justifyContent: "center", color: "#60a5fa", flexShrink: 0 }}>
+                    <FileText size={24} />
                   </div>
                 )}
                 
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: "0.8rem", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div style={{ fontSize: "15px", fontWeight: 700, color: "#f8fafc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {file.name}
                   </div>
-                  <div style={{ fontSize: "0.68rem", color: "hsl(var(--muted-foreground))" }}>
+                  <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "0.15rem" }}>
                     {(file.size / 1024 / 1024).toFixed(2)} MB
                   </div>
                 </div>
@@ -952,11 +1558,11 @@ export function VacationForm({
                   }}
                   style={{
                     border: "none",
-                    backgroundColor: "transparent",
-                    color: "hsl(var(--destructive))",
+                    backgroundColor: "rgba(239, 68, 68, 0.15)",
+                    color: "#f87171",
                     cursor: "pointer",
-                    padding: "0.5rem",
-                    borderRadius: "50%",
+                    padding: "0.6rem",
+                    borderRadius: "0.5rem",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -964,73 +1570,114 @@ export function VacationForm({
                   }}
                   title="Eliminar archivo"
                 >
-                  <Trash2 size={16} />
+                  <Trash2 size={18} />
                 </button>
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
-                <UploadCloud size={28} style={{ color: DOCUMENT_GUIDELINES[requestType] ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" }} />
-                <div style={{ fontSize: "0.8rem", fontWeight: 600 }}>
-                  Arrastra tu archivo aquí o <span style={{ color: "hsl(var(--primary))", textDecoration: "underline" }}>búscalo en tu equipo</span>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.6rem" }}>
+                <UploadCloud size={32} style={{ color: DOCUMENT_GUIDELINES[requestType] ? "#60a5fa" : "#94a3b8" }} />
+                <div style={{ fontSize: "15px", fontWeight: 600, color: "#f8fafc" }}>
+                  Arrastra tu archivo aquí o <span style={{ color: "#60a5fa", textDecoration: "underline" }}>búscalo en tu equipo</span>
                 </div>
-                <div style={{ fontSize: "0.65rem", color: "hsl(var(--muted-foreground))" }}>
-                  PDF, PNG, JPG, JPEG (Máx. 25MB)
+                <div style={{ fontSize: "13px", color: "#94a3b8" }}>
+                  Formatos aceptados: PDF, PNG, JPG, JPEG (Máx. 25MB)
                 </div>
               </div>
             )}
           </div>
           {fileError && (
-            <div style={{ color: "#ef4444", fontSize: "0.75rem", marginTop: "0.25rem", fontWeight: 500 }}>
+            <div style={{ color: "#f87171", fontSize: "14px", marginTop: "0.4rem", fontWeight: 500 }}>
               {fileError}
             </div>
           )}
         </div>
         
-        {/* Reason */}
+        {/* Comentarios / Motivo */}
         <div>
-          <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 800, fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", letterSpacing: "0.06em" }}>COMENTARIOS / MOTIVO (OPCIONAL)</label>
-          <textarea name="reason" className="input" rows={3} placeholder="Detalles o justificación sobre tu ausencia..." style={{ resize: "none", fontSize: "0.875rem", borderRadius: "0.75rem", padding: "0.75rem 1rem" }}></textarea>
+          <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 700, fontSize: "15px", color: "#e2e8f0" }}>
+            {isRemoteIncident ? "DETALLES O NOTAS ADICIONALES (OPCIONAL)" : "COMENTARIOS / MOTIVO (OPCIONAL)"}
+          </label>
+          <textarea 
+            name="reason" 
+            className="input" 
+            rows={3} 
+            placeholder={isRemoteIncident ? "Información adicional para soporte IT o supervisor..." : "Detalles o justificación sobre tu ausencia..."} 
+            style={{ 
+              resize: "none", 
+              fontSize: "15px", 
+              borderRadius: "0.75rem", 
+              padding: "0.85rem 1rem",
+              backgroundColor: "#0f172a",
+              border: "1px solid #334155",
+              color: "#f8fafc",
+              lineHeight: 1.5
+            }}
+          />
         </div>
 
-        {/* Message */}
+        {/* Mensaje de Feedback */}
         {message && (
           <div className="animate-in" style={{ 
-            padding: "0.875rem 1.25rem", 
-            borderRadius: "0.75rem", 
-            backgroundColor: message.type === "success" ? "rgba(16, 185, 129, 0.08)" : "rgba(239, 68, 68, 0.08)",
-            color: message.type === "success" ? "#10b981" : "#ef4444",
-            border: message.type === "success" ? "1px solid rgba(16, 185, 129, 0.2)" : "1px solid rgba(239, 68, 68, 0.2)",
-            fontSize: "0.85rem",
+            padding: "1rem 1.35rem", 
+            borderRadius: "0.875rem", 
+            backgroundColor: message.type === "success" ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)",
+            color: message.type === "success" ? "#34d399" : "#f87171",
+            border: message.type === "success" ? "1px solid rgba(16, 185, 129, 0.35)" : "1px solid rgba(239, 68, 68, 0.35)",
+            fontSize: "15px",
             fontWeight: 600,
             display: "flex",
             alignItems: "center",
-            gap: "0.5rem"
+            gap: "0.75rem"
           }}>
-            {message.type === "success" ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
-            {message.text}
+            {message.type === "success" ? <CheckCircle size={20} /> : <AlertTriangle size={20} />}
+            <span>{message.text}</span>
           </div>
         )}
 
-        {/* Submit */}
+        {/* Botón de Envío Dinámico */}
         <button 
           type="submit" 
           disabled={loading || (requestType === "VACATION" && requestedDays > effectiveBalance)} 
           style={{ 
-            marginTop: "0.5rem", width: "100%", padding: "1rem", 
-            fontSize: "0.95rem", borderRadius: "0.875rem", border: "none",
-            background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.8))",
-            color: "white", fontWeight: 800,
+            marginTop: "0.5rem", 
+            width: "100%", 
+            padding: "1.1rem", 
+            fontSize: "16px", 
+            borderRadius: "0.875rem", 
+            border: "none",
+            background: isRemoteIncident
+              ? "linear-gradient(135deg, #f97316, #ea580c)"
+              : "linear-gradient(135deg, #3b82f6, #1d4ed8)",
+            color: "#ffffff", 
+            fontWeight: 800,
             cursor: loading || (requestType === "VACATION" && requestedDays > effectiveBalance) ? "not-allowed" : "pointer",
             opacity: loading || (requestType === "VACATION" && requestedDays > effectiveBalance) ? 0.6 : 1,
-            boxShadow: "0 6px 20px hsl(var(--primary) / 0.3)",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
+            boxShadow: isRemoteIncident
+              ? "0 6px 20px rgba(249, 115, 22, 0.35)"
+              : "0 6px 20px rgba(59, 130, 246, 0.35)",
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "center", 
+            gap: "0.65rem",
             transition: "all 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
           }}
         >
           {loading ? (
             <span style={{ display: "inline-block", animation: "spin 1s linear infinite" }}>⚙️</span>
-          ) : <Send size={16} />}
-          <span>{loading ? "Enviando Solicitud..." : (requestType === "VACATION" && requestedDays > effectiveBalance ? "Saldo Insuficiente" : "Enviar Solicitud")}</span>
+          ) : isRemoteIncident ? (
+            <AlertOctagon size={18} />
+          ) : (
+            <Send size={18} />
+          )}
+          <span>
+            {loading 
+              ? "Enviando solicitud..." 
+              : requestType === "VACATION" && requestedDays > effectiveBalance 
+                ? "Saldo Insuficiente" 
+                : isRemoteIncident 
+                  ? "Reportar Incidencia de Teletrabajo" 
+                  : "Enviar Solicitud"}
+          </span>
         </button>
       </form>
     </div>

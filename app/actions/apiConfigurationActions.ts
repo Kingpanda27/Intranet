@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
+import { createAuditLog } from "./auditActions"
 
 async function isAdmin() {
   const session = await getServerSession(authOptions)
@@ -35,6 +36,12 @@ export async function createApiConfig(formData: FormData) {
         baseUrl: baseUrl || null,
         isActive
       }
+    })
+
+    await createAuditLog({
+      action: "API_CONFIG_CREATED",
+      target: `${provider}: ${name}`,
+      metadata: { id: config.id, name, provider, baseUrl, isActive }
     })
 
     revalidatePath("/admin/config")
@@ -77,6 +84,12 @@ export async function updateApiConfig(formData: FormData) {
       data: dataToUpdate
     })
 
+    await createAuditLog({
+      action: "API_CONFIG_UPDATED",
+      target: `${provider}: ${name}`,
+      metadata: { id: config.id, name, provider, baseUrl, isActive }
+    })
+
     revalidatePath("/admin/config")
     return { success: true, data: config }
   } catch (error: any) {
@@ -89,8 +102,19 @@ export async function deleteApiConfig(id: string) {
   if (!(await isAdmin())) return { success: false, error: "No autorizado" }
 
   try {
+    const existing = await prisma.apiConfiguration.findUnique({
+      where: { id },
+      select: { name: true, provider: true }
+    })
+
     await prisma.apiConfiguration.delete({
       where: { id }
+    })
+
+    await createAuditLog({
+      action: "API_CONFIG_DELETED",
+      target: existing ? `${existing.provider}: ${existing.name}` : `ID: ${id}`,
+      metadata: { id, name: existing?.name, provider: existing?.provider }
     })
 
     revalidatePath("/admin/config")

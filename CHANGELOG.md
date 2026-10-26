@@ -6,9 +6,45 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1
 
 ---
 
-## [Unreleased]
+## [1.2.0] - 2026-10-26
 
 ### Added
+- **Refactorización Integral del Panel de Nueva Solicitud y Teletrabajo (`VacationForm.tsx`, `timeOffActions.ts`, `VacationList.tsx`, `validations/index.ts`):**
+  - **Selector de Categorías (Pills / Segmented Tabs):** Pestañas segmentadas en cabecera (*Todas*, *Tiempo Libre*, *Salud y Familia*, *Incidencias Remoto / IT* con badge animado de advertencia *Urgente*).
+  - **Modo Colapsable (Show More / Show Less):** Despliegue inicial de las 6 opciones más frecuentes en la vista global y botón interactivo `[Mostrar más incidencias (6) ↓]` / `[Mostrar menos ↑]`, mostrando directamente todas las tarjetas al filtrar por categorías específicas.
+  - **Identidad Cromática Individual (12 tipos de solicitud):** Paleta y halo suave para cada tarjeta en estado hover y selección activa:
+    - *Vacaciones:* Azul eléctrico (`#3b82f6`)
+    - *Permiso Especial:* Índigo (`#6366f1`)
+    - *Reposición de Horas:* Turquesa / Teal (`#14b8a6`)
+    - *Salir Temprano:* Ámbar (`#f59e0b`)
+    - *Enfermedad (corta):* Esmeralda (`#10b981`)
+    - *Licencia Médica Oficial:* Rosa / Carmesí (`#f43f5e`)
+    - *Maternidad / Paternidad:* Fucsia (`#ec4899`)
+    - *Fallecimiento / Duelo:* Violeta / Púrpura suave (`#8b5cf6`)
+    - *Falla de Internet:* Naranja advertencia (`#f97316`)
+    - *Corte de Energía Eléctrica:* Amarillo relámpago (`#eab308`)
+    - *Avería de Hardware / PC:* Rojo alerta (`#ef4444`)
+    - *Fallo de VPN / Accesos:* Púrpura eléctrico (`#a855f7`)
+  - **Jerarquía Tipográfica Mejorada:** Títulos de tarjetas en 17px (`#f8fafc`), subtítulos descriptivos en 13.5px (`#cbd5e1`), etiquetas de campo legibles en 15px (`#e2e8f0`) e inputs accesibles en 15px que evitan zoom indeseado en móviles.
+  - **Formulario Reactivo y UX Condicional para Teletrabajo:**
+    - Exención automática de la política de 25 días de anticipación para emergencias técnicas y supresión de `Fecha Fin` estándar.
+    - Captura precisa con `datetime-local` para la fecha y hora de la falla.
+    - Selector desplegable de tiempo estimado de interrupción (*1-2 horas*, *Medio turno*, *Turno completo*, *Indefinido*).
+    - Campo contextual dinámico adaptativo (*Proveedor ISP*, *Empresa Distribuidora Eléctrica*, *Componente o Dispositivo Afectado*, *Herramienta o Acceso Afectado*).
+    - Toggle de solicitud de reemplazo / revisión de equipo por IT para averías de hardware.
+    - Cómputo de 0 días de vacaciones consumidos (`workingDays = 0`) para incidencias de teletrabajo y notificación desatendida por correo a supervisores y RRHH.
+- **Centro Integral de Auditoría & Trazabilidad (`auditActions.ts`, `AuditLogViewer.tsx`, `auditPermissions.ts`):**
+  - **Control de Acceso Segmentado:** Visualización reservada exclusivamente para Supervisores, Managers, equipo de Tecnología (`TECHNOLOGY`, `TECHNOLOGY_ADMIN`, `IT_MANAGER`), integrantes de *AI & Software Development* y desarrolladores de sistemas.
+  - **Auditoría Completa de Operaciones del Sistema:**
+    - Usuarios: Creación individual, actualización de perfiles/roles, eliminación en bloque, importación masiva M365, invitaciones y contraseñas.
+    - Grupos: Creación, modificación de detalles, borrado de grupos y asignación/desvinculación individual y masiva de integrantes.
+    - Configuraciones TI: Altas, bajas y actualizaciones de proveedores y llaves API de IA.
+  - **Filtros Avanzados y Búsqueda Específica:** Selector dinámico por tipo de acción exacta (`USER_CREATED`, `GROUP_DELETED`, etc.), filtrado por módulos, estado de resultado (*Éxito*, *Rechazado*, *Fallido*, *Alerta*) y rangos de fecha (*Hoy*, *7 días*, *30 días*, *Todo el tiempo*).
+  - **Rediseño Visual Creativo (UI/UX):**
+    - 4 tarjetas KPI con métricas en tiempo real (Total de Eventos, Actividad de Hoy con pulso verde, Alertas/Rechazos e inventario de tipos de acciones auditadas).
+    - Doble modalidad de visualización: **Tabla Dinámica** detallada y **Línea de Tiempo (Timeline Stream)** interactiva con nodos resplandecientes.
+    - Exportación de auditoría con un solo clic en formatos **CSV** y **JSON**.
+    - Inspector modal con visor de diferencias (*Antes vs. Después*) para modificaciones de datos y visor formateado de payload/metadata JSON con botón de copia rápida.
 - **Sincronización Automática con DeskTime (`sync_desktime_groups.mjs`):** Extracción e integración en modo solo lectura (`SELECT`) con la base de datos MySQL externa `wfm_platform` (`desktime_employee_data`, `odoo_employee_data`, `org_team_managers`), creando y homologando 49 grupos/escuadrones, mapeando 274 empleados a sus equipos correspondientes, sincronizando puestos laborales (`position`), asignando líderes y sublíderes, y actualizando roles de sistema.
 - **Rediseño Integral de Gestión de Grupos (`GroupManager.tsx` y `admin/groups/page.tsx`):**
   - Banner interactivo de métricas KPI (Escuadrones Activos, Miembros Asignados, Líderes Activos y Promedio de Integrantes por Grupo).

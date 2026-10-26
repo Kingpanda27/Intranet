@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { createAuditLog } from "@/app/actions/auditActions"
 
 async function assertAuth() {
   const session = await getServerSession(authOptions)
@@ -32,6 +33,12 @@ export async function POST(req: NextRequest) {
     await prisma.user.updateMany({
       where: { id: { in: userIds } },
       data: { projectId: groupId }
+    })
+
+    await createAuditLog({
+      action: "GROUP_MEMBERS_ADDED",
+      target: `Grupo: ${groupId}`,
+      metadata: { groupId, userIds, count: userIds.length, source: "REST_API" }
     })
 
     revalidatePath("/admin/groups")
@@ -69,6 +76,13 @@ export async function DELETE(req: NextRequest) {
         data: { supervisors: { set: [] }, subLeaders: { set: [] } }
       }).catch(err => console.warn("Notice clearing leaders:", err?.message))
       await prisma.project.delete({ where: { id: groupId } })
+
+      await createAuditLog({
+        action: "GROUP_DELETED",
+        target: `Grupo: ${groupId}`,
+        metadata: { groupId, source: "REST_API" }
+      })
+
       revalidatePath("/admin/groups")
       return NextResponse.json({ success: true })
     }
@@ -98,6 +112,12 @@ export async function DELETE(req: NextRequest) {
         console.warn("Notice on disconnecting supervisors/subLeaders in API:", err?.message)
       })
     }
+
+    await createAuditLog({
+      action: "GROUP_MEMBERS_REMOVED",
+      target: groupId ? `Grupo: ${groupId}` : "Desvinculación general",
+      metadata: { groupId, userIds, count: userIds.length, source: "REST_API" }
+    })
 
     revalidatePath("/admin/groups")
     if (groupId) {

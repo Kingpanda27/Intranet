@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getToken } from 'next-auth/jwt'
 
+import { canViewAuditLogs } from '@/lib/auditPermissions'
+
 export async function middleware(request: NextRequest) {
   const isHttps = process.env.NEXTAUTH_URL?.startsWith('https://') || request.headers.get('x-forwarded-proto') === 'https' || request.url.startsWith('https://')
   const token = await getToken({ 
@@ -54,10 +56,17 @@ export async function middleware(request: NextRequest) {
 
   // 1. Control de accesos de Administración (rutas /admin/*)
   // Solo accesible por IT_MANAGER, TECHNOLOGY_ADMIN, TECHNOLOGY, HR
+  // Excepción: /admin/audit-logs accesible por Supervisores, Managers, IT y AI & Software Development
   if (pathname.startsWith('/admin')) {
-    const allowedAdminRoles = ['IT_MANAGER', 'TECHNOLOGY_ADMIN', 'TECHNOLOGY', 'HR']
-    if (!allowedAdminRoles.includes(role)) {
-      return NextResponse.redirect(new URL('/', request.url))
+    if (pathname.startsWith('/admin/audit-logs')) {
+      if (!canViewAuditLogs(token)) {
+        return NextResponse.redirect(new URL('/', request.url))
+      }
+    } else {
+      const allowedAdminRoles = ['IT_MANAGER', 'TECHNOLOGY_ADMIN', 'TECHNOLOGY', 'HR']
+      if (!allowedAdminRoles.includes(role)) {
+        return NextResponse.redirect(new URL('/', request.url))
+      }
     }
   }
 

@@ -17,9 +17,14 @@ export type RequestType =
   | "MEDICAL_LEAVE"
   | "MATERNITY_LEAVE"
   | "PATERNITY_LEAVE"
+  | "MATERNITY_PATERNITY"
   | "BEREAVEMENT_LEAVE"
   | "HOURS_MAKEUP"
   | "SPECIAL"
+  | "REMOTE_INTERNET"
+  | "REMOTE_POWER"
+  | "REMOTE_HARDWARE"
+  | "REMOTE_VPN"
 export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" | "COMPLETED"
 
 async function calculateWorkingDays(startDate: Date, endDate: Date): Promise<number> {
@@ -127,9 +132,24 @@ export async function createTimeOffRequest(formData: FormData) {
   const startDateStr = formData.get("startDate") as string
   const endDateStr = formData.get("endDate") as string
   const leaveTime = formData.get("leaveTime") as string // Para salida temprana
+  const incidentDateTime = formData.get("incidentDateTime") as string | null
+  const incidentDuration = formData.get("incidentDuration") as string | null
+  const incidentContext = formData.get("incidentContext") as string | null
+  const incidentNeedsItReview = formData.get("incidentNeedsItReview") === "true"
 
-  let startDate = new Date(startDateStr)
-  let endDate = new Date(endDateStr)
+  const isRemoteIncident = ["REMOTE_INTERNET", "REMOTE_POWER", "REMOTE_HARDWARE", "REMOTE_VPN"].includes(type)
+
+  let startDate: Date
+  let endDate: Date
+
+  if (isRemoteIncident) {
+    const rawDate = incidentDateTime || startDateStr || new Date().toISOString()
+    startDate = new Date(rawDate)
+    endDate = new Date(rawDate)
+  } else {
+    startDate = new Date(startDateStr)
+    endDate = endDateStr ? new Date(endDateStr) : new Date(startDate)
+  }
 
   if (type === "EARLY_LEAVE" && leaveTime) {
     const [hours, minutes] = leaveTime.split(":")
@@ -137,8 +157,23 @@ export async function createTimeOffRequest(formData: FormData) {
     endDate = new Date(startDate)
   }
 
-  const reason = formData.get("reason") as string
-  let workingDays = await calculateWorkingDays(startDate, endDate)
+  const rawReason = (formData.get("reason") as string) || ""
+  let reason = rawReason
+
+  if (isRemoteIncident) {
+    const details = [
+      incidentDuration ? `Duración estimada: ${incidentDuration}` : null,
+      incidentContext ? `Detalle/Proveedor: ${incidentContext}` : null,
+      incidentNeedsItReview ? `Requiere reemplazo/revisión de equipo por IT: Sí` : null,
+      rawReason.trim() ? `Motivo/Notas: ${rawReason.trim()}` : null
+    ].filter(Boolean).join(" | ")
+    reason = details || "Incidencia de teletrabajo reportada"
+  }
+
+  let workingDays = 0
+  if (!isRemoteIncident && !isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+    workingDays = await calculateWorkingDays(startDate, endDate)
+  }
 
   // Campos de reposición de horas y permisos especiales
   const absenceDateStr = formData.get("absenceDate") as string | null
@@ -157,14 +192,14 @@ export async function createTimeOffRequest(formData: FormData) {
   const absenceDate = absenceDateStr ? new Date(absenceDateStr) : null
   const makeupDate = makeupDateStr ? new Date(makeupDateStr) : null
 
-  // Si es un permiso por horas o reposición de horas, no consume días de saldo de vacaciones de forma predeterminada
-  if (type === "HOURS_MAKEUP" || (type === "SPECIAL" && specialType === "HOURS")) {
+  // Si es un permiso por horas, reposición de horas o incidencia remota, no consume días de saldo de vacaciones
+  if (type === "HOURS_MAKEUP" || (type === "SPECIAL" && specialType === "HOURS") || isRemoteIncident) {
     workingDays = 0
   } else if (type === "SPECIAL" && specialType === "HALF") {
     workingDays = 0.5
   }
 
-  const requiredTypes = ["SICK_LEAVE", "MEDICAL_LEAVE", "MATERNITY_LEAVE", "PATERNITY_LEAVE", "BEREAVEMENT_LEAVE"]
+  const requiredTypes = ["SICK_LEAVE", "MEDICAL_LEAVE", "MATERNITY_LEAVE", "PATERNITY_LEAVE", "MATERNITY_PATERNITY", "BEREAVEMENT_LEAVE"]
   const isDocumentRequired = requiredTypes.includes(type)
   const documentFile = formData.get("document") as File | null
 
@@ -343,15 +378,23 @@ export async function createTimeOffRequest(formData: FormData) {
         case "VACATION": typeLabel = "Vacaciones"; break
         case "PERMISSION": typeLabel = "Permiso Especial"; break
         case "EARLY_LEAVE": typeLabel = "Salida Temprana"; break
-        case "SICK_LEAVE": typeLabel = "Licencia por Enfermedad"; break
-        case "MEDICAL_LEAVE": typeLabel = "Licencia Médica"; break
-        case "MATERNITY_LEAVE": typeLabel = "Licencia por Maternidad"; break
+        case "SICK_LEAVE": typeLabel = "Licencia por Enfermedad (Corta)"; break
+        case "MEDICAL_LEAVE": typeLabel = "Licencia Médica Oficial"; break
+        case "MATERNITY_LEAVE":
+        case "MATERNITY_PATERNITY": typeLabel = "Licencia por Maternidad / Paternidad"; break
         case "PATERNITY_LEAVE": typeLabel = "Licencia por Paternidad"; break
-        case "BEREAVEMENT_LEAVE": typeLabel = "Licencia por Fallecimiento de Familiar Directo"; break
+        case "BEREAVEMENT_LEAVE": typeLabel = "Licencia por Fallecimiento / Duelo"; break
+        case "HOURS_MAKEUP": typeLabel = "Reposición de Horas"; break
+        case "REMOTE_INTERNET": typeLabel = "Incidencia Teletrabajo: Falla de Internet"; break
+        case "REMOTE_POWER": typeLabel = "Incidencia Teletrabajo: Corte de Luz"; break
+        case "REMOTE_HARDWARE": typeLabel = "Incidencia Teletrabajo: Avería de Hardware / PC"; break
+        case "REMOTE_VPN": typeLabel = "Incidencia Teletrabajo: Fallo de VPN / Accesos"; break
       }
 
       let timeDetails = `Inicio: ${startDateStr}`
-      if (type === "EARLY_LEAVE") {
+      if (isRemoteIncident) {
+        timeDetails = `Fecha y hora de inicio de falla: ${incidentDateTime || startDateStr || "Hoy"}\nDuración estimada: ${incidentDuration || "No especificada"}`
+      } else if (type === "EARLY_LEAVE") {
         timeDetails = `Fecha: ${startDateStr}\nHora de salida: ${leaveTime}`
       } else {
         timeDetails = `Desde: ${startDateStr}\nHasta: ${endDateStr}`

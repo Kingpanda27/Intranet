@@ -128,52 +128,78 @@ export function VacationList({ requests }: { requests: TimeOffRequest[] }) {
     switch (type) {
       case "VACATION":
         return { 
-          bg: isDark ? "rgba(59, 130, 246, 0.15)" : "rgba(37, 99, 235, 0.1)", 
+          bg: isDark ? "rgba(59, 130, 246, 0.18)" : "rgba(37, 99, 235, 0.1)", 
           color: isDark ? "#60a5fa" : "#2563eb", 
           text: "Vacaciones" 
         }
-      case "SICK_LEAVE":
+      case "PERMISSION":
+      case "SPECIAL":
         return { 
-          bg: isDark ? "rgba(239, 68, 68, 0.15)" : "rgba(220, 38, 38, 0.1)", 
-          color: isDark ? "#f87171" : "#dc2626", 
-          text: "Licencia Médica" 
+          bg: isDark ? "rgba(99, 102, 241, 0.18)" : "rgba(79, 70, 229, 0.1)", 
+          color: isDark ? "#818cf8" : "#6366f1", 
+          text: "Permiso Especial" 
         }
       case "EARLY_LEAVE":
         return { 
-          bg: isDark ? "rgba(245, 158, 11, 0.15)" : "rgba(217, 119, 6, 0.1)", 
+          bg: isDark ? "rgba(245, 158, 11, 0.18)" : "rgba(217, 119, 6, 0.1)", 
           color: isDark ? "#fbbf24" : "#d97706", 
           text: "Salida Temprana" 
         }
       case "HOURS_MAKEUP":
         return { 
-          bg: isDark ? "rgba(168, 85, 247, 0.15)" : "rgba(147, 51, 234, 0.1)", 
-          color: isDark ? "#c084fc" : "#9333ea", 
+          bg: isDark ? "rgba(20, 184, 166, 0.18)" : "rgba(13, 148, 136, 0.1)", 
+          color: isDark ? "#2dd4bf" : "#14b8a6", 
           text: "Repo. de Horas" 
         }
-      case "SPECIAL":
-      case "PERMISSION":
+      case "SICK_LEAVE":
         return { 
-          bg: isDark ? "rgba(14, 165, 233, 0.15)" : "rgba(3, 105, 161, 0.1)", 
-          color: isDark ? "#38bdf8" : "#0284c7", 
-          text: "Permiso Especial" 
+          bg: isDark ? "rgba(16, 185, 129, 0.18)" : "rgba(5, 150, 105, 0.1)", 
+          color: isDark ? "#34d399" : "#10b981", 
+          text: "Enfermedad (corta)" 
+        }
+      case "MEDICAL_LEAVE":
+        return { 
+          bg: isDark ? "rgba(244, 63, 94, 0.18)" : "rgba(225, 29, 72, 0.1)", 
+          color: isDark ? "#fb7185" : "#f43f5e", 
+          text: "Licencia Médica" 
         }
       case "MATERNITY_LEAVE":
-        return { 
-          bg: isDark ? "rgba(236, 72, 153, 0.15)" : "rgba(219, 39, 119, 0.1)", 
-          color: isDark ? "#f472b6" : "#db2777", 
-          text: "Maternidad" 
-        }
       case "PATERNITY_LEAVE":
+      case "MATERNITY_PATERNITY":
         return { 
-          bg: isDark ? "rgba(99, 102, 241, 0.15)" : "rgba(79, 70, 229, 0.1)", 
-          color: isDark ? "#818cf8" : "#4f46e5", 
-          text: "Paternidad" 
+          bg: isDark ? "rgba(236, 72, 153, 0.18)" : "rgba(219, 39, 119, 0.1)", 
+          color: isDark ? "#f472b6" : "#ec4899", 
+          text: "Maternidad / Paternidad" 
         }
       case "BEREAVEMENT_LEAVE":
         return { 
-          bg: isDark ? "rgba(156, 163, 175, 0.12)" : "rgba(55, 65, 81, 0.08)", 
-          color: isDark ? "#9ca3af" : "#374151", 
-          text: "Luto Familiar" 
+          bg: isDark ? "rgba(139, 92, 246, 0.18)" : "rgba(124, 58, 237, 0.1)", 
+          color: isDark ? "#a78bfa" : "#8b5cf6", 
+          text: "Fallecimiento / Duelo" 
+        }
+      case "REMOTE_INTERNET":
+        return {
+          bg: isDark ? "rgba(249, 115, 22, 0.18)" : "rgba(234, 88, 12, 0.1)",
+          color: isDark ? "#fb923c" : "#f97316",
+          text: "Falla de Internet"
+        }
+      case "REMOTE_POWER":
+        return {
+          bg: isDark ? "rgba(234, 179, 8, 0.18)" : "rgba(202, 138, 4, 0.1)",
+          color: isDark ? "#fde047" : "#eab308",
+          text: "Corte de Luz"
+        }
+      case "REMOTE_HARDWARE":
+        return {
+          bg: isDark ? "rgba(239, 68, 68, 0.18)" : "rgba(220, 38, 38, 0.1)",
+          color: isDark ? "#f87171" : "#ef4444",
+          text: "Avería Hardware / PC"
+        }
+      case "REMOTE_VPN":
+        return {
+          bg: isDark ? "rgba(168, 85, 247, 0.18)" : "rgba(147, 51, 234, 0.1)",
+          color: isDark ? "#c084fc" : "#a855f7",
+          text: "Fallo VPN / Accesos"
         }
       default:
         return { bg: "hsl(var(--muted) / 0.5)", color: "hsl(var(--muted-foreground))", text: type }

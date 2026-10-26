@@ -9,6 +9,7 @@ import bcrypt from "bcryptjs"
 import { saveFile } from "./fileActions"
 import { sendInvitationEmail } from "@/lib/email"
 import { computeUserStatus } from "@/lib/userUtils"
+import { createAuditLog } from "./auditActions"
 
 export async function updateProfile(formData: FormData) {
   const sessionUser = await requireAuth()
@@ -109,6 +110,13 @@ export async function createUser(formData: FormData) {
       }
     })
 
+    await createAuditLog({
+      action: "USER_CREATED",
+      target: `${newUser.name} (${newUser.email})`,
+      targetUserId: newUser.id,
+      metadata: { name: newUser.name, email: newUser.email, role: newUser.role }
+    })
+
     const inviteResult = await inviteUser(newUser.id)
     if (inviteResult.error) {
       return { success: true, warning: inviteResult.error }
@@ -166,12 +174,27 @@ export async function updateUserAdmin(userId: string, formData: FormData) {
       }
     }
 
-    await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: {
         ...(name ? { name: name.trim() } : {}),
         ...(email ? { email: email.trim().toLowerCase() } : {}),
         ...(role ? { role } : {})
+      }
+    })
+
+    const roleChanged = Boolean(role && role !== targetUser.role)
+    await createAuditLog({
+      action: roleChanged ? "USER_ROLE_CHANGED" : "USER_UPDATED",
+      target: `${updatedUser.name} (${updatedUser.email})`,
+      targetUserId: targetUser.id,
+      oldValue: JSON.stringify({ name: targetUser.name, email: targetUser.email, role: targetUser.role }),
+      newValue: JSON.stringify({ name: updatedUser.name, email: updatedUser.email, role: updatedUser.role }),
+      metadata: {
+        updatedBy: currentUser.email,
+        roleChanged,
+        previousRole: targetUser.role,
+        newRole: updatedUser.role
       }
     })
 
@@ -244,9 +267,23 @@ export async function deleteBulkUsers(userIds: string[]) {
       }
     }
 
+    const deletedUsersInfo = await prisma.user.findMany({
+      where: { id: { in: targetIds } },
+      select: { id: true, name: true, email: true, role: true }
+    })
+
     await cleanupUserRelations(targetIds)
     const result = await prisma.user.deleteMany({
       where: { id: { in: targetIds } }
+    })
+
+    await createAuditLog({
+      action: "USER_DELETED",
+      target: deletedUsersInfo.map(u => `${u.name || u.email} (${u.email})`).join(", ") || `${result.count} usuario(s)`,
+      metadata: {
+        deletedCount: result.count,
+        users: deletedUsersInfo
+      }
     })
 
     revalidatePath("/admin/users")
@@ -289,6 +326,12 @@ export async function inviteUser(userId: string) {
       return { error: "Fallo envío correo, pero usuario actualizado." }
     }
 
+    await createAuditLog({
+      action: "USER_INVITED",
+      target: `${user.name || user.email} (${user.email})`,
+      targetUserId: user.id
+    })
+
     return { success: true }
   } catch (error: any) {
     console.error("Error inviting user:", error)
@@ -319,6 +362,13 @@ export async function setInitialPassword(token: string, password: string) {
         invitationExpires: null,
         emailVerified: new Date()
       }
+    })
+
+    await createAuditLog({
+      action: "USER_PASSWORD_SET",
+      target: user.email || user.name || "Usuario",
+      targetUserId: user.id,
+      metadata: { email: user.email }
     })
 
     return { success: true }
@@ -408,6 +458,17 @@ export async function processBulkUsers(usersData: {
       results.errors.push(`Error con ${cleanEmail}: ${e.message || String(e)}`)
     }
   }
+
+  await createAuditLog({
+    action: "USERS_BULK_IMPORT",
+    target: `${results.created} creados, ${results.existing} actualizados`,
+    metadata: {
+      createdCount: results.created,
+      existingCount: results.existing,
+      errorsCount: results.errors.length,
+      totalCount: usersData.length
+    }
+  })
 
   revalidatePath("/admin/users")
   return { success: true, ...results }

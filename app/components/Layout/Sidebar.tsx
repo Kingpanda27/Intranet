@@ -9,6 +9,7 @@ import { useTheme } from '@/app/Providers'
 import React, { useState, useEffect } from 'react'
 import { getMyGroups } from '@/app/actions/teamActions'
 import { useSupportChat } from '@/app/components/SupportAILlama/SupportContext'
+import { canViewAuditLogs } from '@/lib/auditPermissions'
 
 export function Sidebar() {
   const { data: session } = useSession()
@@ -21,6 +22,7 @@ export function Sidebar() {
   const isMasterAdmin = user?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || user?.isSuperAdmin
   const hasDashboardAccess = isMasterAdmin || user?.role === "SUPERVISOR" || user?.role === "MANAGER" || user?.role === "IT_MANAGER" || user?.role === "TECHNOLOGY_ADMIN" || user?.role === "HR" || user?.role === "TECHNOLOGY"
   const isTechnology = isMasterAdmin || user?.role === "TECHNOLOGY" || user?.role === "IT_MANAGER" || user?.role === "TECHNOLOGY_ADMIN" || user?.role === "HR"
+  const canViewAudit = canViewAuditLogs(user)
   const isEmployeeOnly = !isMasterAdmin && (user?.role === "USER" || user?.role === "AGENT")
 
   useEffect(() => {
@@ -127,7 +129,7 @@ export function Sidebar() {
             <span>Configuración TI</span>
           </Link>
         )}
-        {isTechnology && (
+        {canViewAudit && (
           <Link href="/admin/audit-logs" onClick={() => closeSupportChat()} className={getLinkClass("/admin/audit-logs")}>
             <Activity size={18} />
             <span>Logs de Auditoría</span>

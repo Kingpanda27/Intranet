@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
+import { createAuditLog } from "./auditActions"
 
 async function assertTechnology() {
   const session = await getServerSession(authOptions)
@@ -54,7 +55,7 @@ export async function createGroup(formData: FormData) {
   if (supervisorIds.length === 0) return { error: "Debes asignar al menos un supervisor al grupo." }
 
   try {
-    await prisma.project.create({
+    const newGroup = await prisma.project.create({
       data: {
         name: name.trim(),
         description: description?.trim() || null,
@@ -66,6 +67,19 @@ export async function createGroup(formData: FormData) {
         subLeaders: { connect: subLeaderIds.map(id => ({ id })) }
       }
     })
+
+    await createAuditLog({
+      action: "GROUP_CREATED",
+      target: newGroup.name,
+      metadata: {
+        groupId: newGroup.id,
+        name: newGroup.name,
+        description: newGroup.description,
+        supervisorsCount: supervisorIds.length,
+        subLeadersCount: subLeaderIds.length
+      }
+    })
+
     revalidatePath("/admin/groups")
     return { success: true }
   } catch (error) {
@@ -93,7 +107,12 @@ export async function updateGroup(groupId: string, formData: FormData) {
   try { if (subLeaderIdsStr) subLeaderIds = JSON.parse(subLeaderIdsStr) } catch { if (subLeaderIdsStr) subLeaderIds = [subLeaderIdsStr] }
 
   try {
-    await prisma.project.update({
+    const existing = await prisma.project.findUnique({
+      where: { id: groupId },
+      select: { name: true, description: true }
+    })
+
+    const updated = await prisma.project.update({
       where: { id: groupId },
       data: {
         ...(name ? { name: name.trim() } : {}),
@@ -106,6 +125,15 @@ export async function updateGroup(groupId: string, formData: FormData) {
         ...(subLeaderIdsStr ? { subLeaders: { set: subLeaderIds.map(id => ({ id })) } } : {})
       }
     })
+
+    await createAuditLog({
+      action: "GROUP_UPDATED",
+      target: updated.name || groupId,
+      oldValue: existing ? JSON.stringify({ name: existing.name, description: existing.description }) : null,
+      newValue: JSON.stringify({ name: updated.name, description: updated.description }),
+      metadata: { groupId, name: updated.name }
+    })
+
     revalidatePath("/admin/groups")
     return { success: true }
   } catch (error) {
@@ -117,6 +145,11 @@ export async function updateGroup(groupId: string, formData: FormData) {
 export async function deleteGroup(groupId: string) {
   await assertTechnology()
   try {
+    const existingGroup = await prisma.project.findUnique({
+      where: { id: groupId },
+      select: { id: true, name: true }
+    })
+
     // 1. Quitar todos los miembros asignados
     await prisma.user.updateMany({
       where: { projectId: groupId },
@@ -140,6 +173,13 @@ export async function deleteGroup(groupId: string) {
 
     // 4. Eliminar el proyecto
     await prisma.project.delete({ where: { id: groupId } })
+
+    await createAuditLog({
+      action: "GROUP_DELETED",
+      target: existingGroup?.name || `Grupo: ${groupId}`,
+      metadata: { groupId, name: existingGroup?.name }
+    })
+
     revalidatePath("/admin/groups")
     return { success: true }
   } catch (error: any) {
@@ -158,6 +198,18 @@ export async function addMembersToGroup(groupId: string, userIds: string[]) {
       where: { id: { in: userIds } },
       data: { projectId: groupId }
     })
+
+    const group = await prisma.project.findUnique({
+      where: { id: groupId },
+      select: { name: true }
+    })
+
+    await createAuditLog({
+      action: "GROUP_MEMBERS_ADDED",
+      target: group?.name || `Grupo: ${groupId}`,
+      metadata: { groupId, userIds, count: userIds.length }
+    })
+
     revalidatePath("/admin/groups")
     revalidatePath(`/groups/${groupId}`)
     return { success: true, count: userIds.length }
@@ -215,6 +267,12 @@ export async function removeMembersFromGroup(
         console.warn("Notice on disconnecting supervisors/subLeaders in action:", err?.message)
       })
     }
+
+    await createAuditLog({
+      action: "GROUP_MEMBERS_REMOVED",
+      target: groupId ? `Grupo: ${groupId}` : "Desvinculación general",
+      metadata: { groupId, userIds, count: userIds.length }
+    })
 
     revalidatePath("/admin/groups")
     if (groupId) revalidatePath(`/groups/${groupId}`)

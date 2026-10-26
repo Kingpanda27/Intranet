@@ -197,7 +197,7 @@ export const authOptions: NextAuthOptions = {
               ...(email ? [{ email: String(email).trim().toLowerCase() }] : [])
             ]
           },
-          select: { id: true, role: true, name: true, status: true, entraObjectId: true, project: { select: { name: true } } }
+          select: { id: true, email: true, role: true, name: true, status: true, entraObjectId: true, position: true, project: { select: { name: true } } }
         })
 
         if (dbUser) {
@@ -206,6 +206,7 @@ export const authOptions: NextAuthOptions = {
           token.name = dbUser.name
           token.status = dbUser.status || "ACTIVE"
           token.entraObjectId = dbUser.entraObjectId
+          token.position = dbUser.position || ""
           token.projectName = dbUser.project?.name || "Telecom Networks"
           token.isSuperAdmin = String(email || dbUser.email || '').toLowerCase().trim() === "ireyes@tnoutsourcing.com"
         }
@@ -226,6 +227,7 @@ export const authOptions: NextAuthOptions = {
         ;(session.user as any).status = token.status || "ACTIVE"
         ;(session.user as any).entraObjectId = token.entraObjectId
         ;(session.user as any).name = token.name || session.user.name
+        ;(session.user as any).position = (token as any).position || ""
         ;(session.user as any).projectName = (token as any).projectName || "Telecom Networks"
         ;(session.user as any).isSuperAdmin = Boolean(token.isSuperAdmin || (session.user?.email && session.user.email.toLowerCase().trim() === "ireyes@tnoutsourcing.com"))
       }
