@@ -4,6 +4,18 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y este proyecto se adhiere a [Semantic Versioning (SemVer)](https://semver.org/lang/es/).
 
+## [1.2.6] - 2026-10-26
+
+### Added
+- **Agrupamiento de Solicitudes y Permisos por Grupo / Campaña en Panel de Control (`AdminDashboard.tsx`, `timeOffActions.ts`):**
+  - **Visualización en Recuadro Compartido por Grupo:** En lugar de mostrar una lista plana desordenada, las solicitudes de permisos, vacaciones e incidencias se organizan visualmente dentro del recuadro o tarjeta del grupo correspondiente (`user.project`). Si dos o más colaboradores del mismo grupo solicitan permisos, aparecen unificados en el mismo recuadro del grupo.
+  - **Identidad Visual y Métricas del Grupo:** Cada recuadro cuenta con cabecera distintiva que hereda el color temático del grupo (`project.color`), imagen o avatar con ícono (`project.image` / `project.icon`), contador de colaboradores únicos (`👥 X colaboradores`) y badges con el conteo de solicitudes pendientes, aprobadas y rechazadas del grupo.
+  - **Soporte de Colaboradores Sin Grupo:** Las solicitudes de usuarios sin asignación de grupo se presentan juntas en un recuadro dedicado `"Sin Grupo Asignado"` con estética neutra y profesional.
+  - **Píldoras de Filtrado Rápido por Grupo:** Barra horizontal de chips/píldoras interactivas con el color distintivo de cada grupo para aislar un grupo específico o ver todos con un solo clic.
+  - **Controles de Colapso y Búsqueda en Tiempo Real:** Buscador predictivo (por nombre de empleado, correo, motivo, tipo de solicitud o grupo) y botón de colapsar/expandir grupos (individual o masivo).
+  - **Selector de Modo de Vista:** Switch moderno para alternar entre vista agrupada (`"Por Grupos"`) y vista de lista clásica (`"Lista Plana"`).
+  - **Enriquecimiento de Consultas Backend (`timeOffActions.ts`):** Las consultas `getPendingRequests()` y `getAllSupervisedRequests()` ahora extraen `id`, `name`, `color`, `icon` e `image` de la entidad `Project` para alimentar de forma dinámica la interfaz.
+
 ## [1.2.5] - 2026-10-26
 
 ### Added

@@ -745,7 +745,17 @@ export async function getPendingRequests() {
         id: true,
         name: true,
         email: true,
-        project: { select: { name: true } }
+        role: true,
+        image: true,
+        project: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true,
+            image: true
+          }
+        }
       }
     }
   }
@@ -827,7 +837,17 @@ export async function getAllSupervisedRequests() {
         id: true,
         name: true,
         email: true,
-        project: { select: { name: true } }
+        role: true,
+        image: true,
+        project: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            icon: true,
+            image: true
+          }
+        }
       }
     }
   }

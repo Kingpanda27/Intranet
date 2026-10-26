@@ -22,7 +22,7 @@ async function main() {
   }
 
   console.log("===============================================================");
-  console.log(`    DESPLIEGUE A PRODUCCIÓN - INTRANET v1.2.5 (${host}) `);
+  console.log(`    DESPLIEGUE A PRODUCCIÓN - INTRANET v1.2.6 (${host}) `);
   console.log("===============================================================");
 
   // 1. Conectar SSH
@@ -31,7 +31,7 @@ async function main() {
   console.log("✓ Conectado exitosamente.");
 
   // 2. Archivos a transferir
-  console.log("\n[2/5] Transfiriendo archivos de la versión 1.2.5...");
+  console.log("\n[2/5] Transfiriendo archivos de la versión 1.2.6...");
   const filesToTransfer = [
     { local: 'package.json', remote: '/var/www/html/package.json' },
     { local: 'CHANGELOG.md', remote: '/var/www/html/CHANGELOG.md' },
@@ -47,6 +47,7 @@ async function main() {
     { local: 'app/actions/userActions.ts', remote: '/var/www/html/app/actions/userActions.ts' },
     { local: 'app/admin/audit-logs/page.tsx', remote: '/var/www/html/app/admin/audit-logs/page.tsx' },
     { local: 'app/api/admin/groups/members/route.ts', remote: '/var/www/html/app/api/admin/groups/members/route.ts' },
+    { local: 'app/components/Admin/AdminDashboard.tsx', remote: '/var/www/html/app/components/Admin/AdminDashboard.tsx' },
     { local: 'app/components/Admin/AuditLogViewer.tsx', remote: '/var/www/html/app/components/Admin/AuditLogViewer.tsx' },
     { local: 'app/components/Admin/GroupManager.tsx', remote: '/var/www/html/app/components/Admin/GroupManager.tsx' },
     { local: 'app/components/Admin/UserManager.tsx', remote: '/var/www/html/app/components/Admin/UserManager.tsx' },

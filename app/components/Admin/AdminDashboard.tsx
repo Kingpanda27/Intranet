@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react"
 import { createPortal } from "react-dom"
-import { CheckCircle2, XCircle, User, Briefcase, Calendar, MessageSquare, Download, Clock, History, Trash2, Paperclip, ExternalLink, AlertCircle, Pencil, X, Save, RefreshCw } from "lucide-react"
+import { CheckCircle2, XCircle, User, Briefcase, Calendar, MessageSquare, Download, Clock, History, Trash2, Paperclip, ExternalLink, AlertCircle, Pencil, X, Save, RefreshCw, Users, ChevronDown, ChevronUp, Search, Layers, LayoutGrid, ListFilter, Shield, Sparkles } from "lucide-react"
 import { getAllSupervisedRequests, updateRequestStatus, RequestStatus, deleteTimeOffRequest, editTimeOffRequest } from "@/app/actions/timeOffActions"
 import Papa from "papaparse"
 import { formatDateLong, formatDateShort, formatTime12h, formatDateTimeShort } from "@/lib/dateUtils"
@@ -38,6 +38,12 @@ export default function AdminDashboard() {
   const [modalHoursUsed, setModalHoursUsed] = useState("")
   const [modalExitTime, setModalExitTime] = useState("")
   const [modalReturnTime, setModalReturnTime] = useState("")
+
+  // Estados para agrupación por grupos y filtrado interactivo
+  const [searchQuery, setSearchQuery] = useState("")
+  const [selectedGroupFilter, setSelectedGroupFilter] = useState("ALL")
+  const [viewMode, setViewMode] = useState<"GROUPS" | "LIST">("GROUPS")
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     fetchRequests()
@@ -195,7 +201,100 @@ export default function AdminDashboard() {
 
   const pendingRequests = requests.filter(r => r.status === "PENDING")
   const historyRequests = requests.filter(r => r.status !== "PENDING")
-  const displayedRequests = activeTab === "PENDING" ? pendingRequests : historyRequests
+  const currentTabRequests = activeTab === "PENDING" ? pendingRequests : historyRequests
+
+  // Filtrado reactivo por término de búsqueda (nombre, email, grupo, motivo, tipo)
+  const filteredRequests = currentTabRequests.filter(r => {
+    if (!searchQuery.trim()) return true
+    const q = searchQuery.toLowerCase().trim()
+    const name = (r.user?.name || "").toLowerCase()
+    const email = (r.user?.email || "").toLowerCase()
+    const groupName = (r.user?.project?.name || "Sin Grupo Asignado").toLowerCase()
+    const reason = (r.reason || "").toLowerCase()
+    const type = (r.type || "").toLowerCase()
+    return name.includes(q) || email.includes(q) || groupName.includes(q) || reason.includes(q) || type.includes(q)
+  })
+
+  // Agrupación dinámica por grupos creados en Gestión de Grupos (Project)
+  const groupsMap = new Map<string, {
+    groupId: string
+    groupName: string
+    groupColor: string
+    groupIcon?: string
+    groupImage?: string | null
+    requests: any[]
+    pendingCount: number
+    approvedCount: number
+    rejectedCount: number
+    uniqueEmployeesCount: number
+  }>()
+
+  filteredRequests.forEach(req => {
+    const project = req.user?.project
+    const groupId = project?.id || "unassigned"
+    const groupName = project?.name || "Sin Grupo Asignado"
+    const groupColor = project?.color || "#ff6a00"
+    const groupIcon = project?.icon || "Users"
+    const groupImage = project?.image
+
+    if (!groupsMap.has(groupId)) {
+      groupsMap.set(groupId, {
+        groupId,
+        groupName,
+        groupColor,
+        groupIcon,
+        groupImage,
+        requests: [],
+        pendingCount: 0,
+        approvedCount: 0,
+        rejectedCount: 0,
+        uniqueEmployeesCount: 0
+      })
+    }
+
+    const bucket = groupsMap.get(groupId)!
+    bucket.requests.push(req)
+    if (req.status === "PENDING") bucket.pendingCount++
+    else if (req.status === "APPROVED") bucket.approvedCount++
+    else if (req.status === "REJECTED") bucket.rejectedCount++
+  })
+
+  groupsMap.forEach(b => {
+    const uids = new Set(b.requests.map(r => r.user?.id || r.userId))
+    b.uniqueEmployeesCount = uids.size
+  })
+
+  // Todos los grupos en la pestaña activa ordenados (los que tienen más pendientes primero)
+  const allGroupsInTab = Array.from(groupsMap.values()).sort((a, b) => {
+    if (a.pendingCount !== b.pendingCount) return b.pendingCount - a.pendingCount
+    return a.groupName.localeCompare(b.groupName)
+  })
+
+  // Grupos filtrados según el chip seleccionado
+  const visibleGroups = selectedGroupFilter === "ALL" 
+    ? allGroupsInTab 
+    : allGroupsInTab.filter(g => g.groupId === selectedGroupFilter)
+
+  const toggleGroupCollapse = (groupId: string) => {
+    setCollapsedGroups(prev => ({
+      ...prev,
+      [groupId]: !prev[groupId]
+    }))
+  }
+
+  const areAllCollapsed = visibleGroups.length > 0 && visibleGroups.every(g => Boolean(collapsedGroups[g.groupId]))
+
+  const toggleCollapseAll = () => {
+    if (areAllCollapsed) {
+      setCollapsedGroups({})
+    } else {
+      const all: Record<string, boolean> = {}
+      visibleGroups.forEach(g => {
+        all[g.groupId] = true
+      })
+      setCollapsedGroups(all)
+    }
+  }
 
   // Métricas
   const approvedRequests = requests.filter(r => r.status === "APPROVED")
@@ -294,248 +393,380 @@ export default function AdminDashboard() {
         </button>
       </div>
       
-      {displayedRequests.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: "4rem 2rem", background: "hsl(var(--surface) / 0.5)" }}>
-          <p style={{ color: "hsl(var(--muted-foreground))" }}>No hay solicitudes en esta sección.</p>
+      {/* Barra de Herramientas y Filtros por Grupo */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginBottom: "1.75rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+          {/* Búsqueda predictiva */}
+          <div style={{ position: "relative", flex: 1, minWidth: "260px", maxWidth: "440px" }}>
+            <Search size={16} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "hsl(var(--muted-foreground))" }} />
+            <input
+              className="input"
+              placeholder="Buscar por empleado, motivo, tipo o grupo..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{ fontSize: "0.85rem", paddingLeft: "2.5rem", paddingRight: searchQuery ? "2.2rem" : "1rem", borderRadius: "999px", width: "100%" }}
+            />
+            {searchQuery && (
+              <button 
+                type="button"
+                onClick={() => setSearchQuery("")} 
+                style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "hsl(var(--muted-foreground))", display: "flex", alignItems: "center", padding: "2px" }}
+                title="Limpiar búsqueda"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Controles de vista: Alternar modo y Colapso */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+            {viewMode === "GROUPS" && visibleGroups.length > 0 && (
+              <button 
+                type="button" 
+                onClick={toggleCollapseAll}
+                className="btn btn-surface hover-scale"
+                style={{ fontSize: "0.78rem", padding: "0.45rem 0.85rem", display: "inline-flex", alignItems: "center", gap: "0.4rem", borderRadius: "999px" }}
+                title={areAllCollapsed ? "Expandir todos los recuadros de grupos" : "Colapsar todos los recuadros de grupos"}
+              >
+                <Layers size={14} />
+                {areAllCollapsed ? "Expandir Grupos" : "Colapsar Grupos"}
+              </button>
+            )}
+
+            <div style={{ display: "flex", backgroundColor: "hsl(var(--surface))", padding: "3px", borderRadius: "999px", border: "1px solid hsl(var(--border))" }}>
+              <button
+                type="button"
+                onClick={() => setViewMode("GROUPS")}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  padding: "0.35rem 0.8rem",
+                  borderRadius: "999px",
+                  fontSize: "0.78rem",
+                  fontWeight: 700,
+                  border: "none",
+                  cursor: "pointer",
+                  backgroundColor: viewMode === "GROUPS" ? "hsl(var(--primary))" : "transparent",
+                  color: viewMode === "GROUPS" ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))",
+                  transition: "all 0.2s"
+                }}
+              >
+                <LayoutGrid size={13} />
+                Vista por Grupos
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("LIST")}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  padding: "0.35rem 0.8rem",
+                  borderRadius: "999px",
+                  fontSize: "0.78rem",
+                  fontWeight: 700,
+                  border: "none",
+                  cursor: "pointer",
+                  backgroundColor: viewMode === "LIST" ? "hsl(var(--primary))" : "transparent",
+                  color: viewMode === "LIST" ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))",
+                  transition: "all 0.2s"
+                }}
+              >
+                <ListFilter size={13} />
+                Vista Lista
+              </button>
+            </div>
+          </div>
         </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {displayedRequests.map((request) => (
-            <div key={request.id} className="card animate-in" style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "1.5rem", alignItems: "start" }}>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.75rem" }}>
-                  <div style={{ 
-                    width: "40px", 
-                    height: "40px", 
+
+        {/* Chips Horizontales de Selección de Grupo */}
+        {allGroupsInTab.length > 0 && (
+          <div style={{ display: "flex", gap: "0.5rem", overflowX: "auto", paddingBottom: "0.35rem", width: "100%", scrollbarWidth: "thin" }}>
+            <button
+              type="button"
+              onClick={() => setSelectedGroupFilter("ALL")}
+              className="btn hover-scale"
+              style={{
+                padding: "0.35rem 0.85rem",
+                borderRadius: "999px",
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                backgroundColor: selectedGroupFilter === "ALL" ? "hsl(var(--primary))" : "hsl(var(--surface))",
+                color: selectedGroupFilter === "ALL" ? "hsl(var(--primary-foreground))" : "hsl(var(--foreground))",
+                border: "1px solid hsl(var(--border))",
+                whiteSpace: "nowrap",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.4rem"
+              }}
+            >
+              <Users size={13} />
+              Todos los Grupos ({filteredRequests.length})
+            </button>
+
+            {allGroupsInTab.map(g => {
+              const isSelected = selectedGroupFilter === g.groupId
+              return (
+                <button
+                  key={g.groupId}
+                  type="button"
+                  onClick={() => setSelectedGroupFilter(isSelected ? "ALL" : g.groupId)}
+                  className="btn hover-scale"
+                  style={{
+                    padding: "0.35rem 0.85rem",
+                    borderRadius: "999px",
+                    fontSize: "0.78rem",
+                    fontWeight: isSelected ? 700 : 550,
+                    backgroundColor: isSelected ? (g.groupColor || "hsl(var(--primary))") : "hsl(var(--surface))",
+                    color: isSelected ? "#fff" : "hsl(var(--foreground))",
+                    border: `1px solid ${isSelected ? (g.groupColor || "hsl(var(--primary))") : "hsl(var(--border))"}`,
+                    whiteSpace: "nowrap",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.45rem",
+                    transition: "all 0.2s"
+                  }}
+                >
+                  <span style={{ 
+                    width: 9, 
+                    height: 9, 
                     borderRadius: "50%", 
-                    backgroundColor: "hsl(var(--primary) / 0.1)", 
-                    display: "flex", 
-                    alignItems: "center", 
-                    justifyContent: "center",
-                    color: "hsl(var(--primary))",
-                    fontWeight: 700
+                    backgroundColor: isSelected ? "#fff" : (g.groupColor || "hsl(var(--primary))"),
+                    boxShadow: isSelected ? "none" : `0 0 6px ${g.groupColor || "hsl(var(--primary))"}` 
+                  }} />
+                  <span>{g.groupName}</span>
+                  <span style={{ 
+                    fontSize: "0.7rem", 
+                    padding: "0.1rem 0.45rem", 
+                    borderRadius: "999px", 
+                    backgroundColor: isSelected ? "rgba(255,255,255,0.25)" : "hsl(var(--muted) / 0.5)",
+                    fontWeight: 800
                   }}>
-                    {request.user.name?.[0].toUpperCase()}
-                  </div>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: "1rem" }}>{request.user.name}</h3>
-                    <p style={{ margin: 0, fontSize: "0.875rem", color: "hsl(var(--muted-foreground))" }}>
-                      {request.user.email} • {request.user.project?.name || "Sin Proyecto"}
-                    </p>
-                  </div>
-                </div>
+                    {g.requests.length}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      
+      {/* Visualización de Solicitudes (Por Grupos o Lista) */}
+      {filteredRequests.length === 0 ? (
+        <div className="card glass animate-in" style={{ textAlign: "center", padding: "4rem 2rem", background: "hsl(var(--surface) / 0.5)", borderRadius: "1.25rem", border: "1px dashed hsl(var(--border))" }}>
+          <div style={{ width: 48, height: 48, borderRadius: "50%", backgroundColor: "hsl(var(--primary) / 0.1)", color: "hsl(var(--primary))", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem" }}>
+            <Briefcase size={22} />
+          </div>
+          <h3 style={{ margin: "0 0 0.5rem", fontSize: "1.1rem" }}>No hay solicitudes disponibles</h3>
+          <p style={{ color: "hsl(var(--muted-foreground))", margin: 0, fontSize: "0.875rem" }}>
+            {searchQuery 
+              ? `No se encontraron resultados que coincidan con "${searchQuery}".` 
+              : activeTab === "PENDING" ? "No tienes solicitudes pendientes por revisar en tus grupos a cargo." : "No hay registros históricos de solicitudes en esta sección."}
+          </p>
+        </div>
+      ) : viewMode === "GROUPS" ? (
+        /* VISTA DIVIDIDA POR GRUPOS: Cada grupo tiene su recuadro contenedor */
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
+          {visibleGroups.map(group => {
+            const isCollapsed = Boolean(collapsedGroups[group.groupId])
+            const groupColor = group.groupColor || "hsl(var(--primary))"
 
-                {/* Bloque Discreto de Información de la Solicitud */}
-                <div style={{ 
-                  display: "flex", 
-                  flexWrap: "wrap", 
-                  gap: "1.25rem", 
-                  fontSize: "0.78rem", 
-                  color: "hsl(var(--muted-foreground))", 
-                  marginBottom: "1rem", 
-                  padding: "0.5rem 0.85rem", 
-                  backgroundColor: "hsl(var(--muted) / 0.25)", 
-                  borderRadius: "0.5rem", 
-                  border: "1px solid hsl(var(--border) / 0.4)" 
-                }}>
-                  <div><strong style={{ color: "hsl(var(--foreground))" }}>Creada por:</strong> {request.createdBy?.name || request.user?.name || "No disponible"}</div>
-                  <div><strong style={{ color: "hsl(var(--foreground))" }}>Fecha de creación:</strong> {formatDateLong(request.createdAt)}</div>
-                  <div><strong style={{ color: "hsl(var(--foreground))" }}>Hora de creación:</strong> {formatTime12h(request.createdAt)}</div>
-                </div>
-
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem", fontSize: "0.875rem" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <Briefcase size={16} color="hsl(var(--muted-foreground))" />
-                    <span style={{ fontWeight: 600 }}>
-                      {request.type === "VACATION" ? "Vacaciones" : 
-                       request.type === "PERMISSION" ? `Permiso Especial (${request.specialType === "HOURS" ? "Horas" : request.specialType === "HALF" ? "Medio Día" : "Día Completo"})` : 
-                       request.type === "SPECIAL" ? `Permiso Especial (${request.specialType === "HOURS" ? "Horas" : request.specialType === "HALF" ? "Medio Día" : "Día Completo"})` : 
-                       request.type === "HOURS_MAKEUP" ? "Reposición de Horas" : 
-                       request.type === "EARLY_LEAVE" ? "Salida Temprana" :
-                       request.type === "SICK_LEAVE" ? "Enfermedad" :
-                       request.type === "MEDICAL_LEAVE" ? "Licencia Médica" :
-                       request.type === "MATERNITY_LEAVE" ? "Maternidad" :
-                       request.type === "PATERNITY_LEAVE" ? "Paternidad" :
-                       request.type === "BEREAVEMENT_LEAVE" ? "Luto Familiar" : request.type}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <Calendar size={16} color="hsl(var(--muted-foreground))" />
-                    <span>
-                      {request.type === "HOURS_MAKEUP" ? (
-                        <>
-                          Ausencia: {request.absenceDate ? new Date(request.absenceDate).toLocaleDateString("es-ES") : "N/A"} | Propuesta Reposición: {request.makeupDate ? new Date(request.makeupDate).toLocaleDateString("es-ES") : "N/A"} de {request.makeupStartTime || "N/A"} a {request.makeupEndTime || "N/A"}
-                        </>
-                      ) : request.type === "SPECIAL" && request.specialType === "HOURS" ? (
-                        <>
-                          Fecha: {new Date(request.startDate).toLocaleDateString("es-ES")} | Horario: de {request.exitTime || "N/A"} a {request.returnTime || "N/A"}
-                        </>
-                      ) : request.type === "EARLY_LEAVE" ? (
-                        <>
-                          {new Date(request.startDate).toLocaleDateString()} a las {new Date(request.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </>
+            return (
+              <div
+                key={group.groupId}
+                className="card glass animate-in"
+                style={{
+                  borderRadius: "1.25rem",
+                  overflow: "hidden",
+                  border: `1px solid ${groupColor}40`,
+                  backgroundColor: "hsl(var(--surface) / 0.45)",
+                  boxShadow: `0 10px 32px -10px ${groupColor}25`,
+                  padding: 0,
+                  transition: "all 0.25s ease"
+                }}
+              >
+                {/* Encabezado del Recuadro de Grupo */}
+                <div 
+                  onClick={() => toggleGroupCollapse(group.groupId)}
+                  style={{
+                    padding: "1.1rem 1.5rem",
+                    borderBottom: isCollapsed ? "none" : `1px solid ${groupColor}30`,
+                    background: `linear-gradient(90deg, ${groupColor}15 0%, transparent 80%)`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "1rem",
+                    cursor: "pointer",
+                    userSelect: "none",
+                    flexWrap: "wrap"
+                  }}
+                  title="Haz clic para colapsar o expandir las solicitudes de este grupo"
+                >
+                  {/* Identidad del Grupo */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "1rem", minWidth: "220px" }}>
+                    <div style={{
+                      width: "44px",
+                      height: "44px",
+                      borderRadius: "12px",
+                      backgroundColor: `${groupColor}22`,
+                      color: groupColor,
+                      border: `1.5px solid ${groupColor}55`,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontWeight: 800,
+                      fontSize: "1.1rem",
+                      flexShrink: 0,
+                      boxShadow: `0 4px 12px ${groupColor}25`
+                    }}>
+                      {group.groupImage ? (
+                        <img src={group.groupImage} alt={group.groupName} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "10px" }} />
                       ) : (
-                        <>
-                          {new Date(request.startDate).toLocaleDateString()} - {new Date(request.endDate).toLocaleDateString()}
-                        </>
+                        <Users size={22} style={{ color: groupColor }} />
                       )}
-                    </span>
-                  </div>
-                  
-                  {/* Horas solicitadas, aprobadas y reales */}
-                  {(request.type === "HOURS_MAKEUP" || (request.type === "SPECIAL" && request.specialType === "HOURS")) && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <Clock size={16} color="hsl(var(--primary))" />
-                      <span style={{ fontSize: "0.8rem", color: "hsl(var(--primary))", fontWeight: 700 }}>
-                        {request.type === "HOURS_MAKEUP" ? (
-                          <>A reponer: {request.hoursToMakeUp || 0} hrs | Aprobadas: {request.hoursApproved !== null ? `${request.hoursApproved} hrs` : "Pendiente"}</>
-                        ) : (
-                          <>Solicitadas: {request.hoursRequested || 0} hrs | Aprobadas: {request.hoursApproved !== null ? `${request.hoursApproved} hrs` : "Pendiente"} | Reales: {request.hoursUsed !== null ? `${request.hoursUsed} hrs` : "Pendiente"}</>
-                        )}
-                      </span>
                     </div>
-                  )}
-                </div>
 
-                {request.reason && (
-                  <div style={{ marginTop: "1rem", padding: "0.75rem", backgroundColor: "hsl(var(--muted) / 0.5)", borderRadius: "0.5rem", fontSize: "0.875rem" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem", color: "hsl(var(--muted-foreground))" }}>
-                      <MessageSquare size={14} />
-                      <span style={{ fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase" }}>Motivo</span>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+                        <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800, color: "hsl(var(--foreground))" }}>
+                          {group.groupName}
+                        </h3>
+                        <span style={{
+                          fontSize: "0.72rem",
+                          fontWeight: 750,
+                          padding: "0.2rem 0.55rem",
+                          borderRadius: "999px",
+                          backgroundColor: `${groupColor}20`,
+                          color: groupColor,
+                          border: `1px solid ${groupColor}40`,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "0.3rem"
+                        }}>
+                          <Users size={12} />
+                          {group.uniqueEmployeesCount} colaborador{group.uniqueEmployeesCount !== 1 ? "es" : ""}
+                        </span>
+                      </div>
+                      <p style={{ margin: "0.2rem 0 0", fontSize: "0.8rem", color: "hsl(var(--muted-foreground))" }}>
+                        {group.requests.length} solicitud{group.requests.length !== 1 ? "es" : ""} en este recuadro de grupo
+                      </p>
                     </div>
-                    {request.reason}
                   </div>
-                )}
 
-                {request.documentUrl && (
-                  <div style={{ marginTop: "1.25rem" }}>
-                    <a
-                      href={request.documentUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
+                  {/* Resumen de Estado del Grupo y Botón de Colapso */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                    {activeTab === "PENDING" ? (
+                      <span style={{
+                        padding: "0.35rem 0.8rem",
+                        borderRadius: "999px",
+                        fontSize: "0.78rem",
+                        fontWeight: 750,
+                        backgroundColor: "rgba(245, 158, 11, 0.16)",
+                        color: "#f59e0b",
+                        border: "1px solid rgba(245, 158, 11, 0.35)",
                         display: "inline-flex",
                         alignItems: "center",
-                        gap: "0.4rem",
-                        fontSize: "0.75rem",
-                        color: "hsl(var(--primary))",
-                        textDecoration: "none",
-                        fontWeight: 700,
-                        padding: "0.35rem 0.75rem",
-                        borderRadius: "0.5rem",
-                        backgroundColor: "hsl(var(--primary) / 0.06)",
-                        border: "1px solid hsl(var(--primary) / 0.12)",
-                        transition: "all 0.2s"
-                      }}
-                      title={request.documentName || "Ver adjunto"}
-                    >
-                      <Paperclip size={13} />
-                      <span>Ver Documento Adjunto</span>
-                      <ExternalLink size={11} style={{ opacity: 0.7 }} />
-                    </a>
+                        gap: "0.35rem"
+                      }}>
+                        <Clock size={13} />
+                        {group.pendingCount} pendiente{group.pendingCount !== 1 ? "s" : ""}
+                      </span>
+                    ) : (
+                      <div style={{ display: "flex", gap: "0.4rem" }}>
+                        {group.approvedCount > 0 && (
+                          <span style={{
+                            padding: "0.3rem 0.65rem",
+                            borderRadius: "999px",
+                            fontSize: "0.74rem",
+                            fontWeight: 700,
+                            backgroundColor: "rgba(16, 185, 129, 0.15)",
+                            color: "#10b981",
+                            border: "1px solid rgba(16, 185, 129, 0.3)"
+                          }}>
+                            ✓ {group.approvedCount} aprobada{group.approvedCount !== 1 ? "s" : ""}
+                          </span>
+                        )}
+                        {group.rejectedCount > 0 && (
+                          <span style={{
+                            padding: "0.3rem 0.65rem",
+                            borderRadius: "999px",
+                            fontSize: "0.74rem",
+                            fontWeight: 700,
+                            backgroundColor: "rgba(239, 68, 68, 0.15)",
+                            color: "#ef4444",
+                            border: "1px solid rgba(239, 68, 68, 0.3)"
+                          }}>
+                            ✕ {group.rejectedCount} rechazada{group.rejectedCount !== 1 ? "s" : ""}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    <div style={{ 
+                      width: 32, 
+                      height: 32, 
+                      borderRadius: "50%", 
+                      display: "flex", 
+                      alignItems: "center", 
+                      justifyContent: "center", 
+                      backgroundColor: "hsl(var(--surface))",
+                      border: "1px solid hsl(var(--border))",
+                      color: "hsl(var(--muted-foreground))"
+                    }}>
+                      {isCollapsed ? <ChevronDown size={17} /> : <ChevronUp size={17} />}
+                    </div>
                   </div>
-                )}
-                
-                {request.supervisorNote && activeTab === "HISTORY" && (
-                  <div style={{ marginTop: "0.75rem", padding: "0.75rem", borderLeft: "3px solid hsl(var(--primary))", backgroundColor: "hsl(var(--primary) / 0.05)", borderRadius: "0 0.5rem 0.5rem 0", fontSize: "0.875rem" }}>
-                    <span style={{ fontWeight: 600, display: "block", marginBottom: "0.25rem", color: "hsl(var(--primary))" }}>Nota del Supervisor:</span>
-                    {request.supervisorNote}
+                </div>
+
+                {/* Contenido del Recuadro: Solicitudes de los miembros de este grupo */}
+                {!isCollapsed && (
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    {group.requests.map((request, idx) => (
+                      <div 
+                        key={request.id}
+                        style={{
+                          borderTop: idx > 0 ? "1px solid hsl(var(--border) / 0.45)" : "none",
+                          backgroundColor: idx % 2 === 0 ? "transparent" : "hsl(var(--surface) / 0.25)"
+                        }}
+                      >
+                        <RequestCardItem
+                          request={request}
+                          activeTab={activeTab}
+                          processingId={processingId}
+                          onApprove={(id) => handleStatusUpdate(id, "APPROVED")}
+                          onReject={(id) => handleStatusUpdate(id, "REJECTED")}
+                          onEdit={(req) => setEditingReq(req)}
+                          onDelete={(id) => handleDeleteRequest(id)}
+                        />
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
-
-              {activeTab === "PENDING" ? (
-                <div style={{ display: "flex", gap: "0.5rem" }}>
-                  <button 
-                    onClick={() => handleStatusUpdate(request.id, "APPROVED")}
-                    disabled={processingId === request.id}
-                    className="btn btn-primary" 
-                    style={{ backgroundColor: "#10b981", borderColor: "#10b981", height: "fit-content" }}
-                  >
-                    <CheckCircle2 size={16} />
-                    <span>Aprobar</span>
-                  </button>
-                  <button 
-                    onClick={() => handleStatusUpdate(request.id, "REJECTED")}
-                    disabled={processingId === request.id}
-                    className="btn btn-surface" 
-                    style={{ color: "#ef4444", height: "fit-content" }}
-                  >
-                    <XCircle size={16} />
-                    <span>Denegar</span>
-                  </button>
-                  <button 
-                    onClick={() => setEditingReq(request)}
-                    disabled={processingId === request.id}
-                    className="btn btn-surface" 
-                    style={{ color: "hsl(var(--primary))", height: "fit-content" }}
-                    title="Editar solicitud"
-                  >
-                    <Pencil size={16} />
-                    <span>Editar</span>
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", alignItems: "flex-end", justifyContent: "space-between", height: "100%" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", alignItems: "flex-end" }}>
-                    <span style={{ 
-                      display: "inline-flex", alignItems: "center", gap: "0.35rem",
-                      padding: "0.35rem 0.85rem", borderRadius: "9999px", fontSize: "0.80rem", fontWeight: 700,
-                      backgroundColor: request.status === "APPROVED" ? "#10b98120" : "#ef444420", 
-                      color: request.status === "APPROVED" ? "#10b981" : "#ef4444"
-                    }}>
-                      {request.status === "APPROVED" ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
-                      {request.status === "APPROVED" ? "Aprobada" : "Rechazada"}
-                    </span>
-                    {request.status === "APPROVED" && (
-                      <span style={{ 
-                        display: "inline-flex", alignItems: "center", gap: "0.35rem",
-                        padding: "0.35rem 0.85rem", borderRadius: "9999px", fontSize: "0.80rem", fontWeight: 700,
-                        backgroundColor: request.affectsBonus ? "rgba(239, 68, 68, 0.12)" : "rgba(16, 185, 129, 0.12)", 
-                        color: request.affectsBonus ? "#ef4444" : "#10b981",
-                        border: request.affectsBonus ? "1px solid rgba(239, 68, 68, 0.2)" : "1px solid rgba(16, 185, 129, 0.2)"
-                      }}>
-                        {request.affectsBonus ? "Afecta Bono" : "No Afecta Bono"}
-                      </span>
-                    )}
-                    <div style={{ fontSize: "0.72rem", color: "hsl(var(--muted-foreground))", textAlign: "right", marginTop: "0.25rem", display: "flex", flexDirection: "column", gap: "0.15rem" }}>
-                      <div>Creada el {formatDateTimeShort(request.createdAt)}</div>
-                      {request.status === "APPROVED" && (
-                        <div>
-                          Aprobada: <strong>{formatDateTimeShort(request.approvedAt)}</strong>{request.approvedBy?.name ? ` por ${request.approvedBy.name}` : ""}
-                        </div>
-                      )}
-                      {request.status === "REJECTED" && (
-                        <div>
-                          Rechazada: <strong>{formatDateTimeShort(request.rejectedAt)}</strong>{request.rejectedBy?.name ? ` por ${request.rejectedBy.name}` : ""}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: "0.4rem", marginTop: "auto" }}>
-                    <button 
-                      type="button"
-                      onClick={() => setEditingReq(request)}
-                      disabled={processingId === request.id}
-                      className="btn btn-ghost" 
-                      title="Editar solicitud"
-                      style={{ padding: "0.4rem", color: "hsl(var(--primary))" }}
-                    >
-                      <Pencil size={16} />
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={() => handleDeleteRequest(request.id)}
-                      disabled={processingId === request.id}
-                      className="btn btn-ghost" 
-                      title="Limpiar registro del historial"
-                      style={{ padding: "0.4rem", color: "hsl(0 70% 55%)" }}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-              )}
+            )
+          })}
+        </div>
+      ) : (
+        /* VISTA LISTA PLANA (Alternativa unificada) */
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          {filteredRequests.map((request) => (
+            <div 
+              key={request.id} 
+              className="card glass animate-in" 
+              style={{ borderRadius: "1.25rem", padding: 0, overflow: "hidden" }}
+            >
+              <RequestCardItem
+                request={request}
+                activeTab={activeTab}
+                processingId={processingId}
+                onApprove={(id) => handleStatusUpdate(id, "APPROVED")}
+                onReject={(id) => handleStatusUpdate(id, "REJECTED")}
+                onEdit={(req) => setEditingReq(req)}
+                onDelete={(id) => handleDeleteRequest(id)}
+              />
             </div>
           ))}
         </div>
@@ -951,6 +1182,397 @@ function EditAdminRequestModal({
           </div>
         </form>
       </div>
+    </div>
+  )
+}
+
+function getRequestTypeInfo(type: string, specialType?: string | null) {
+  switch (type) {
+    case "VACATION":
+      return { label: "Vacaciones", color: "#38bdf8", bg: "rgba(56, 189, 248, 0.12)", border: "rgba(56, 189, 248, 0.25)" }
+    case "PERMISSION":
+    case "SPECIAL": {
+      const spec = specialType === "HOURS" ? "Horas" : specialType === "HALF" ? "Medio Día" : "Día Completo"
+      return { label: `Permiso Especial (${spec})`, color: "#a855f7", bg: "rgba(168, 85, 247, 0.12)", border: "rgba(168, 85, 247, 0.25)" }
+    }
+    case "HOURS_MAKEUP":
+      return { label: "Reposición de Horas", color: "#f59e0b", bg: "rgba(245, 158, 11, 0.12)", border: "rgba(245, 158, 11, 0.25)" }
+    case "EARLY_LEAVE":
+      return { label: "Salida Temprana", color: "#eab308", bg: "rgba(234, 179, 8, 0.12)", border: "rgba(234, 179, 8, 0.25)" }
+    case "SICK_LEAVE":
+      return { label: "Enfermedad", color: "#ec4899", bg: "rgba(236, 72, 153, 0.12)", border: "rgba(236, 72, 153, 0.25)" }
+    case "MEDICAL_LEAVE":
+      return { label: "Licencia Médica", color: "#f43f5e", bg: "rgba(244, 63, 94, 0.12)", border: "rgba(244, 63, 94, 0.25)" }
+    case "MATERNITY_LEAVE":
+      return { label: "Maternidad", color: "#14b8a6", bg: "rgba(20, 184, 166, 0.12)", border: "rgba(20, 184, 166, 0.25)" }
+    case "PATERNITY_LEAVE":
+      return { label: "Paternidad", color: "#06b6d4", bg: "rgba(6, 182, 212, 0.12)", border: "rgba(6, 182, 212, 0.25)" }
+    case "BEREAVEMENT_LEAVE":
+      return { label: "Luto Familiar", color: "#94a3b8", bg: "rgba(148, 163, 184, 0.12)", border: "rgba(148, 163, 184, 0.25)" }
+    case "REMOTE_INTERNET":
+      return { label: "Incidencia: Falla Internet", color: "#ef4444", bg: "rgba(239, 68, 68, 0.12)", border: "rgba(239, 68, 68, 0.25)" }
+    case "REMOTE_POWER":
+      return { label: "Incidencia: Corte de Luz", color: "#eab308", bg: "rgba(234, 179, 8, 0.12)", border: "rgba(234, 179, 8, 0.25)" }
+    case "REMOTE_HARDWARE":
+      return { label: "Incidencia: Hardware / PC", color: "#f97316", bg: "rgba(249, 115, 22, 0.12)", border: "rgba(249, 115, 22, 0.25)" }
+    case "REMOTE_VPN":
+      return { label: "Incidencia: VPN / Red", color: "#6366f1", bg: "rgba(99, 102, 241, 0.12)", border: "rgba(99, 102, 241, 0.25)" }
+    default:
+      return { label: type, color: "hsl(var(--primary))", bg: "hsl(var(--primary) / 0.12)", border: "hsl(var(--primary) / 0.25)" }
+  }
+}
+
+function RequestCardItem({
+  request,
+  activeTab,
+  processingId,
+  onApprove,
+  onReject,
+  onEdit,
+  onDelete
+}: {
+  request: any
+  activeTab: "PENDING" | "HISTORY"
+  processingId: string | null
+  onApprove: (id: string) => void
+  onReject: (id: string) => void
+  onEdit: (req: any) => void
+  onDelete: (id: string) => void
+}) {
+  const typeInfo = getRequestTypeInfo(request.type, request.specialType)
+  const isBeingProcessed = processingId === request.id
+
+  return (
+    <div 
+      style={{
+        padding: "1.25rem 1.5rem",
+        display: "grid",
+        gridTemplateColumns: "1fr auto",
+        gap: "1.5rem",
+        alignItems: "start",
+        position: "relative"
+      }}
+    >
+      <div>
+        {/* Encabezado del Colaborador */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", marginBottom: "0.85rem", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <div style={{
+              width: "40px",
+              height: "40px",
+              borderRadius: "50%",
+              backgroundColor: "hsl(var(--primary) / 0.12)",
+              color: "hsl(var(--primary))",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontWeight: 800,
+              fontSize: "0.95rem",
+              border: "1px solid hsl(var(--primary) / 0.25)",
+              flexShrink: 0
+            }}>
+              {request.user?.name?.[0]?.toUpperCase() || "U"}
+            </div>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                <h4 style={{ margin: 0, fontSize: "1rem", fontWeight: 750, color: "hsl(var(--foreground))" }}>
+                  {request.user?.name}
+                </h4>
+                {request.user?.role && (
+                  <span style={{
+                    fontSize: "0.68rem",
+                    fontWeight: 700,
+                    padding: "0.15rem 0.5rem",
+                    borderRadius: "999px",
+                    backgroundColor: "hsl(var(--surface))",
+                    border: "1px solid hsl(var(--border))",
+                    color: "hsl(var(--muted-foreground))"
+                  }}>
+                    {request.user.role}
+                  </span>
+                )}
+                {request.user?.project?.name && (
+                  <span style={{
+                    fontSize: "0.68rem",
+                    fontWeight: 650,
+                    color: request.user.project.color || "hsl(var(--muted-foreground))",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.25rem"
+                  }}>
+                    • {request.user.project.name}
+                  </span>
+                )}
+              </div>
+              <p style={{ margin: "0.15rem 0 0", fontSize: "0.8rem", color: "hsl(var(--muted-foreground))" }}>
+                {request.user?.email}
+              </p>
+            </div>
+          </div>
+
+          {/* Badge del Tipo de Solicitud */}
+          <span style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.35rem",
+            padding: "0.3rem 0.75rem",
+            borderRadius: "999px",
+            fontSize: "0.78rem",
+            fontWeight: 700,
+            backgroundColor: typeInfo.bg,
+            color: typeInfo.color,
+            border: `1px solid ${typeInfo.border}`
+          }}>
+            <Briefcase size={13} />
+            {typeInfo.label}
+          </span>
+        </div>
+
+        {/* Trazabilidad: Creada por y fechas */}
+        <div style={{ 
+          display: "flex", 
+          flexWrap: "wrap", 
+          gap: "1.25rem", 
+          fontSize: "0.76rem", 
+          color: "hsl(var(--muted-foreground))", 
+          marginBottom: "0.85rem", 
+          padding: "0.45rem 0.75rem", 
+          backgroundColor: "hsl(var(--surface) / 0.6)", 
+          borderRadius: "0.5rem", 
+          border: "1px solid hsl(var(--border) / 0.4)" 
+        }}>
+          <div><strong style={{ color: "hsl(var(--foreground))" }}>Creada por:</strong> {request.createdBy?.name || request.user?.name || "No disponible"}</div>
+          <div><strong style={{ color: "hsl(var(--foreground))" }}>Fecha de registro:</strong> {formatDateLong(request.createdAt)} a las {formatTime12h(request.createdAt)}</div>
+        </div>
+
+        {/* Detalles de Fechas y Horarios */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "1.25rem", fontSize: "0.85rem", marginBottom: "0.75rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <Calendar size={15} color="hsl(var(--primary))" />
+            <span>
+              {request.type === "HOURS_MAKEUP" ? (
+                <>Ausencia: <strong>{request.absenceDate ? formatDateShort(request.absenceDate) : "N/A"}</strong> | Propuesta Reposición: <strong>{request.makeupDate ? formatDateShort(request.makeupDate) : "N/A"}</strong> ({request.makeupStartTime || "N/A"} a {request.makeupEndTime || "N/A"})</>
+              ) : request.type === "SPECIAL" && request.specialType === "HOURS" ? (
+                <>Fecha: <strong>{formatDateShort(request.startDate)}</strong> | Horario: <strong>{request.exitTime || "N/A"} a {request.returnTime || "N/A"}</strong></>
+              ) : request.type === "EARLY_LEAVE" ? (
+                <>Salida: <strong>{formatDateShort(request.startDate)}</strong> a las <strong>{formatTime12h(request.startDate)}</strong></>
+              ) : (
+                <>Del <strong>{formatDateShort(request.startDate)}</strong> al <strong>{formatDateShort(request.endDate)}</strong></>
+              )}
+            </span>
+          </div>
+
+          {(request.type === "HOURS_MAKEUP" || (request.type === "SPECIAL" && request.specialType === "HOURS")) && (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <Clock size={15} color="hsl(var(--primary))" />
+              <span style={{ fontSize: "0.8rem", color: "hsl(var(--primary))", fontWeight: 700 }}>
+                {request.type === "HOURS_MAKEUP" ? (
+                  <>A reponer: {request.hoursToMakeUp || 0} hrs | Aprobadas: {request.hoursApproved !== null && request.hoursApproved !== undefined ? `${request.hoursApproved} hrs` : "Pendiente"}</>
+                ) : (
+                  <>Solicitadas: {request.hoursRequested || 0} hrs | Aprobadas: {request.hoursApproved !== null && request.hoursApproved !== undefined ? `${request.hoursApproved} hrs` : "Pendiente"} | Reales: {request.hoursUsed !== null && request.hoursUsed !== undefined ? `${request.hoursUsed} hrs` : "Pendiente"}</>
+                )}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Motivo */}
+        {request.reason && (
+          <div style={{ 
+            marginTop: "0.6rem", 
+            padding: "0.65rem 0.85rem", 
+            backgroundColor: "hsl(var(--surface) / 0.8)", 
+            borderRadius: "0.5rem", 
+            fontSize: "0.84rem",
+            border: "1px solid hsl(var(--border) / 0.3)"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.2rem", color: "hsl(var(--muted-foreground))" }}>
+              <MessageSquare size={13} />
+              <span style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Motivo de la Solicitud</span>
+            </div>
+            {request.reason}
+          </div>
+        )}
+
+        {/* Adjunto */}
+        {request.documentUrl && (
+          <div style={{ marginTop: "0.75rem" }}>
+            <a
+              href={request.documentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                fontSize: "0.75rem",
+                color: "hsl(var(--primary))",
+                textDecoration: "none",
+                fontWeight: 700,
+                padding: "0.35rem 0.75rem",
+                borderRadius: "0.5rem",
+                backgroundColor: "hsl(var(--primary) / 0.08)",
+                border: "1px solid hsl(var(--primary) / 0.2)",
+                transition: "all 0.2s"
+              }}
+            >
+              <Paperclip size={13} />
+              <span>Ver Documento Adjunto</span>
+              <ExternalLink size={11} style={{ opacity: 0.7 }} />
+            </a>
+          </div>
+        )}
+
+        {/* Nota del supervisor en historial */}
+        {request.supervisorNote && activeTab === "HISTORY" && (
+          <div style={{ 
+            marginTop: "0.75rem", 
+            padding: "0.65rem 0.85rem", 
+            borderLeft: "3px solid hsl(var(--primary))", 
+            backgroundColor: "hsl(var(--primary) / 0.05)", 
+            borderRadius: "0 0.5rem 0.5rem 0", 
+            fontSize: "0.825rem" 
+          }}>
+            <span style={{ fontWeight: 700, display: "block", marginBottom: "0.2rem", color: "hsl(var(--primary))" }}>Nota del Supervisor:</span>
+            {request.supervisorNote}
+          </div>
+        )}
+      </div>
+
+      {/* Botones de acción / Estado */}
+      {activeTab === "PENDING" ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", alignItems: "stretch", minWidth: "115px" }}>
+          <button 
+            type="button"
+            onClick={() => onApprove(request.id)}
+            disabled={isBeingProcessed}
+            className="btn hover-scale" 
+            style={{ 
+              backgroundColor: "#10b981", 
+              color: "#fff", 
+              border: "1px solid #059669",
+              borderRadius: "0.6rem",
+              padding: "0.5rem 0.85rem",
+              fontSize: "0.8rem",
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "0.4rem",
+              cursor: isBeingProcessed ? "not-allowed" : "pointer"
+            }}
+          >
+            <CheckCircle2 size={15} />
+            <span>Aprobar</span>
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => onReject(request.id)}
+            disabled={isBeingProcessed}
+            className="btn btn-surface hover-scale" 
+            style={{ 
+              color: "#ef4444", 
+              border: "1px solid rgba(239, 68, 68, 0.3)",
+              borderRadius: "0.6rem",
+              padding: "0.5rem 0.85rem",
+              fontSize: "0.8rem",
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "0.4rem",
+              cursor: isBeingProcessed ? "not-allowed" : "pointer"
+            }}
+          >
+            <XCircle size={15} />
+            <span>Denegar</span>
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => onEdit(request)}
+            disabled={isBeingProcessed}
+            className="btn btn-ghost" 
+            style={{ 
+              color: "hsl(var(--primary))",
+              borderRadius: "0.6rem",
+              padding: "0.4rem 0.85rem",
+              fontSize: "0.78rem",
+              fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "0.35rem"
+            }}
+            title="Editar solicitud"
+          >
+            <Pencil size={13} />
+            <span>Editar</span>
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", alignItems: "flex-end", justifyContent: "space-between", height: "100%" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", alignItems: "flex-end" }}>
+            <span style={{ 
+              display: "inline-flex", alignItems: "center", gap: "0.35rem",
+              padding: "0.3rem 0.75rem", borderRadius: "9999px", fontSize: "0.78rem", fontWeight: 700,
+              backgroundColor: request.status === "APPROVED" ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)", 
+              color: request.status === "APPROVED" ? "#10b981" : "#ef4444",
+              border: request.status === "APPROVED" ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(239, 68, 68, 0.3)"
+            }}>
+              {request.status === "APPROVED" ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
+              {request.status === "APPROVED" ? "Aprobada" : "Rechazada"}
+            </span>
+            {request.status === "APPROVED" && (
+              <span style={{ 
+                display: "inline-flex", alignItems: "center", gap: "0.35rem",
+                padding: "0.25rem 0.65rem", borderRadius: "9999px", fontSize: "0.72rem", fontWeight: 700,
+                backgroundColor: request.affectsBonus ? "rgba(239, 68, 68, 0.12)" : "rgba(16, 185, 129, 0.12)", 
+                color: request.affectsBonus ? "#ef4444" : "#10b981",
+                border: request.affectsBonus ? "1px solid rgba(239, 68, 68, 0.2)" : "1px solid rgba(16, 185, 129, 0.2)"
+              }}>
+                {request.affectsBonus ? "Afecta Bono" : "No Afecta Bono"}
+              </span>
+            )}
+            <div style={{ fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", textAlign: "right", marginTop: "0.2rem", display: "flex", flexDirection: "column", gap: "0.15rem" }}>
+              <div>Registrada: {formatDateTimeShort(request.createdAt)}</div>
+              {request.status === "APPROVED" && (
+                <div>
+                  Aprobada: <strong>{formatDateTimeShort(request.approvedAt)}</strong>{request.approvedBy?.name ? ` por ${request.approvedBy.name}` : ""}
+                </div>
+              )}
+              {request.status === "REJECTED" && (
+                <div>
+                  Rechazada: <strong>{formatDateTimeShort(request.rejectedAt)}</strong>{request.rejectedBy?.name ? ` por ${request.rejectedBy.name}` : ""}
+                </div>
+              )}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "0.35rem", marginTop: "auto" }}>
+            <button 
+              type="button"
+              onClick={() => onEdit(request)}
+              disabled={isBeingProcessed}
+              className="btn btn-ghost" 
+              title="Editar solicitud"
+              style={{ padding: "0.4rem", color: "hsl(var(--primary))" }}
+            >
+              <Pencil size={15} />
+            </button>
+            <button 
+              type="button"
+              onClick={() => onDelete(request.id)}
+              disabled={isBeingProcessed}
+              className="btn btn-ghost" 
+              title="Limpiar registro del historial"
+              style={{ padding: "0.4rem", color: "hsl(0 70% 55%)" }}
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
