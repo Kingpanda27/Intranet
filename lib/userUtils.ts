@@ -1,3 +1,15 @@
+export const NON_ABSENCE_REQUEST_TYPES = [
+  "PERMISSION",
+  "SPECIAL",
+  "EARLY_LEAVE",
+  "LATE_ARRIVAL",
+  "HOURS_MAKEUP",
+  "REMOTE_INTERNET",
+  "REMOTE_POWER",
+  "REMOTE_HARDWARE",
+  "REMOTE_VPN"
+]
+
 export type UserStatus = {
   status: "AVAILABLE" | "OFFLINE" | "VACATION" | "SICK_LEAVE" | "MEDICAL_LEAVE" | "MATERNITY_LEAVE" | "PATERNITY_LEAVE" | "BEREAVEMENT_LEAVE" | "SPECIAL_PERMISSION"
   label: string
@@ -45,8 +57,11 @@ export function computeUserStatus(requests: any[], lastSeen?: Date | null | unde
     }
   }
 
-  // If multiple, pick the first one (most critical usually)
-  const current = activeRequests[0]
+  // Prioritize full day absences over partial permissions if multiple active
+  const fullAbsence = activeRequests.find(req => 
+    ["VACATION", "SICK_LEAVE", "MEDICAL_LEAVE", "MATERNITY_LEAVE", "PATERNITY_LEAVE", "MATERNITY_PATERNITY", "BEREAVEMENT_LEAVE"].includes(req.type)
+  )
+  const current = fullAbsence || activeRequests[0]
   const returnDate = new Date(current.endDate)
   returnDate.setDate(returnDate.getDate() + 1) // next day after end date
 
@@ -58,13 +73,21 @@ export function computeUserStatus(requests: any[], lastSeen?: Date | null | unde
     case "MEDICAL_LEAVE":
       return { status: "MEDICAL_LEAVE", label: "Licencia médica activa", color: "#ef4444", returnDate, type: current.type }
     case "MATERNITY_LEAVE":
+    case "MATERNITY_PATERNITY":
       return { status: "MATERNITY_LEAVE", label: "Licencia por maternidad", color: "#a855f7", returnDate, type: current.type }
     case "PATERNITY_LEAVE":
       return { status: "PATERNITY_LEAVE", label: "Licencia por paternidad", color: "#0ea5e9", returnDate, type: current.type }
     case "BEREAVEMENT_LEAVE":
       return { status: "BEREAVEMENT_LEAVE", label: "Licencia por fallecimiento", color: "#52525b", returnDate, type: current.type }
     case "PERMISSION":
+    case "SPECIAL":
     case "EARLY_LEAVE":
+    case "LATE_ARRIVAL":
+    case "HOURS_MAKEUP":
+      // Si el colaborador está conectado o activo, está disponible para trabajar
+      if (isOnline) {
+        return { status: "AVAILABLE", label: "Disponible", color: "#10b981", returnDate: null, type: "AVAILABLE" }
+      }
       return { status: "SPECIAL_PERMISSION", label: "Permiso especial", color: "#f59e0b", returnDate, type: current.type }
     default:
       if (isOnline) {

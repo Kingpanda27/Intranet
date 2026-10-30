@@ -1,6 +1,38 @@
 "use client"
 
 import { TrendingUp, Gift, Zap, Hash, Star, CalendarX, Award, Calendar, Cake, Briefcase, Activity, Plane, FileText } from "lucide-react"
+import { useTranslation } from "@/lib/i18n/LanguageContext"
+import { getLocalizedHolidayTitle } from "@/lib/holidayData"
+
+function getEventBadgeDate(dateVal: Date | string, isHoliday?: boolean, precalculatedMonth?: string, precalculatedDay?: number, locale: string = "es") {
+  if (precalculatedMonth && precalculatedDay !== undefined) {
+    return { month: precalculatedMonth, day: precalculatedDay }
+  }
+  const d = new Date(dateVal)
+  if (isNaN(d.getTime())) return { month: "", day: "" }
+  
+  // Si es un feriado o evento a medianoche UTC (00:00:00Z),
+  // se debe leer con UTC para evitar desfase de -1 día por zona horaria local (ej. UTC-4 / UTC-5).
+  const isUtcMidnight = isHoliday || (d.getUTCHours() === 0 && d.getUTCMinutes() === 0)
+  
+  const month = d.toLocaleDateString(locale === "en" ? "en-US" : "es-ES", { 
+    month: "short", 
+    timeZone: isUtcMidnight ? "UTC" : undefined 
+  }).replace(".", "")
+  
+  const day = isUtcMidnight ? d.getUTCDate() : d.getDate()
+  return { month, day }
+}
+
+function formatDateSafe(dateVal: Date | string, options?: Intl.DateTimeFormatOptions, locale: string = "es") {
+  const d = new Date(dateVal)
+  if (isNaN(d.getTime())) return ""
+  const isUtcMidnight = d.getUTCHours() === 0 && d.getUTCMinutes() === 0
+  return d.toLocaleDateString(locale === "en" ? "en-US" : "es-ES", {
+    ...(options || { day: "numeric", month: "short" }),
+    timeZone: isUtcMidnight ? "UTC" : undefined
+  })
+}
 
 export function RightPanel({ 
   absentEmployees = [], 
@@ -19,6 +51,15 @@ export function RightPanel({
   corporateActivity?: any,
   personalSummary?: any
 }) {
+  const { t, locale } = useTranslation()
+
+  const quickLinks = [
+    { key: "policies", label: t("rightPanel.policies") },
+    { key: "benefits", label: t("rightPanel.benefits") },
+    { key: "itSupport", label: t("rightPanel.itSupport") },
+    { key: "directory", label: t("rightPanel.directory") }
+  ]
+
   return (
     <div style={{ 
       display: "flex", 
@@ -37,13 +78,13 @@ export function RightPanel({
       }}>
         <h3 style={{ fontSize: "1rem", fontWeight: 800, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.6rem" }}>
           <CalendarX size={20} color="hsl(var(--primary))" /> 
-          Personal Ausente Hoy
+          {t("rightPanel.absentToday")}
         </h3>
         
         <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
           {absentEmployees.length === 0 ? (
             <div style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.85rem", opacity: 0.8, textAlign: "center", padding: "1rem 0" }}>
-              Todo el equipo está disponible hoy.
+              {t("rightPanel.noAbsencesToday")}
             </div>
           ) : (
             absentEmployees.map((emp) => (
@@ -88,13 +129,13 @@ export function RightPanel({
       }}>
         <h3 style={{ fontSize: "1rem", fontWeight: 800, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.6rem" }}>
           <Award size={20} color="hsl(var(--primary))" /> 
-          Reconocimientos Recientes
+          {t("rightPanel.recentRecognitions")}
         </h3>
         
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           {recognitions.length === 0 ? (
             <div style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.85rem", opacity: 0.8, textAlign: "center", padding: "1rem 0" }}>
-              Aún no hay reconocimientos. ¡Sé el primero en otorgar uno!
+              {t("rightPanel.noRecognitions")}
             </div>
           ) : (
             recognitions.map(rec => (
@@ -104,8 +145,8 @@ export function RightPanel({
                   <span style={{ fontSize: "0.8rem", fontWeight: 700 }}>{rec.receiver.name}</span>
                 </div>
                 <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
-                  Por <span style={{ fontWeight: 600, color: "hsl(var(--foreground))" }}>{rec.type.replace('_', ' ')}</span>
-                  <br />De: {rec.sender.name}
+                  {t("metrics.reason")}: <span style={{ fontWeight: 600, color: "hsl(var(--foreground))" }}>{rec.type.replace('_', ' ')}</span>
+                  <br />{t("metrics.kudosBy")}: {rec.sender.name}
                 </div>
               </div>
             ))
@@ -127,39 +168,44 @@ export function RightPanel({
       }}>
         <h3 style={{ fontSize: "1rem", fontWeight: 800, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.6rem" }}>
           <Calendar size={20} color="hsl(340 80% 60%)" /> 
-          Próximos Eventos
+          {t("rightPanel.upcomingEvents")}
         </h3>
         
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           {upcomingEvents.length === 0 ? (
             <div style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.85rem", opacity: 0.8, textAlign: "center", padding: "1rem 0" }}>
-              No hay eventos programados.
+              {t("rightPanel.noUpcomingEvents")}
             </div>
           ) : (
-            upcomingEvents.map((ev, i) => (
-              <div key={`${ev.id}-${i}`} style={{ display: "flex", alignItems: "center", gap: "0.75rem", paddingBottom: "0.5rem", borderBottom: i === upcomingEvents.length - 1 ? 'none' : "1px dashed hsl(var(--border))" }}>
-                <div style={{ 
-                  width: 36, height: 36, borderRadius: "8px", 
-                  backgroundColor: ev.isHoliday ? "hsl(340 80% 60% / 0.15)" : "hsl(var(--primary)/0.15)",
-                  color: ev.isHoliday ? "hsl(340 80% 60%)" : "hsl(var(--primary))",
-                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                  fontWeight: 800, lineHeight: 1
-                }}>
-                  <span style={{ fontSize: "0.7rem", textTransform: "uppercase" }}>
-                    {ev.date.toLocaleDateString("es-ES", { month: "short" })}
-                  </span>
-                  <span style={{ fontSize: "1rem" }}>
-                    {ev.date.getDate()}
-                  </span>
-                </div>
-                <div>
-                  <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "hsl(var(--foreground))" }}>{ev.title}</div>
-                  <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
-                    {ev.isHoliday ? "Feriado" : "Evento Corporativo"}
+            upcomingEvents.map((ev, i) => {
+              const { month, day } = getEventBadgeDate(ev.date, ev.isHoliday, ev.month, ev.day, locale)
+              return (
+                <div key={`${ev.id}-${i}`} style={{ display: "flex", alignItems: "center", gap: "0.75rem", paddingBottom: "0.5rem", borderBottom: i === upcomingEvents.length - 1 ? 'none' : "1px dashed hsl(var(--border))" }}>
+                  <div style={{ 
+                    width: 36, height: 36, borderRadius: "8px", 
+                    backgroundColor: ev.isHoliday ? "hsl(340 80% 60% / 0.15)" : "hsl(var(--primary)/0.15)",
+                    color: ev.isHoliday ? "hsl(340 80% 60%)" : "hsl(var(--primary))",
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                    fontWeight: 800, lineHeight: 1
+                  }}>
+                    <span style={{ fontSize: "0.7rem", textTransform: "uppercase" }}>
+                      {month}
+                    </span>
+                    <span style={{ fontSize: "1rem" }}>
+                      {day}
+                    </span>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "hsl(var(--foreground))" }}>
+                      {ev.isHoliday ? getLocalizedHolidayTitle(ev.title, locale) : ev.title}
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
+                      {ev.isHoliday ? t("rightPanel.holidayBadge") : t("rightPanel.companyEvent")}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       </div>
@@ -177,7 +223,7 @@ export function RightPanel({
         }}>
           <h3 style={{ fontSize: "1rem", fontWeight: 800, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.6rem", color: "hsl(340 80% 60%)" }}>
             <Cake size={20} /> 
-            Cumpleaños Hoy
+            {t("rightPanel.birthdays")}
           </h3>
           
           <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
@@ -200,7 +246,7 @@ export function RightPanel({
                     {emp.name}
                   </div>
                   <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
-                    ¡Es su día especial! 🎉
+                    {t("rightPanel.specialDay")}
                   </div>
                 </div>
               </div>
@@ -222,7 +268,7 @@ export function RightPanel({
         }}>
           <h3 style={{ fontSize: "1rem", fontWeight: 800, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.6rem" }}>
             <Plane size={20} color="hsl(var(--primary))" /> 
-            Próximas Vacaciones
+            {t("rightPanel.upcomingVacations")}
           </h3>
           
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -244,8 +290,8 @@ export function RightPanel({
                   <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "hsl(var(--foreground))", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {req.user.name}
                   </div>
-                  <div style={{ fontSize: "0.7rem", color: "hsl(var(--muted-foreground))" }}>
-                    {new Date(req.startDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })} - {new Date(req.endDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+                  <div style={{ fontSize: "0.7rem", color: "hsl(var(--muted-foreground))" }} suppressHydrationWarning>
+                    {formatDateSafe(req.startDate, undefined, locale)} - {formatDateSafe(req.endDate, undefined, locale)}
                   </div>
                 </div>
               </div>
@@ -266,7 +312,7 @@ export function RightPanel({
       }}>
         <h3 style={{ fontSize: "1rem", fontWeight: 800, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.6rem" }}>
           <Activity size={20} color="#10b981" /> 
-          Actividad 7 Días
+          {t("rightPanel.activity7Days")}
         </h3>
         
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
@@ -276,15 +322,15 @@ export function RightPanel({
           </div>
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "hsl(var(--foreground))" }}>{corporateActivity.docs}</div>
-            <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", textTransform: "uppercase", fontWeight: 600 }}>Documentos</div>
+            <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", textTransform: "uppercase", fontWeight: 600 }}>{t("home.documents")}</div>
           </div>
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "hsl(var(--foreground))" }}>{corporateActivity.requests}</div>
-            <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", textTransform: "uppercase", fontWeight: 600 }}>Solicitudes</div>
+            <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", textTransform: "uppercase", fontWeight: 600 }}>{t("vacations.historyTitle")}</div>
           </div>
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "hsl(var(--foreground))" }}>{corporateActivity.recs}</div>
-            <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", textTransform: "uppercase", fontWeight: 600 }}>Kudos</div>
+            <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", textTransform: "uppercase", fontWeight: 600 }}>{t("social.kudos")}</div>
           </div>
         </div>
       </div>
@@ -301,22 +347,22 @@ export function RightPanel({
       }}>
         <h3 style={{ fontSize: "1rem", fontWeight: 800, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.6rem" }}>
           <Briefcase size={20} color="hsl(var(--primary))" /> 
-          Mi Resumen
+          {t("rightPanel.mySummary")}
         </h3>
         
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.75rem", backgroundColor: "hsl(var(--muted)/0.3)", borderRadius: "var(--radius-md)" }}>
-            <span style={{ fontSize: "0.85rem", color: "hsl(var(--muted-foreground))", display: "flex", alignItems: "center", gap: "0.5rem" }}><Calendar size={14} /> Días de Vacaciones</span>
+            <span style={{ fontSize: "0.85rem", color: "hsl(var(--muted-foreground))", display: "flex", alignItems: "center", gap: "0.5rem" }}><Calendar size={14} /> {t("rightPanel.vacationDays")}</span>
             <span style={{ fontSize: "1rem", fontWeight: 800 }}>{personalSummary.vacationBalance}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.75rem", backgroundColor: "hsl(var(--muted)/0.3)", borderRadius: "var(--radius-md)" }}>
-            <span style={{ fontSize: "0.85rem", color: "hsl(var(--muted-foreground))", display: "flex", alignItems: "center", gap: "0.5rem" }}><Award size={14} /> Reconocimientos</span>
+            <span style={{ fontSize: "0.85rem", color: "hsl(var(--muted-foreground))", display: "flex", alignItems: "center", gap: "0.5rem" }}><Award size={14} /> {t("rightPanel.kudos")}</span>
             <span style={{ fontSize: "1rem", fontWeight: 800 }}>{personalSummary.recognitions}</span>
           </div>
           {personalSummary.nextAbsence && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.75rem", backgroundColor: "hsl(var(--primary)/0.1)", borderRadius: "var(--radius-md)" }}>
-              <span style={{ fontSize: "0.85rem", color: "hsl(var(--primary))", display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 600 }}><Plane size={14} /> Próxima Ausencia</span>
-              <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "hsl(var(--primary))" }}>{new Date(personalSummary.nextAbsence.startDate).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}</span>
+              <span style={{ fontSize: "0.85rem", color: "hsl(var(--primary))", display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 600 }}><Plane size={14} /> {t("rightPanel.nextAbsence")}</span>
+              <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "hsl(var(--primary))" }} suppressHydrationWarning>{new Date(personalSummary.nextAbsence.startDate).toLocaleDateString(locale === "en" ? "en-US" : "es-ES", { day: "numeric", month: "short" })}</span>
             </div>
           )}
         </div>
@@ -337,10 +383,10 @@ export function RightPanel({
       }}>
         <h3 style={{ fontSize: "1rem", fontWeight: 800, marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.6rem" }}>
           <Zap size={20} color="hsl(45 90% 50%)" /> 
-          Enlaces Rápidos
+          {t("rightPanel.quickLinks")}
         </h3>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
-          {["Políticas", "Beneficios", "Soporte IT", "Directorio"].map((link, i) => (
+          {quickLinks.map((item, i) => (
             <button key={i} style={{ 
               fontSize: "0.8rem", fontWeight: 600, padding: "0.5rem 0.85rem", 
               borderRadius: "12px", 
@@ -368,15 +414,15 @@ export function RightPanel({
               e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.02)";
             }}
             >
-              {link}
+              {item.label}
             </button>
           ))}
         </div>
       </div>
       
       <div style={{ textAlign: "center", fontSize: "0.75rem", color: "hsl(var(--muted-foreground)/0.6)", marginTop: "0.5rem", opacity: 0.8 }}>
-        Telecom Networks Outsourcing © 2026<br/>
-        Privacidad · Términos
+        {t("rightPanel.copyright")}<br/>
+        {t("rightPanel.privacyTerms")}
       </div>
     </div>
   )

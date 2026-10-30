@@ -1,5 +1,5 @@
 import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { authOptions, isSuperAdminEmail } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { getRoleChangeRequests } from "@/app/actions/roleRequestActions"
 import { RoleRequestManager } from "@/app/components/Admin/RoleRequestManager"
@@ -10,7 +10,9 @@ export default async function AdminRoleRequestsPage() {
   if (!session?.user) redirect("/")
 
   const user = session.user as any
-  const isMaster = user.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || user.isSuperAdmin
+  const isMaster = isSuperAdminEmail(user.email) || user.isSuperAdmin
+  // El rol ADMIN tiene explícitamente restringido el acceso a Solicitudes de Rol
+  if (user.role === "ADMIN" && !isMaster) redirect("/")
   const allowedRoles = ["TECHNOLOGY", "TECHNOLOGY_ADMIN", "IT_MANAGER", "SUPERVISOR", "MANAGER", "HR"]
   if (!allowedRoles.includes(user.role) && !isMaster) redirect("/")
 

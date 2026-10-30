@@ -1,13 +1,15 @@
 "use server"
 
 import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { authOptions, isSuperAdminEmail } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { sendTimeOffEmail } from "@/lib/email"
 import { saveFile } from "./fileActions"
+import { savePrivateAttachment } from "@/lib/privateStorage"
 import { createAuditLog } from "./auditActions"
 import { MIN_VACATION_DAYS } from "@/lib/vacationPolicy"
+import { formatTimeStr12h } from "@/lib/dateUtils"
 import {
   canAccessApprovalsPanel,
   getTimeOffScopeFilter,
@@ -21,12 +23,14 @@ export type RequestType =
   | "VACATION"
   | "PERMISSION"
   | "EARLY_LEAVE"
+  | "LATE_ARRIVAL"
   | "SICK_LEAVE"
   | "MEDICAL_LEAVE"
   | "MATERNITY_LEAVE"
   | "PATERNITY_LEAVE"
   | "MATERNITY_PATERNITY"
   | "BEREAVEMENT_LEAVE"
+  | "MARRIAGE_LEAVE"
   | "HOURS_MAKEUP"
   | "SPECIAL"
   | "REMOTE_INTERNET"
@@ -68,11 +72,12 @@ export async function getEligibleEmployeesForTimeOff() {
 
   const isMaster = isCEO(user)
   const isHR = role === "HR"
+  const isAdminUser = role === "ADMIN"
 
-  // 1. CEO y RRHH -> Acceso a todos los empleados
-  if (isMaster || isHR) {
+  // 1. CEO, RRHH y ADMIN -> Acceso a todos los empleados
+  if (isMaster || isHR || isAdminUser) {
     const users = await prisma.user.findMany({
-      where: { role: { not: "NO_ROLE" } },
+      where: { isActive: true, role: { not: "NO_ROLE" } },
       select: {
         id: true,
         name: true,
@@ -104,10 +109,14 @@ export async function getEligibleEmployeesForTimeOff() {
 
     const users = await prisma.user.findMany({
       where: {
+        isActive: true,
         role: { not: "NO_ROLE" },
         OR: [
           { role: { in: ["TECHNOLOGY", "TECHNOLOGY_ADMIN", "IT_MANAGER"] } },
-          ...(techProjectIds.length > 0 ? [{ projectId: { in: techProjectIds } }] : [])
+          ...(techProjectIds.length > 0 ? [
+            { projects: { some: { id: { in: techProjectIds } } } },
+            { projectId: { in: techProjectIds } }
+          ] : [])
         ]
       },
       select: {
@@ -115,7 +124,8 @@ export async function getEligibleEmployeesForTimeOff() {
         name: true,
         email: true,
         vacationBalance: true,
-        project: { select: { name: true } }
+        project: { select: { name: true } },
+        projects: { select: { name: true } }
       },
       orderBy: { name: "asc" }
     })
@@ -129,15 +139,20 @@ export async function getEligibleEmployeesForTimeOff() {
 
     const users = await prisma.user.findMany({
       where: {
+        isActive: true,
         role: { not: "NO_ROLE" },
-        projectId: { in: managedProjectIds }
+        OR: [
+          { projects: { some: { id: { in: managedProjectIds } } } },
+          { projectId: { in: managedProjectIds } }
+        ]
       },
       select: {
         id: true,
         name: true,
         email: true,
         vacationBalance: true,
-        project: { select: { name: true } }
+        project: { select: { name: true } },
+        projects: { select: { name: true } }
       },
       orderBy: { name: "asc" }
     })
@@ -145,6 +160,28 @@ export async function getEligibleEmployeesForTimeOff() {
   }
 
   return []
+}
+
+function formatTimeOffTypeLabel(type: string): string {
+  switch (type) {
+    case "VACATION": return "Vacaciones"
+    case "PERMISSION": return "Permiso Especial"
+    case "EARLY_LEAVE": return "Salida Temprana"
+    case "LATE_ARRIVAL": return "Llegada Tarde"
+    case "SICK_LEAVE": return "Licencia por Enfermedad"
+    case "MEDICAL_LEAVE": return "Licencia Médica"
+    case "MATERNITY_LEAVE":
+    case "MATERNITY_PATERNITY": return "Licencia por Maternidad / Paternidad"
+    case "PATERNITY_LEAVE": return "Licencia por Paternidad"
+    case "BEREAVEMENT_LEAVE": return "Licencia por Duelo"
+    case "MARRIAGE_LEAVE": return "Licencia por Matrimonio"
+    case "HOURS_MAKEUP": return "Reposición de Horas"
+    case "REMOTE_INTERNET": return "Incidencia: Falla de Internet"
+    case "REMOTE_POWER": return "Incidencia: Corte de Luz"
+    case "REMOTE_HARDWARE": return "Incidencia: Avería de Hardware / PC"
+    case "REMOTE_VPN": return "Incidencia: Fallo de VPN / Red"
+    default: return type.replace(/_/g, " ")
+  }
 }
 
 export async function createTimeOffRequest(formData: FormData) {
@@ -178,7 +215,8 @@ export async function createTimeOffRequest(formData: FormData) {
   }
 
   const autoApprove = formData.get("autoApprove") === "true"
-  const canManage = ["SUPERVISOR", "TEAM_LEAD", "MANAGER", "IT_MANAGER", "HR", "TECHNOLOGY"].includes(loggedInRole)
+  const affectsBonus = formData.get("affectsBonus") === "true"
+  const canManage = ["SUPERVISOR", "TEAM_LEAD", "MANAGER", "IT_MANAGER", "HR", "TECHNOLOGY", "TECHNOLOGY_ADMIN", "ADMIN"].includes(loggedInRole) || Boolean((session.user as any)?.isSuperAdmin) || isSuperAdminEmail((session.user as any)?.email)
 
   if (targetUserIds.length === 0) {
     targetUserIds = [loggedInUserId]
@@ -195,7 +233,12 @@ export async function createTimeOffRequest(formData: FormData) {
   const type = formData.get("type") as RequestType || "VACATION"
   const startDateStr = formData.get("startDate") as string
   const endDateStr = formData.get("endDate") as string
-  const leaveTime = formData.get("leaveTime") as string // Para salida temprana
+  const rawLeaveTime = (formData.get("leaveTime") as string | null) || null
+  const rawExitTime = (formData.get("exitTime") as string | null) || null
+  const rawArrivalTime = (formData.get("arrivalTime") as string | null) || null
+  const leaveTime = rawLeaveTime || rawExitTime // Para salida temprana
+  const arrivalTime = rawArrivalTime || (formData.get("returnTime") as string | null) || null // Para llegada tarde
+  const isPreApproved = formData.get("isPreApproved") === "true" || formData.get("specialType") === "PRE_APPROVED"
   const incidentDate = formData.get("incidentDate") as string | null
   const incidentStartTime = formData.get("incidentStartTime") as string | null
   const incidentEndTime = formData.get("incidentEndTime") as string | null
@@ -225,8 +268,31 @@ export async function createTimeOffRequest(formData: FormData) {
   }
 
   if (type === "EARLY_LEAVE" && leaveTime) {
+    const cleanDateStr = startDateStr ? startDateStr.split("T")[0] : new Date().toISOString().split("T")[0]
     const [hours, minutes] = leaveTime.split(":")
-    startDate.setHours(parseInt(hours), parseInt(minutes), 0, 0)
+    const padH = (hours || "00").padStart(2, "0")
+    const padM = (minutes || "00").padStart(2, "0")
+    // Forzar zona horaria de República Dominicana (UTC-4) para evitar desfase al persistir
+    const parsed = new Date(`${cleanDateStr}T${padH}:${padM}:00-04:00`)
+    if (!isNaN(parsed.getTime())) {
+      startDate = parsed
+    } else {
+      startDate = new Date(startDateStr)
+      startDate.setHours(parseInt(hours), parseInt(minutes), 0, 0)
+    }
+    endDate = new Date(startDate)
+  } else if (type === "LATE_ARRIVAL" && arrivalTime) {
+    const cleanDateStr = startDateStr ? startDateStr.split("T")[0] : new Date().toISOString().split("T")[0]
+    const [hours, minutes] = arrivalTime.split(":")
+    const padH = (hours || "00").padStart(2, "0")
+    const padM = (minutes || "00").padStart(2, "0")
+    const parsed = new Date(`${cleanDateStr}T${padH}:${padM}:00-04:00`)
+    if (!isNaN(parsed.getTime())) {
+      startDate = parsed
+    } else {
+      startDate = new Date(startDateStr)
+      startDate.setHours(parseInt(hours), parseInt(minutes), 0, 0)
+    }
     endDate = new Date(startDate)
   }
 
@@ -245,6 +311,13 @@ export async function createTimeOffRequest(formData: FormData) {
       rawReason.trim() ? `Motivo/Notas: ${rawReason.trim()}` : null
     ].filter(Boolean).join(" | ")
     reason = details || "Incidencia de teletrabajo reportada"
+  } else if (type === "LATE_ARRIVAL") {
+    const approvalTag = isPreApproved ? "[Con Aprobación Previa]" : "[Sin Aprobación Previa]"
+    if (rawReason.trim() && !rawReason.includes("[Con Aprobación Previa]") && !rawReason.includes("[Sin Aprobación Previa]")) {
+      reason = `${approvalTag} ${rawReason.trim()}`
+    } else if (!rawReason.trim()) {
+      reason = approvalTag
+    }
   }
 
   let workingDays = 0
@@ -259,9 +332,9 @@ export async function createTimeOffRequest(formData: FormData) {
   const makeupStartTime = formData.get("makeupStartTime") as string | null
   const makeupEndTime = formData.get("makeupEndTime") as string | null
 
-  const specialType = formData.get("specialType") as string | null
-  const exitTime = formData.get("exitTime") as string | null
-  const returnTime = formData.get("returnTime") as string | null
+  const specialType = (formData.get("specialType") as string | null) || (type === "PERMISSION" ? "HOURS" : type === "LATE_ARRIVAL" ? (isPreApproved ? "PRE_APPROVED" : "NOT_PRE_APPROVED") : null)
+  const exitTime = (formData.get("exitTime") as string | null) || leaveTime || null
+  const returnTime = (formData.get("returnTime") as string | null) || arrivalTime || null
   const hoursRequestedStr = formData.get("hoursRequested") as string | null
 
   const hoursToMakeUp = hoursToMakeUpStr ? parseFloat(hoursToMakeUpStr) : null
@@ -269,14 +342,14 @@ export async function createTimeOffRequest(formData: FormData) {
   const absenceDate = absenceDateStr ? new Date(absenceDateStr) : null
   const makeupDate = makeupDateStr ? new Date(makeupDateStr) : null
 
-  // Si es un permiso por horas, reposición de horas o incidencia remota, no consume días de saldo de vacaciones
-  if (type === "HOURS_MAKEUP" || (type === "SPECIAL" && specialType === "HOURS") || isRemoteIncident) {
+  // Si es un permiso por horas, salida temprana, llegada tarde, reposición de horas o incidencia remota, no consume días de saldo de vacaciones
+  if (type === "HOURS_MAKEUP" || type === "EARLY_LEAVE" || type === "LATE_ARRIVAL" || type === "PERMISSION" || (type === "SPECIAL" && specialType === "HOURS") || isRemoteIncident) {
     workingDays = 0
   } else if (type === "SPECIAL" && specialType === "HALF") {
     workingDays = 0.5
   }
 
-  const requiredTypes = ["SICK_LEAVE", "MEDICAL_LEAVE", "MATERNITY_LEAVE", "PATERNITY_LEAVE", "MATERNITY_PATERNITY", "BEREAVEMENT_LEAVE"]
+  const requiredTypes = ["SICK_LEAVE", "MEDICAL_LEAVE", "MATERNITY_LEAVE", "PATERNITY_LEAVE", "MATERNITY_PATERNITY", "BEREAVEMENT_LEAVE", "MARRIAGE_LEAVE"]
   const isDocumentRequired = requiredTypes.includes(type)
   const documentFile = formData.get("document") as File | null
 
@@ -289,16 +362,17 @@ export async function createTimeOffRequest(formData: FormData) {
 
   if (documentFile && documentFile.size > 0) {
     const ext = documentFile.name.split(".").pop()?.toLowerCase()
-    const allowedExtensions = ["pdf", "jpg", "jpeg", "png"]
+    const allowedExtensions = ["pdf", "jpg", "jpeg", "png", "webp", "msg"]
     if (!ext || !allowedExtensions.includes(ext)) {
-      return { success: false, error: "Formato de archivo no permitido. Solo se aceptan PDF, JPG, JPEG y PNG." }
+      return { success: false, error: "Formato de archivo no permitido. Solo se aceptan PDF, JPG, JPEG, PNG, WEBP y MSG." }
     }
     try {
+      const savedFile = await savePrivateAttachment(documentFile, "medical")
       documentName = documentFile.name
-      documentUrl = await saveFile(documentFile, "documents")
-    } catch (e) {
-      console.error("Error saving document:", e)
-      return { success: false, error: "Error al guardar el archivo adjunto." }
+      documentUrl = savedFile.relativePath // Guarda únicamente la ruta relativa interna, nunca una URL pública directa
+    } catch (e: any) {
+      console.error("Error al guardar adjunto médico confidencial:", e)
+      return { success: false, error: e?.message || "Error al guardar el archivo adjunto." }
     }
   }
 
@@ -335,6 +409,7 @@ export async function createTimeOffRequest(formData: FormData) {
             requestedDays: workingDays,
             reason: requestReason,
             status: initialStatus,
+            affectsBonus: affectsBonus,
             documentUrl,
             documentName,
             absenceDate,
@@ -354,17 +429,61 @@ export async function createTimeOffRequest(formData: FormData) {
         affectedUserNames.push(u.name || u.email || tId)
 
         try {
+          const typeLabel = formatTimeOffTypeLabel(type)
           await prisma.notification.create({
             data: {
               userId: tId,
-              title: "Incidencia / Solicitud registrada por tu supervisor",
-              message: `${loggedInName} ha registrado una solicitud de ${type} para tu equipo. Estado: ${initialStatus === "APPROVED" ? "Aprobada" : "Pendiente"}.`,
+              title: `Solicitud registrada por supervisor: ${typeLabel}`,
+              message: `${loggedInName} ha registrado una solicitud de ${typeLabel} para tu equipo. Estado: ${initialStatus === "APPROVED" ? "Aprobada" : "Pendiente de aprobación"}.`,
               type: "TIME_OFF",
               link: "/vacations"
             }
           })
         } catch (notifErr) {
           console.error("Error creating notification for user:", tId, notifErr)
+        }
+      }
+
+      // Notificar a los líderes de los grupos/proyectos involucrados si la solicitud masiva queda pendiente
+      if (!autoApprove) {
+        try {
+          const typeLabel = formatTimeOffTypeLabel(type)
+          const targetUsers = await prisma.user.findMany({
+            where: { id: { in: targetUserIds } },
+            select: { projectId: true, projects: { select: { id: true } } }
+          })
+          const allGroupIds = new Set<string>()
+          for (const tu of targetUsers) {
+            if (tu.projectId) allGroupIds.add(tu.projectId)
+            tu.projects?.forEach(p => allGroupIds.add(p.id))
+          }
+          
+          for (const gId of allGroupIds) {
+            const proj = await prisma.project.findUnique({
+              where: { id: gId },
+              include: {
+                supervisors: { select: { id: true } },
+                subLeaders: { select: { id: true } }
+              }
+            })
+            const leaderIds = new Set<string>()
+            proj?.supervisors?.forEach((s: any) => { if (s.id && s.id !== loggedInUserId) leaderIds.add(s.id) })
+            proj?.subLeaders?.forEach((s: any) => { if (s.id && s.id !== loggedInUserId) leaderIds.add(s.id) })
+
+            for (const leaderId of leaderIds) {
+              await prisma.notification.create({
+                data: {
+                  userId: leaderId,
+                  title: `Nueva solicitud masiva: ${typeLabel}`,
+                  message: `${loggedInName} ha registrado una solicitud masiva de ${typeLabel} para ${createdRequests.length} integrantes de ${proj?.name || "tu grupo"}. Pendiente de revisión.`,
+                  type: "TIME_OFF",
+                  link: "/dashboard"
+                }
+              }).catch(() => {})
+            }
+          }
+        } catch (massLeaderErr) {
+          console.warn("Notice notifying leaders of mass requests:", massLeaderErr)
         }
       }
 
@@ -395,6 +514,7 @@ export async function createTimeOffRequest(formData: FormData) {
           case "MATERNITY_PATERNITY": typeLabel = "Licencia por Maternidad / Paternidad"; break
           case "PATERNITY_LEAVE": typeLabel = "Licencia por Paternidad"; break
           case "BEREAVEMENT_LEAVE": typeLabel = "Licencia por Fallecimiento / Duelo"; break
+          case "MARRIAGE_LEAVE": typeLabel = "Licencia por Matrimonio"; break
           case "HOURS_MAKEUP": typeLabel = "Reposición de Horas"; break
           case "REMOTE_INTERNET": typeLabel = "Incidencia Teletrabajo: Falla de Internet"; break
           case "REMOTE_POWER": typeLabel = "Incidencia Teletrabajo: Corte de Luz"; break
@@ -409,7 +529,12 @@ export async function createTimeOffRequest(formData: FormData) {
             : (incidentDuration ? `Duración estimada: ${incidentDuration}\n` : "")
           timeDetails = `Fecha de la falla: ${incidentDate || startDateStr || "Hoy"}\n${timeStr}`
         } else if (type === "EARLY_LEAVE") {
-          timeDetails = `Fecha: ${startDateStr}\nHora de salida: ${leaveTime}`
+          timeDetails = `Fecha: ${startDateStr}\nHora de salida: ${formatTimeStr12h(exitTime) || exitTime || leaveTime || ""}`
+        } else if (type === "LATE_ARRIVAL") {
+          const approvalLabel = isPreApproved ? "Con aprobación previa" : "Sin aprobación previa"
+          timeDetails = `Fecha: ${startDateStr}\nHora estimada de llegada: ${formatTimeStr12h(returnTime || rawArrivalTime) || returnTime || rawArrivalTime || ""}\nCondición: ${approvalLabel}`
+        } else if (type === "PERMISSION" || type === "SPECIAL") {
+          timeDetails = `Fecha: ${startDateStr}\nHorario solicitado: ${formatTimeStr12h(exitTime) || exitTime || "-"} a ${formatTimeStr12h(returnTime) || returnTime || "-"}${hoursRequested ? ` (${hoursRequested} hrs)` : ""}`
         } else {
           timeDetails = `Desde: ${startDateStr}\nHasta: ${endDateStr}`
         }
@@ -518,6 +643,7 @@ export async function createTimeOffRequest(formData: FormData) {
         requestedDays: workingDays,
         reason: requestReason,
         status: initialStatus,
+        affectsBonus: isCreatedOnBehalf ? affectsBonus : false,
         documentUrl,
         documentName,
         absenceDate,
@@ -561,7 +687,8 @@ export async function createTimeOffRequest(formData: FormData) {
         include: { 
           project: {
              include: {
-               supervisors: true
+               supervisors: true,
+               subLeaders: true
              }
           }
         }
@@ -583,23 +710,7 @@ export async function createTimeOffRequest(formData: FormData) {
         }
       }
 
-      let typeLabel = "Vacaciones"
-      switch (type) {
-        case "VACATION": typeLabel = "Vacaciones"; break
-        case "PERMISSION": typeLabel = "Permiso Especial"; break
-        case "EARLY_LEAVE": typeLabel = "Salida Temprana"; break
-        case "SICK_LEAVE": typeLabel = "Licencia por Enfermedad (Corta)"; break
-        case "MEDICAL_LEAVE": typeLabel = "Licencia Médica Oficial"; break
-        case "MATERNITY_LEAVE":
-        case "MATERNITY_PATERNITY": typeLabel = "Licencia por Maternidad / Paternidad"; break
-        case "PATERNITY_LEAVE": typeLabel = "Licencia por Paternidad"; break
-        case "BEREAVEMENT_LEAVE": typeLabel = "Licencia por Fallecimiento / Duelo"; break
-        case "HOURS_MAKEUP": typeLabel = "Reposición de Horas"; break
-        case "REMOTE_INTERNET": typeLabel = "Incidencia Teletrabajo: Falla de Internet"; break
-        case "REMOTE_POWER": typeLabel = "Incidencia Teletrabajo: Corte de Luz"; break
-        case "REMOTE_HARDWARE": typeLabel = "Incidencia Teletrabajo: Avería de Hardware / PC"; break
-        case "REMOTE_VPN": typeLabel = "Incidencia Teletrabajo: Fallo de VPN / Accesos"; break
-      }
+      const typeLabel = formatTimeOffTypeLabel(type)
 
       let timeDetails = `Inicio: ${startDateStr}`
       if (isRemoteIncident) {
@@ -608,7 +719,12 @@ export async function createTimeOffRequest(formData: FormData) {
           : (incidentDuration ? `Duración estimada: ${incidentDuration}\n` : "")
         timeDetails = `Fecha de la falla: ${incidentDate || startDateStr || "Hoy"}\n${timeStr}`
       } else if (type === "EARLY_LEAVE") {
-        timeDetails = `Fecha: ${startDateStr}\nHora de salida: ${leaveTime}`
+        timeDetails = `Fecha: ${startDateStr}\nHora de salida: ${formatTimeStr12h(exitTime) || exitTime || leaveTime || ""}`
+      } else if (type === "LATE_ARRIVAL") {
+        const approvalLabel = isPreApproved ? "Con aprobación previa" : "Sin aprobación previa"
+        timeDetails = `Fecha: ${startDateStr}\nHora estimada de llegada: ${formatTimeStr12h(returnTime || rawArrivalTime) || returnTime || rawArrivalTime || ""}\nCondición: ${approvalLabel}`
+      } else if (type === "PERMISSION" || type === "SPECIAL") {
+        timeDetails = `Fecha: ${startDateStr}\nHorario solicitado: ${formatTimeStr12h(exitTime) || exitTime || "-"} a ${formatTimeStr12h(returnTime) || returnTime || "-"}${hoursRequested ? ` (${hoursRequested} hrs)` : ""}`
       } else {
         timeDetails = `Desde: ${startDateStr}\nHasta: ${endDateStr}`
       }
@@ -621,8 +737,51 @@ export async function createTimeOffRequest(formData: FormData) {
         reason: requestReason || "Ninguno especificado",
         toEmails
       });
+
+      // Notificar en la campana a los líderes y supervisores del grupo si queda pendiente
+      if (initialStatus === "PENDING") {
+        const leaderIds = new Set<string>()
+        if (userWithProject?.project) {
+          if (Array.isArray(userWithProject.project.supervisors)) {
+            userWithProject.project.supervisors.forEach((s: any) => {
+              if (s.id && s.id !== loggedInUserId) leaderIds.add(s.id)
+            })
+          }
+          if (Array.isArray(userWithProject.project.subLeaders)) {
+            userWithProject.project.subLeaders.forEach((s: any) => {
+              if (s.id && s.id !== loggedInUserId) leaderIds.add(s.id)
+            })
+          }
+
+          if (userWithProject.project.id) {
+            const projectLeadUsers = await prisma.user.findMany({
+              where: {
+                projectId: userWithProject.project.id,
+                role: { in: ["TEAM_LEAD", "SUPERVISOR", "MANAGER"] },
+                isActive: true,
+                id: { not: loggedInUserId }
+              },
+              select: { id: true }
+            })
+            projectLeadUsers.forEach((pl: any) => leaderIds.add(pl.id))
+          }
+        }
+
+        const firstTimeDetail = timeDetails.split('\n')[0] || ""
+        for (const leaderId of leaderIds) {
+          await prisma.notification.create({
+            data: {
+              userId: leaderId,
+              title: `Nueva solicitud: ${typeLabel}`,
+              message: `${userWithProject?.name || "Un agente"} de ${userWithProject?.project?.name || "tu grupo"} ha solicitado ${typeLabel} (${firstTimeDetail}). Requiere tu revisión.`,
+              type: "TIME_OFF",
+              link: "/dashboard"
+            }
+          }).catch(notifErr => console.error("Error creating leader notification:", notifErr))
+        }
+      }
     } catch (e) {
-      console.error("Error al procesar notificación de email:", e)
+      console.error("Error al procesar notificación de solicitud:", e)
     }
 
     revalidatePath("/vacations")
@@ -839,6 +998,8 @@ export async function getAllSupervisedRequests() {
         email: true,
         role: true,
         image: true,
+        isActive: true,
+        status: true,
         project: {
           select: {
             id: true,
@@ -956,15 +1117,41 @@ export async function updateRequestStatus(
     })
 
     // Generar notificación interna al empleado sobre el cambio de estado
+    const typeLabel = formatTimeOffTypeLabel(oldRequest.type)
+    const notifTitle = status === "APPROVED" 
+      ? `Solicitud Aprobada: ${typeLabel}`
+      : status === "REJECTED"
+      ? `Solicitud Denegada: ${typeLabel}`
+      : `Solicitud de ${typeLabel}: ${status}`
+    
+    const notifMessage = status === "APPROVED"
+      ? `Tu solicitud de ${typeLabel} ha sido aprobada.${note ? ` Nota del supervisor: "${note}".` : ""}`
+      : status === "REJECTED"
+      ? `Tu solicitud de ${typeLabel} ha sido denegada.${note ? ` Motivo: "${note}".` : ""}`
+      : `Tu solicitud de ${typeLabel} ha cambiado a estado '${status}'.${note ? ` Nota: "${note}".` : ""}`
+
     await prisma.notification.create({
       data: {
         userId: oldRequest.userId,
-        title: `Solicitud de Permiso ${status === "APPROVED" ? "Aprobada" : status === "REJECTED" ? "Rechazada" : status}`,
-        message: `Tu solicitud de ${oldRequest.type.replace('_', ' ')} ha sido marcada como ${status}. Nota del supervisor: ${note || "N/A"}.`,
+        title: notifTitle,
+        message: notifMessage,
         type: "TIME_OFF",
         link: "/vacations"
       }
-    })
+    }).catch(err => console.warn("Error creating user notification:", err))
+
+    // Si quien solicitó/registró el permiso fue otra persona (on behalf), notificarle también a quien la solicitó
+    if (oldRequest.createdById && oldRequest.createdById !== oldRequest.userId) {
+      await prisma.notification.create({
+        data: {
+          userId: oldRequest.createdById,
+          title: notifTitle,
+          message: `La solicitud de ${typeLabel} que registraste para ${oldRequest.user?.name || "el colaborador"} ha sido ${status === "APPROVED" ? "aprobada" : status === "REJECTED" ? "denegada" : status}.${note ? ` Nota: "${note}".` : ""}`,
+          type: "TIME_OFF",
+          link: "/dashboard"
+        }
+      }).catch(err => console.warn("Error notifying request creator:", err))
+    }
 
     // Registro de Auditoría
     await createAuditLog(
@@ -979,6 +1166,147 @@ export async function updateRequestStatus(
   } catch (error) {
     console.error("Error updating request:", error)
     return { success: false, error: "Error al actualizar la solicitud" }
+  }
+}
+
+export async function bulkUpdateRequestStatus(
+  requestIds: string[], 
+  status: RequestStatus, 
+  note?: string, 
+  affectsBonus?: boolean
+) {
+  const session = await getServerSession(authOptions)
+  if (!session || !session.user) throw new Error("No autorizado")
+
+  if (!Array.isArray(requestIds) || requestIds.length === 0) {
+    return { success: false, error: "No se seleccionaron solicitudes para procesar." }
+  }
+
+  const user = session.user as any
+  let approvedCount = 0
+  let rejectedCount = 0
+  let failedCount = 0
+  const errors: string[] = []
+
+  for (const requestId of requestIds) {
+    try {
+      const auth = await authorizeRequestAction(user, requestId)
+      if (!auth.authorized) {
+        failedCount++
+        errors.push(`ID ${requestId}: ${auth.error || "No autorizado"}`)
+        continue
+      }
+
+      const oldRequest = auth.request
+
+      // Si es VACATION, ajustar el saldo de vacaciones
+      if (oldRequest.type === "VACATION") {
+        const workingDays = await calculateWorkingDays(oldRequest.startDate, oldRequest.endDate)
+        if (status === "APPROVED" && oldRequest.status !== "APPROVED") {
+          await prisma.user.update({
+            where: { id: oldRequest.userId },
+            data: { vacationBalance: { decrement: workingDays } }
+          })
+        } else if (oldRequest.status === "APPROVED" && (status === "REJECTED" || status === "CANCELLED")) {
+          await prisma.user.update({
+            where: { id: oldRequest.userId },
+            data: { vacationBalance: { increment: workingDays } }
+          })
+        }
+      }
+
+      const updateData: any = {
+        status,
+        supervisorNote: note || oldRequest.supervisorNote,
+        affectsBonus: affectsBonus !== undefined ? affectsBonus : (status === "APPROVED" ? false : oldRequest.affectsBonus),
+        updatedAt: new Date()
+      }
+
+      if (status === "APPROVED") {
+        updateData.approvedAt = new Date()
+        updateData.approvedById = user.id
+      } else if (status === "REJECTED") {
+        updateData.rejectedAt = new Date()
+        updateData.rejectedById = user.id
+      }
+
+      await prisma.timeOffRequest.update({
+        where: { id: requestId },
+        data: updateData
+      })
+
+      // Notificación al empleado y a quien solicitó
+      try {
+        const typeLabel = formatTimeOffTypeLabel(oldRequest.type)
+        const notifTitle = status === "APPROVED" 
+          ? `Solicitud Aprobada: ${typeLabel}`
+          : status === "REJECTED"
+          ? `Solicitud Denegada: ${typeLabel}`
+          : `Solicitud de ${typeLabel}: ${status}`
+        
+        const notifMsg = status === "APPROVED"
+          ? `Tu solicitud de ${typeLabel} ha sido aprobada.${note ? ` Nota del supervisor: "${note}".` : ""}`
+          : status === "REJECTED"
+          ? `Tu solicitud de ${typeLabel} ha sido denegada.${note ? ` Motivo: "${note}".` : ""}`
+          : `Tu solicitud de ${typeLabel} ha cambiado a estado '${status}'.${note ? ` Nota: "${note}".` : ""}`
+
+        await prisma.notification.create({
+          data: {
+            userId: oldRequest.userId,
+            title: notifTitle,
+            message: notifMsg,
+            type: "TIME_OFF",
+            link: "/vacations"
+          }
+        })
+
+        if (oldRequest.createdById && oldRequest.createdById !== oldRequest.userId) {
+          await prisma.notification.create({
+            data: {
+              userId: oldRequest.createdById,
+              title: notifTitle,
+              message: `La solicitud de ${typeLabel} que registraste para ${oldRequest.user?.name || "el colaborador"} ha sido ${status === "APPROVED" ? "aprobada" : status === "REJECTED" ? "denegada" : status}.${note ? ` Nota: "${note}".` : ""}`,
+              type: "TIME_OFF",
+              link: "/dashboard"
+            }
+          }).catch(() => {})
+        }
+      } catch (notifErr) {
+        console.warn("Notice creating notification in bulk:", notifErr)
+      }
+
+      if (status === "APPROVED") approvedCount++
+      else if (status === "REJECTED") rejectedCount++
+    } catch (err: any) {
+      console.error(`Error in bulk processing ${requestId}:`, err)
+      failedCount++
+      errors.push(`ID ${requestId}: ${err?.message || "Error al actualizar"}`)
+    }
+  }
+
+  // Auditoría del lote masivo
+  try {
+    await createAuditLog(
+      status === "APPROVED" ? "BULK_APPROVE_TIME_OFF" : "BULK_REJECT_TIME_OFF",
+      `Lote:${approvedCount + rejectedCount} solicitudes`,
+      `Aprobación masiva de ${approvedCount} solicitudes por ${user.name || user.email}. Nota: ${note || "N/A"}.`,
+      { requestIds, approvedCount, rejectedCount, failedCount }
+    )
+  } catch (auditErr) {
+    console.warn("Notice in audit log:", auditErr)
+  }
+
+  revalidatePath("/dashboard")
+  revalidatePath("/vacations")
+  revalidatePath("/calendar")
+
+  return {
+    success: approvedCount > 0 || rejectedCount > 0,
+    approved: approvedCount,
+    rejected: rejectedCount,
+    failed: failedCount,
+    total: requestIds.length,
+    errors: errors.length > 0 ? errors : undefined
   }
 }
 
@@ -1236,8 +1564,8 @@ export async function getHolidays() {
 export async function addHoliday(name: string, dateStr: string) {
   const session = await getServerSession(authOptions)
   const role = (session?.user as any)?.role
-  const isMasterAdmin = (session?.user as any)?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (session?.user as any)?.isSuperAdmin
-  if (role !== "IT_MANAGER" && role !== "HR" && role !== "TECHNOLOGY" && !isMasterAdmin) throw new Error("No autorizado")
+  const isMasterAdmin = isSuperAdminEmail((session?.user as any)?.email) || Boolean((session?.user as any)?.isSuperAdmin)
+  if (role !== "IT_MANAGER" && role !== "HR" && role !== "TECHNOLOGY" && role !== "ADMIN" && !isMasterAdmin) throw new Error("No autorizado")
 
   try {
     await prisma.holiday.create({

@@ -31,6 +31,7 @@ import {
   X
 } from "lucide-react"
 import { getAuditLogs, GetAuditLogsParams } from "@/app/actions/auditActions"
+import { useTranslation } from "@/lib/i18n/LanguageContext"
 
 interface AuditLogViewerProps {
   initialData: {
@@ -49,6 +50,7 @@ interface AuditLogViewerProps {
 }
 
 export function AuditLogViewer({ initialData, currentUser }: AuditLogViewerProps) {
+  const { t, locale } = useTranslation()
   const [data, setData] = useState(initialData)
   const [logs, setLogs] = useState(initialData.logs)
   const [searchTerm, setSearchTerm] = useState("")
@@ -293,7 +295,7 @@ export function AuditLogViewer({ initialData, currentUser }: AuditLogViewerProps
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
                 <h1 style={{ margin: 0, fontSize: "1.75rem", fontWeight: 800, letterSpacing: "-0.02em" }}>
-                  Centro de Auditoría & Trazabilidad
+                  {t("audit.title")}
                 </h1>
                 <span style={{
                   display: "inline-flex",
@@ -308,11 +310,11 @@ export function AuditLogViewer({ initialData, currentUser }: AuditLogViewerProps
                   borderRadius: "999px"
                 }}>
                   <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#10b981", boxShadow: "0 0 8px #10b981" }} />
-                  Activo
+                  {t("common.active")}
                 </span>
               </div>
               <p style={{ color: "hsl(var(--muted-foreground))", margin: "0.25rem 0 0 0", fontSize: "0.9rem" }}>
-                Registro inmutable de altas, bajas, asignaciones de grupos, roles y modificaciones operativas.
+                {t("audit.subtitle")}
               </p>
             </div>
           </div>
@@ -884,8 +886,21 @@ export function AuditLogViewer({ initialData, currentUser }: AuditLogViewerProps
                               {(log.userName || "S").charAt(0).toUpperCase()}
                             </div>
                             <div style={{ display: "flex", flexDirection: "column" }}>
-                              <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>
+                              <span style={{ fontWeight: 600, fontSize: "0.85rem", display: "inline-flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap" }}>
                                 {log.userName || "Sistema"}
+                                {log.isActorInactive && (
+                                  <span style={{
+                                    fontSize: "0.65rem",
+                                    fontWeight: 700,
+                                    padding: "0.1rem 0.4rem",
+                                    borderRadius: "0.3rem",
+                                    backgroundColor: "rgba(239, 68, 68, 0.12)",
+                                    color: "#ef4444",
+                                    border: "1px solid rgba(239, 68, 68, 0.25)"
+                                  }}>
+                                    (Inactivo / Baja)
+                                  </span>
+                                )}
                               </span>
                               {log.actorUserId && (
                                 <span style={{ fontSize: "0.72rem", color: "hsl(var(--muted-foreground))", fontFamily: "monospace" }}>
@@ -904,9 +919,26 @@ export function AuditLogViewer({ initialData, currentUser }: AuditLogViewerProps
                               borderRadius: "0.4rem",
                               backgroundColor: "hsl(var(--muted) / 0.5)",
                               fontSize: "0.82rem",
-                              wordBreak: "break-word"
+                              wordBreak: "break-word",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "0.35rem",
+                              flexWrap: "wrap"
                             }}>
                               {log.target}
+                              {log.isTargetInactive && (
+                                <span style={{
+                                  fontSize: "0.65rem",
+                                  fontWeight: 700,
+                                  padding: "0.05rem 0.35rem",
+                                  borderRadius: "0.25rem",
+                                  backgroundColor: "rgba(239, 68, 68, 0.12)",
+                                  color: "#ef4444",
+                                  border: "1px solid rgba(239, 68, 68, 0.25)"
+                                }}>
+                                  (Inactivo / Baja)
+                                </span>
+                              )}
                             </span>
                           ) : (
                             <span style={{ color: "hsl(var(--muted-foreground))" }}>—</span>
@@ -1015,14 +1047,20 @@ export function AuditLogViewer({ initialData, currentUser }: AuditLogViewerProps
                       </div>
 
                       <div style={{ fontSize: "0.9rem", margin: "0.5rem 0", display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
-                        <div>
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
                           <span style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.78rem" }}>Actor: </span>
                           <b>{log.userName || "Sistema"}</b>
+                          {log.isActorInactive && (
+                            <span style={{ fontSize: "0.65rem", color: "#ef4444", fontWeight: 700 }}>(Inactivo / Baja)</span>
+                          )}
                         </div>
                         {log.target && (
-                          <div>
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
                             <span style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.78rem" }}>Destino: </span>
                             <span style={{ fontWeight: 600 }}>{log.target}</span>
+                            {log.isTargetInactive && (
+                              <span style={{ fontSize: "0.65rem", color: "#ef4444", fontWeight: 700 }}>(Inactivo / Baja)</span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1230,7 +1268,22 @@ export function AuditLogViewer({ initialData, currentUser }: AuditLogViewerProps
               <div>
                 <div style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.75rem", fontWeight: 600 }}>USUARIO ACTOR</div>
                 <div style={{ fontWeight: 600, marginTop: "0.2rem" }}>
-                  {selectedLog.userName || "Sistema"}
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                    {selectedLog.userName || "Sistema"}
+                    {selectedLog.isActorInactive && (
+                      <span style={{
+                        fontSize: "0.68rem",
+                        fontWeight: 700,
+                        padding: "0.1rem 0.4rem",
+                        borderRadius: "0.3rem",
+                        backgroundColor: "rgba(239, 68, 68, 0.12)",
+                        color: "#ef4444",
+                        border: "1px solid rgba(239, 68, 68, 0.25)"
+                      }}>
+                        (Inactivo / Baja)
+                      </span>
+                    )}
+                  </span>
                   {selectedLog.actorUserId && (
                     <span style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", display: "block" }}>
                       ID: {selectedLog.actorUserId}
@@ -1242,7 +1295,22 @@ export function AuditLogViewer({ initialData, currentUser }: AuditLogViewerProps
               <div>
                 <div style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.75rem", fontWeight: 600 }}>DESTINO / OBJETIVO</div>
                 <div style={{ fontWeight: 600, marginTop: "0.2rem" }}>
-                  {selectedLog.target || "—"}
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                    {selectedLog.target || "—"}
+                    {selectedLog.isTargetInactive && (
+                      <span style={{
+                        fontSize: "0.68rem",
+                        fontWeight: 700,
+                        padding: "0.1rem 0.4rem",
+                        borderRadius: "0.3rem",
+                        backgroundColor: "rgba(239, 68, 68, 0.12)",
+                        color: "#ef4444",
+                        border: "1px solid rgba(239, 68, 68, 0.25)"
+                      }}>
+                        (Inactivo / Baja)
+                      </span>
+                    )}
+                  </span>
                   {selectedLog.targetUserId && (
                     <span style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", display: "block" }}>
                       Target ID: {selectedLog.targetUserId}

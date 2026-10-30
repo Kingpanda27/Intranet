@@ -11,40 +11,70 @@ import {
   getRecentDocsDetails 
 } from "@/app/actions/homeActions"
 import { useRouter } from "next/navigation"
+import { useTranslation } from "@/lib/i18n/LanguageContext"
 
 type ModalType = "ACTIVE" | "ABSENT" | "EVENTS" | "RECOGNITIONS" | "DOCS" | null
 
 const ABSENCE_TYPES: Record<string, { label: string, color: string, icon: string }> = {
   VACATION: { label: "Vacaciones", color: "#3b82f6", icon: "🔵" },
   SICK: { label: "Enfermedad", color: "#ef4444", icon: "🔴" },
+  SICK_LEAVE: { label: "Enfermedad", color: "#ef4444", icon: "🔴" },
   MEDICAL: { label: "Licencia Médica", color: "#a855f7", icon: "🟣" },
+  MEDICAL_LEAVE: { label: "Licencia Médica", color: "#a855f7", icon: "🟣" },
   PATERNITY: { label: "Licencia por Paternidad", color: "#0ea5e9", icon: "🩵" },
+  PATERNITY_LEAVE: { label: "Licencia por Paternidad", color: "#0ea5e9", icon: "🩵" },
   MATERNITY: { label: "Licencia por Maternidad", color: "#d946ef", icon: "💜" },
+  MATERNITY_LEAVE: { label: "Licencia por Maternidad", color: "#d946ef", icon: "💜" },
+  MATERNITY_PATERNITY: { label: "Maternidad / Paternidad", color: "#d946ef", icon: "💜" },
   BEREAVEMENT: { label: "Fallecimiento Familiar", color: "#1f2937", icon: "⚫" },
+  BEREAVEMENT_LEAVE: { label: "Fallecimiento Familiar", color: "#1f2937", icon: "⚫" },
+  MARRIAGE: { label: "Licencia por Matrimonio", color: "#e11d48", icon: "💍" },
+  MARRIAGE_LEAVE: { label: "Licencia por Matrimonio", color: "#e11d48", icon: "💍" },
   PERMISSION: { label: "Permiso", color: "#f59e0b", icon: "🟡" },
-  EARLY_LEAVE: { label: "Salida Temprana", color: "#eab308", icon: "🟡" }
+  EARLY_LEAVE: { label: "Salida Temprana", color: "#eab308", icon: "🟡" },
+  LATE_ARRIVAL: { label: "Llegada Tarde", color: "#f97316", icon: "🟠" }
 }
 
-function formatLastSeen(lastSeenDate?: Date | string | null): { text: string; isOnline: boolean } {
-  if (!lastSeenDate) return { text: "No visto hoy", isOnline: false }
+function formatLastSeen(lastSeenDate?: Date | string | null, isEn?: boolean): { text: string; isOnline: boolean } {
+  if (!lastSeenDate) return { text: isEn ? "Not seen today" : "No visto hoy", isOnline: false }
   const d = new Date(lastSeenDate)
   const diffMs = Date.now() - d.getTime()
   const diffMins = Math.floor(diffMs / 60000)
 
-  if (diffMins < 5) return { text: "En línea ahora", isOnline: true }
-  if (diffMins < 60) return { text: `Hace ${diffMins} min`, isOnline: false }
+  if (diffMins < 5) return { text: isEn ? "Online now" : "En línea ahora", isOnline: true }
+  if (diffMins < 60) return { text: isEn ? `${diffMins}m ago` : `Hace ${diffMins} min`, isOnline: false }
   const hours = Math.floor(diffMins / 60)
-  if (hours < 24) return { text: `Hace ${hours} h`, isOnline: false }
-  return { text: d.toLocaleDateString("es-ES", { hour: "2-digit", minute: "2-digit" }), isOnline: false }
+  if (hours < 24) return { text: isEn ? `${hours}h ago` : `Hace ${hours} h`, isOnline: false }
+  return { text: d.toLocaleDateString(isEn ? "en-US" : "es-ES", { hour: "2-digit", minute: "2-digit" }), isOnline: false }
 }
 
 export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: any }) {
+  const { t, locale } = useTranslation()
   const router = useRouter()
+  const isEn = locale === "en"
+  const dateLocale = isEn ? "en-US" : "es-ES"
   const [currentMetrics, setCurrentMetrics] = useState(initialMetrics)
   const [activeModal, setActiveModal] = useState<ModalType>(null)
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<any>(null)
   const [searchQuery, setSearchQuery] = useState("")
+
+  const getAbsenceTypeInfo = (type: string) => {
+    const normalizedType = type === "SICK" ? "SICK_LEAVE" 
+      : type === "MEDICAL" ? "MEDICAL_LEAVE" 
+      : type === "PATERNITY" ? "PATERNITY_LEAVE" 
+      : type === "MATERNITY" ? "MATERNITY_LEAVE" 
+      : type === "BEREAVEMENT" ? "BEREAVEMENT_LEAVE" 
+      : type;
+    
+    const translated = t(`vacations.types.${normalizedType}.label` as any);
+    const fallback = ABSENCE_TYPES[type]?.label || ABSENCE_TYPES[normalizedType]?.label || type;
+    const label = (translated && !translated.startsWith("vacations.types.")) ? translated : fallback;
+    const color = ABSENCE_TYPES[type]?.color || ABSENCE_TYPES[normalizedType]?.color || "#3b82f6";
+    const icon = ABSENCE_TYPES[type]?.icon || ABSENCE_TYPES[normalizedType]?.icon || "🔵";
+    
+    return { label, color, icon };
+  }
 
   // Auto-refresh métricas en tiempo real cada 30 segundos
   useEffect(() => {
@@ -101,11 +131,11 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
     <>
       <div className="animate-in slide-in-bottom-sm" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
         {[
-          { id: "ACTIVE", label: "Activos Hoy", value: currentMetrics?.activeEmployees ?? 0, icon: Users, color: "#10b981", bg: "rgba(16, 185, 129, 0.1)" },
-          { id: "ABSENT", label: "Ausentes", value: currentMetrics?.absentEmployees ?? 0, icon: UserX, color: "#ef4444", bg: "rgba(239, 68, 68, 0.1)" },
-          { id: "EVENTS", label: "Eventos Semana", value: currentMetrics?.eventsThisWeek ?? 0, icon: Calendar, color: "hsl(340 80% 60%)", bg: "hsla(340, 80%, 60%, 0.1)" },
-          { id: "RECOGNITIONS", label: "Reconocimientos del Mes", value: currentMetrics?.recognitionsThisMonth ?? 0, icon: Award, color: "#f59e0b", bg: "rgba(245, 158, 11, 0.1)" },
-          { id: "DOCS", label: "Nuevos Docs", value: currentMetrics?.newDocsThisMonth ?? 0, icon: FileText, color: "hsl(var(--primary))", bg: "hsl(var(--primary)/0.1)" }
+          { id: "ACTIVE", label: t("metrics.activeToday"), value: currentMetrics?.activeEmployees ?? 0, icon: Users, color: "#10b981", bg: "rgba(16, 185, 129, 0.1)" },
+          { id: "ABSENT", label: t("metrics.absentToday"), value: currentMetrics?.absentEmployees ?? 0, icon: UserX, color: "#ef4444", bg: "rgba(239, 68, 68, 0.1)" },
+          { id: "EVENTS", label: t("metrics.eventsWeek"), value: currentMetrics?.eventsThisWeek ?? 0, icon: Calendar, color: "hsl(340 80% 60%)", bg: "hsla(340, 80%, 60%, 0.1)" },
+          { id: "RECOGNITIONS", label: t("metrics.kudosMonth"), value: currentMetrics?.recognitionsThisMonth ?? 0, icon: Award, color: "#f59e0b", bg: "rgba(245, 158, 11, 0.1)" },
+          { id: "DOCS", label: t("metrics.newDocs"), value: currentMetrics?.newDocsThisMonth ?? 0, icon: FileText, color: "hsl(var(--primary))", bg: "hsl(var(--primary)/0.1)" }
         ].map((stat, i) => (
           <div 
             key={i} 
@@ -159,11 +189,11 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
             {/* Header */}
             <div style={{ padding: "1.5rem", borderBottom: "1px solid hsl(var(--border)/0.5)", display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "hsl(var(--surface))" }}>
               <h2 style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0, display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                {activeModal === "ACTIVE" && <><Users color="#10b981" size={22} /> Empleados Activos Hoy</>}
-                {activeModal === "ABSENT" && <><UserX color="#ef4444" size={22} /> Empleados Ausentes Hoy</>}
-                {activeModal === "EVENTS" && <><Calendar color="hsl(340 80% 60%)" size={22} /> Eventos Próximos de la Semana</>}
-                {activeModal === "RECOGNITIONS" && <><Award color="#f59e0b" size={22} /> Reconocimientos del Mes</>}
-                {activeModal === "DOCS" && <><FileText color="hsl(var(--primary))" size={22} /> Documentos Recientes</>}
+                {activeModal === "ACTIVE" && <><Users color="#10b981" size={22} /> {t("metrics.modalActiveTitle")}</>}
+                {activeModal === "ABSENT" && <><UserX color="#ef4444" size={22} /> {t("metrics.modalAbsentTitle")}</>}
+                {activeModal === "EVENTS" && <><Calendar color="hsl(340 80% 60%)" size={22} /> {t("metrics.modalEventsTitle")}</>}
+                {activeModal === "RECOGNITIONS" && <><Award color="#f59e0b" size={22} /> {t("metrics.modalKudosTitle")}</>}
+                {activeModal === "DOCS" && <><FileText color="hsl(var(--primary))" size={22} /> {t("metrics.modalDocsTitle")}</>}
               </h2>
               <button onClick={() => setActiveModal(null)} className="btn btn-ghost" style={{ padding: "0.5rem", borderRadius: "50%", color: "hsl(var(--muted-foreground))" }}>
                 <X size={20} />
@@ -173,7 +203,9 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
             {/* Content */}
             <div style={{ padding: "1.5rem", overflowY: "auto", flex: 1, backgroundColor: "hsl(var(--background))" }}>
               {loading ? (
-                <div style={{ textAlign: "center", padding: "3rem", color: "hsl(var(--muted-foreground))", fontWeight: 600 }}>Cargando detalles...</div>
+                <div style={{ textAlign: "center", padding: "3rem", color: "hsl(var(--muted-foreground))", fontWeight: 600 }}>
+                  {t("metrics.loadingDetails") || (isEn ? "Loading details..." : "Cargando detalles...")}
+                </div>
               ) : (
                 <>
                   {/* ACTIVOS HOY */}
@@ -183,7 +215,7 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
                         <Search size={18} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "hsl(var(--muted-foreground))" }} />
                         <input 
                           type="text" 
-                          placeholder="Buscar por nombre, correo, cargo o departamento..." 
+                          placeholder={t("metrics.searchEmployees")} 
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
                           className="input"
@@ -192,7 +224,7 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                         {filteredActive.length > 0 ? filteredActive.map((u: any) => {
-                          const status = formatLastSeen(u.lastSeen)
+                          const status = formatLastSeen(u.lastSeen, isEn)
                           return (
                             <div key={u.id} style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "1rem", backgroundColor: "hsl(var(--surface))", borderRadius: "16px", border: "1px solid hsl(var(--border)/0.5)" }}>
                               <div style={{ position: "relative" }}>
@@ -228,7 +260,9 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
                             </div>
                           )
                         }) : (
-                          <div style={{ textAlign: "center", padding: "2rem", color: "hsl(var(--muted-foreground))" }}>No se encontraron empleados activos coincidentes.</div>
+                          <div style={{ textAlign: "center", padding: "2rem", color: "hsl(var(--muted-foreground))" }}>
+                            {t("metrics.noActiveFound") || (isEn ? "No matching active employees found." : "No se encontraron empleados activos coincidentes.")}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -238,7 +272,7 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
                   {activeModal === "ABSENT" && data && (
                     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                       {data.length > 0 ? data.map((req: any) => {
-                        const typeInfo = ABSENCE_TYPES[req.type] || { label: req.type, color: "#6b7280", icon: "⚪" };
+                        const typeInfo = getAbsenceTypeInfo(req.type);
                         return (
                           <div key={req.id} style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "1rem", backgroundColor: "hsl(var(--surface))", borderRadius: "16px", border: `1px solid ${typeInfo.color}30` }}>
                             {req.user.image ? (
@@ -254,7 +288,7 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
                                 {typeInfo.icon} {typeInfo.label}
                               </div>
                               <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", marginTop: "0.2rem" }}>
-                                {new Date(req.startDate).toLocaleDateString("es-ES")} - {new Date(req.endDate).toLocaleDateString("es-ES")}
+                                {new Date(req.startDate).toLocaleDateString(dateLocale)} - {new Date(req.endDate).toLocaleDateString(dateLocale)}
                               </div>
                             </div>
                           </div>
@@ -262,8 +296,12 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
                       }) : (
                         <div style={{ textAlign: "center", padding: "3rem" }}>
                           <UserX size={48} color="hsl(var(--muted-foreground)/0.3)" style={{ margin: "0 auto 1rem auto" }} />
-                          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "hsl(var(--foreground))" }}>No hay ausencias programadas hoy</h3>
-                          <p style={{ color: "hsl(var(--muted-foreground))" }}>Todo el equipo está disponible.</p>
+                          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "hsl(var(--foreground))" }}>
+                            {t("metrics.noAbsencesScheduled") || (isEn ? "No scheduled absences today" : "No hay ausencias programadas hoy")}
+                          </h3>
+                          <p style={{ color: "hsl(var(--muted-foreground))" }}>
+                            {t("metrics.allTeamAvailable") || (isEn ? "The whole team is present." : "Todo el equipo está disponible.")}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -275,25 +313,31 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
                       {data.length > 0 ? (
                         <>
                           <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                            {data.map((ev: any) => (
-                              <div key={ev.id} style={{ display: "flex", gap: "1rem", padding: "1rem", backgroundColor: "hsl(var(--surface))", borderRadius: "16px", border: "1px solid hsl(var(--border)/0.5)" }}>
-                                <div style={{ 
-                                  backgroundColor: "hsla(340, 80%, 60%, 0.1)", color: "hsl(340 80% 60%)", 
-                                  width: 60, height: 60, borderRadius: "12px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontWeight: 800 
-                                }}>
-                                  <span style={{ fontSize: "0.7rem", textTransform: "uppercase" }}>{new Date(ev.startDate).toLocaleDateString("es-ES", { month: "short" })}</span>
-                                  <span style={{ fontSize: "1.25rem" }}>{new Date(ev.startDate).getDate()}</span>
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                  <div style={{ fontWeight: 800, fontSize: "1.1rem" }}>{ev.title}</div>
-                                  <div style={{ fontSize: "0.85rem", color: "hsl(var(--muted-foreground))", display: "flex", gap: "0.5rem", marginTop: "0.2rem" }}>
-                                    <span>{new Date(ev.startDate).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</span>
-                                    {ev.location && <span>• {ev.location}</span>}
+                            {data.map((ev: any) => {
+                              const d = new Date(ev.startDate)
+                              const isUtcMidnight = ev.type === 'HOLIDAY' || (d.getUTCHours() === 0 && d.getUTCMinutes() === 0)
+                              const month = d.toLocaleDateString("es-ES", { month: "short", timeZone: isUtcMidnight ? "UTC" : undefined }).replace(".", "")
+                              const day = isUtcMidnight ? d.getUTCDate() : d.getDate()
+                              return (
+                                <div key={ev.id} style={{ display: "flex", gap: "1rem", padding: "1rem", backgroundColor: "hsl(var(--surface))", borderRadius: "16px", border: "1px solid hsl(var(--border)/0.5)" }}>
+                                  <div style={{ 
+                                    backgroundColor: "hsla(340, 80%, 60%, 0.1)", color: "hsl(340 80% 60%)", 
+                                    width: 60, height: 60, borderRadius: "12px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontWeight: 800 
+                                  }}>
+                                    <span style={{ fontSize: "0.7rem", textTransform: "uppercase" }}>{month}</span>
+                                    <span style={{ fontSize: "1.25rem" }}>{day}</span>
                                   </div>
-                                  {ev.description && <p style={{ fontSize: "0.85rem", marginTop: "0.5rem", color: "hsl(var(--foreground))" }}>{ev.description}</p>}
+                                  <div style={{ flex: 1 }}>
+                                    <div style={{ fontWeight: 800, fontSize: "1.1rem" }}>{ev.title}</div>
+                                    <div style={{ fontSize: "0.85rem", color: "hsl(var(--muted-foreground))", display: "flex", gap: "0.5rem", marginTop: "0.2rem" }}>
+                                      <span suppressHydrationWarning>{isUtcMidnight ? "Todo el día" : d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</span>
+                                      {ev.location && <span>• {ev.location}</span>}
+                                    </div>
+                                    {ev.description && <p style={{ fontSize: "0.85rem", marginTop: "0.5rem", color: "hsl(var(--foreground))" }}>{ev.description}</p>}
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              )
+                            })}
                           </div>
                           <button onClick={() => router.push("/calendar")} className="btn btn-primary" style={{ width: "100%", padding: "1rem", borderRadius: "16px", marginTop: "1rem" }}>
                             Ver Calendario Completo
@@ -363,13 +407,14 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
                     const allDocs = Array.isArray(data) ? data : (data.allDocs || [])
                     const hasNewDocs = newDocs.length > 0
                     const hasAnyDocs = allDocs.length > 0
+                    const dateLocale = locale === "en" ? "en-US" : "es-DO"
 
                     return (
                       <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
                         {hasNewDocs ? (
                           <div>
                             <div style={{ fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "hsl(var(--primary))", marginBottom: "0.75rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                              <FileText size={16} /> Nuevos este mes ({newDocs.length})
+                              <FileText size={16} /> {t("documents.modal.newThisMonth", { count: newDocs.length })}
                             </div>
                             <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                               {newDocs.map((doc: any) => (
@@ -381,13 +426,13 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
                                     <div style={{ minWidth: 0 }}>
                                       <div style={{ fontWeight: 700, fontSize: "0.95rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.title}</div>
                                       <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
-                                        {doc.category || "General"} • {new Date(doc.createdAt).toLocaleDateString("es-ES")}
+                                        {doc.category || t("documents.categories.general")} • {new Date(doc.createdAt).toLocaleDateString(dateLocale)}
                                       </div>
                                     </div>
                                   </div>
                                   {(doc.url || doc.fileUrl) && (
                                     <a href={doc.url || doc.fileUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: "0.4rem 0.85rem", borderRadius: "8px", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.35rem", flexShrink: 0 }}>
-                                      <Download size={14} /> Abrir
+                                      <Download size={14} /> {t("documents.card.open")}
                                     </a>
                                   )}
                                 </div>
@@ -397,7 +442,7 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
                         ) : (
                           <div style={{ textAlign: "center", padding: "1.25rem 1rem", backgroundColor: "hsl(var(--surface))", borderRadius: "16px", border: "1px dashed hsl(var(--border))" }}>
                             <p style={{ margin: 0, fontWeight: 600, color: "hsl(var(--muted-foreground))", fontSize: "0.9rem" }}>
-                              No se han subido nuevos documentos este mes.
+                              {t("documents.modal.noNewThisMonth")}
                             </p>
                           </div>
                         )}
@@ -405,7 +450,7 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
                         {hasAnyDocs ? (
                           <div>
                             <div style={{ fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "hsl(var(--muted-foreground))", marginBottom: "0.75rem", fontWeight: 800 }}>
-                              Documentos en Repositorio ({allDocs.length})
+                              {t("documents.modal.repositoryDocs", { count: allDocs.length })}
                             </div>
                             <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                               {allDocs.map((doc: any) => (
@@ -417,13 +462,13 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
                                     <div style={{ minWidth: 0 }}>
                                       <div style={{ fontWeight: 700, fontSize: "0.95rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.title}</div>
                                       <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
-                                        {doc.category || "General"} • {new Date(doc.createdAt).toLocaleDateString("es-ES")}
+                                        {doc.category || t("documents.categories.general")} • {new Date(doc.createdAt).toLocaleDateString(dateLocale)}
                                       </div>
                                     </div>
                                   </div>
                                   {(doc.url || doc.fileUrl) && (
                                     <a href={doc.url || doc.fileUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: "0.4rem 0.85rem", borderRadius: "8px", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.35rem", flexShrink: 0 }}>
-                                      <Download size={14} /> Abrir
+                                      <Download size={14} /> {t("documents.card.open")}
                                     </a>
                                   )}
                                 </div>
@@ -433,13 +478,13 @@ export function MetricsInteractiveCards({ metrics: initialMetrics }: { metrics: 
                         ) : (
                           <div style={{ textAlign: "center", padding: "2.5rem 1rem" }}>
                             <FileText size={48} color="hsl(var(--muted-foreground)/0.3)" style={{ margin: "0 auto 1rem auto" }} />
-                            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "hsl(var(--foreground))" }}>No hay documentos disponibles</h3>
-                            <p style={{ color: "hsl(var(--muted-foreground))", marginBottom: "1rem" }}>Aún no se han compartido archivos en el repositorio.</p>
+                            <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "hsl(var(--foreground))" }}>{t("documents.modal.noDocsAvailable")}</h3>
+                            <p style={{ color: "hsl(var(--muted-foreground))", marginBottom: "1rem" }}>{t("documents.filters.noDocsFound")}</p>
                           </div>
                         )}
 
                         <button onClick={() => router.push("/knowledge-base")} className="btn btn-primary" style={{ width: "100%", padding: "1rem", borderRadius: "16px", marginTop: "0.25rem" }}>
-                          Ir al Centro de Documentos
+                          {t("documents.modal.goToCenter")}
                         </button>
                       </div>
                     )

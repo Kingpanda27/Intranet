@@ -1,7 +1,7 @@
 "use client"
 // v3-modern - ultra animated redesign
 import { useState } from "react"
-import { Server, Save, Book, Play, MessageSquare, Loader2, Phone, Plus, Trash2, Globe, Settings2, ShieldCheck, HelpCircle, ChevronDown, Check, X, Code2 } from "lucide-react"
+import { Server, Save, Book, Play, MessageSquare, Loader2, Phone, Plus, Trash2, Globe, Settings2, ShieldCheck, HelpCircle, ChevronDown, Check, X, Code2, AlertCircle, Bot } from "lucide-react"
 import { createOllamaConfigWithFiles, updateOllamaConfigWithFiles, deleteOllamaConfig, testOllamaPrompt } from "@/app/actions/ollamaActions"
 
 export default function OllamaManager({ initialConfigs, documents, whatsappConfigs }: { initialConfigs: any[], documents: any[], whatsappConfigs: any[] }) {

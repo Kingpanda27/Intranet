@@ -51,6 +51,17 @@ export async function sendFriendRequest(receiverId: string) {
       await sendFriendRequestEmail(receiver.email, session.user.name || "Un colega")
     }
 
+    // Crear notificación interna en la barra de notificaciones
+    await prisma.notification.create({
+      data: {
+        userId: receiverId,
+        title: "Nueva solicitud de conexión",
+        message: `${session.user.name || "Un colega"} quiere conectar contigo en el Centro Social.`,
+        type: "SOCIAL",
+        link: "/social"
+      }
+    }).catch(err => console.error("Error creating social notification:", err))
+
     revalidatePath("/")
     revalidatePath("/social")
     return { success: true }
@@ -62,12 +73,16 @@ export async function sendFriendRequest(receiverId: string) {
 
 export async function acceptFriendRequest(friendshipId: string) {
   const session = await getServerSession(authOptions)
-  if (!session || !session.user) throw new Error("No autenticado")
+  if (!session || !session.user) return { error: "No autenticado" }
 
   try {
     const friendship = await prisma.friendship.findUnique({ where: { id: friendshipId } })
     console.log(`[SOCIAL] acceptFriendRequest: id=${friendshipId}`, friendship)
     if (!friendship) return { error: "Solicitud no encontrada" }
+
+    if (friendship.status === "ACCEPTED") {
+      return { success: true }
+    }
 
     // Verificar que los usuarios de la amistad todavía existen
     const [u1, u2] = await Promise.all([
@@ -77,14 +92,26 @@ export async function acceptFriendRequest(friendshipId: string) {
 
     if (!u1 || !u2) return { error: "Uno de los usuarios de esta solicitud ya no existe." }
 
-    if (friendship.receiverId !== (session.user as any).id) {
-      return { error: "No autorizado" }
+    const currentUserId = (session.user as any).id
+    if (friendship.receiverId !== currentUserId) {
+      return { error: "No autorizado para aceptar esta solicitud" }
     }
 
     await prisma.friendship.update({
       where: { id: friendshipId },
       data: { status: "ACCEPTED" }
     })
+
+    // Notificar al emisor original que su solicitud fue aceptada
+    await prisma.notification.create({
+      data: {
+        userId: friendship.senderId,
+        title: "Solicitud de conexión aceptada",
+        message: `${session.user.name || "Tu colega"} aceptó tu solicitud de conexión. ¡Ahora están conectados!`,
+        type: "SOCIAL",
+        link: "/social"
+      }
+    }).catch(err => console.error("Error creating accept notification:", err))
 
     // Invalidate cache
     try {
@@ -98,9 +125,9 @@ export async function acceptFriendRequest(friendshipId: string) {
     revalidatePath("/social")
     revalidatePath("/dashboard")
     return { success: true }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Accept error:", error)
-    return { error: "Error al aceptar solicitud" }
+    return { error: error?.message || "Error al aceptar solicitud" }
   }
 }
 
@@ -163,6 +190,7 @@ export async function getPeople(query: string) {
     where: {
       AND: [
         { id: { not: userId } },
+        { isActive: true },
         {
           OR: [
             { name: { contains: query } },
@@ -217,8 +245,8 @@ export async function getFriends() {
   const friendships = await prisma.friendship.findMany({
     where: {
       OR: [
-        { senderId: userId, status: "ACCEPTED" },
-        { receiverId: userId, status: "ACCEPTED" }
+        { senderId: userId, status: { in: ["ACCEPTED", "ACCEP ED"] } },
+        { receiverId: userId, status: { in: ["ACCEPTED", "ACCEP ED"] } }
       ]
     },
     include: {
@@ -267,11 +295,12 @@ export async function getSocialStatsDetail() {
 
   const [allUsers, friendships, pendingRequests] = await Promise.all([
     prisma.user.findMany({
+      where: { isActive: true },
       select: { id: true, name: true, email: true, image: true, role: true }
     }),
     prisma.friendship.findMany({
       where: {
-        status: "ACCEPTED",
+        status: { in: ["ACCEPTED", "ACCEP ED"] },
         OR: [{ senderId: userId }, { receiverId: userId }]
       },
       include: {

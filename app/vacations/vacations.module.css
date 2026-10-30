@@ -1,0 +1,214 @@
+/* ==========================================================================
+   Vacations & Leave Management Responsive Styles
+   Next.js 15 (App Router) + React 19 + HSL Token System
+   ========================================================================== */
+
+/* ── 1. Fluid & Ergonomic Container ── */
+.vacationsContainer {
+  width: 100%;
+  max-width: 1560px;
+  margin-inline: auto;
+  padding-inline: clamp(1rem, 3vw, 2.5rem);
+  padding-top: clamp(1.5rem, 3vw, 2.5rem);
+  padding-bottom: 4rem;
+  overflow-x: clip;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* ── Header Section ── */
+.header {
+  margin-bottom: clamp(1.5rem, 2.5vw, 2.5rem);
+  min-width: 0;
+}
+
+.title {
+  font-size: clamp(1.5rem, 2.75vw, 2.25rem);
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  letter-spacing: -0.025em;
+  color: hsl(var(--foreground));
+  line-height: 1.2;
+}
+
+.subtitle {
+  color: hsl(var(--muted-foreground));
+  font-size: clamp(0.85rem, 1.25vw, 1rem);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ── Fila 1: Balance y Métricas Rápidas ── */
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: clamp(1rem, 1.5vw, 1.5rem);
+  margin-bottom: clamp(1.75rem, 2.5vw, 2.5rem);
+  width: 100%;
+  min-width: 0;
+}
+
+.metricCard {
+  padding: 1.25rem;
+  border-radius: 1rem;
+  border: 1px solid hsl(var(--border));
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+  background-color: hsl(var(--surface) / 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), 
+              border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+}
+
+.metricCard:hover {
+  transform: translateY(-2px);
+  border-color: hsl(var(--primary) / 0.4);
+  box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.1);
+}
+
+.metricLabel {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metricValue {
+  font-size: clamp(1.85rem, 2.5vw, 2.25rem);
+  font-weight: 800;
+  margin-top: 0.5rem;
+  line-height: 1.1;
+}
+
+/* ── Fila 2 & 3: Distribución Principal Responsiva por Breakpoints ── */
+.layoutGrid {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* Breakpoint A: Monitores Amplios (≥1560px) */
+@media (min-width: 1560px) {
+  .layoutGrid {
+    grid-template-areas:
+      "form sidebar"
+      "history history";
+    grid-template-columns: minmax(0, 1fr) 380px;
+    gap: 2rem;
+    align-items: start;
+    margin-bottom: 2.5rem;
+  }
+}
+
+/* Breakpoint B: Laptops y Pantallas Medianas (1024px – 1559px) */
+@media (min-width: 1024px) and (max-width: 1559px) {
+  .layoutGrid {
+    grid-template-areas:
+      "form sidebar"
+      "history history";
+    grid-template-columns: minmax(0, 1fr) minmax(290px, 340px);
+    gap: 1.5rem;
+    align-items: start;
+    margin-bottom: 2rem;
+  }
+}
+
+/* Breakpoint C: Pantallas Compactas y Monitores Verticales (≤1023px) */
+@media (max-width: 1023px) {
+  .layoutGrid {
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+    margin-bottom: 2rem;
+  }
+
+  /* Jerarquía de visualización estricta:
+     1. Balance/Métricas rápidas (arriba en .metricsGrid)
+     2. Formulario y selector de tipos (.formArea)
+     3. Previsualizaciones/Historial (.historyArea)
+     4. Widgets complementarios (.sidebarArea)
+  */
+  .formArea {
+    order: 1;
+    width: 100%;
+  }
+
+  .historyArea {
+    order: 2;
+    width: 100%;
+  }
+
+  .sidebarArea {
+    order: 3;
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)) !important;
+    gap: 1.25rem !important;
+  }
+}
+
+/* ── Áreas Semánticas del Grid ── */
+.formArea {
+  grid-area: form;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.sidebarArea {
+  grid-area: sidebar;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.historyArea {
+  grid-area: history;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ── Tarjetas de Widgets del Sidebar ── */
+.sidebarCard {
+  padding: 1.5rem;
+  border-radius: 1.25rem;
+  border: 1px solid hsl(var(--border));
+  background-color: hsl(var(--surface) / 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  min-width: 0;
+  box-sizing: border-box;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.sidebarCard:hover {
+  border-color: hsl(var(--primary) / 0.3);
+}
+
+.policiesCard {
+  padding: 1.5rem;
+  border-radius: 1.25rem;
+  border: 1px solid hsl(var(--primary) / 0.2);
+  background-color: hsl(var(--primary) / 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  min-width: 0;
+  box-sizing: border-box;
+}

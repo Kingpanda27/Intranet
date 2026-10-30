@@ -1,4 +1,7 @@
+"use client"
+
 import React from 'react'
+import { useTranslation } from "@/lib/i18n/LanguageContext"
 
 export type UserStatus = {
   status: string
@@ -16,12 +19,31 @@ type UserStatusBadgeProps = {
 }
 
 export function UserStatusBadge({ status, showText = true, className = "", style = {} }: UserStatusBadgeProps) {
+  const { t, locale } = useTranslation()
   const isAvailable = status.status === "AVAILABLE"
   
-  let tooltipText = status.label
+  const getStatusLabel = () => {
+    switch (status.status) {
+      case "AVAILABLE": return t("userStatus.available")
+      case "OFFLINE": return t("userStatus.offline")
+      case "VACATION": return t("userStatus.vacation")
+      case "SICK_LEAVE": return t("userStatus.sickLeave")
+      case "MEDICAL_LEAVE": return t("userStatus.medicalLeave")
+      case "MATERNITY_LEAVE": return t("userStatus.maternityLeave")
+      case "PATERNITY_LEAVE": return t("userStatus.paternityLeave")
+      case "BEREAVEMENT_LEAVE": return t("userStatus.bereavementLeave")
+      case "SPECIAL_PERMISSION": return t("userStatus.specialPermission")
+      default: return status.label || t("userStatus.offline")
+    }
+  }
+
+  const translatedLabel = getStatusLabel()
+
+  let tooltipText = translatedLabel
   if (!isAvailable && status.returnDate) {
-    const returnDateStr = new Date(status.returnDate).toLocaleDateString("es-ES", { day: 'numeric', month: 'short' })
-    tooltipText += ` (Regreso: ${returnDateStr})`
+    const localeCode = locale === "en" ? "en-US" : "es-ES"
+    const returnDateStr = new Date(status.returnDate).toLocaleDateString(localeCode, { day: 'numeric', month: 'short' })
+    tooltipText += ` (${t("userStatus.returns")}: ${returnDateStr})`
   }
 
   return (
@@ -53,7 +75,7 @@ export function UserStatusBadge({ status, showText = true, className = "", style
       />
       {showText && (
         <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "hsl(var(--foreground))", whiteSpace: "nowrap" }}>
-          {isAvailable ? "Disponible" : status.label}
+          {translatedLabel}
         </span>
       )}
     </div>

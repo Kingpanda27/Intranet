@@ -4,6 +4,7 @@ import { signIn } from "next-auth/react"
 import { AlertCircle, Lock, Mail, Eye, EyeOff } from "lucide-react"
 import { useState } from "react"
 import { useTheme } from "@/app/Providers"
+import { APP_VERSION } from "@/lib/version"
 
 export function LoginForm() {
   const [email, setEmail] = useState("")
@@ -252,7 +253,10 @@ export function LoginForm() {
 
         <div style={{ marginTop: "2rem", fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", textAlign: "center", lineHeight: "1.5" }}>
           Desarrollado por IT Telecom Support Team<br/>
-          Soporte: <a href="mailto:support@tnoutsourcing.com" style={{ color: "hsl(var(--primary))", textDecoration: "none", fontWeight: 600 }}>support@tnoutsourcing.com</a>
+          Soporte: <a href="mailto:support@tnoutsourcing.com" style={{ color: "hsl(var(--primary))", textDecoration: "none", fontWeight: 600 }}>support@tnoutsourcing.com</a><br/>
+          <span style={{ display: "inline-block", marginTop: "0.35rem", fontWeight: 600, color: "hsl(var(--muted-foreground))" }}>
+            Versión {APP_VERSION}
+          </span>
         </div>
       </div>
     </div>

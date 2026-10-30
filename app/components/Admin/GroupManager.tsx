@@ -8,7 +8,8 @@ import {
   deleteGroup, 
   addMembersToGroup, 
   removeMembersFromGroup,
-  setGroupLeaders
+  setGroupLeaders,
+  assignUserToGroups
 } from "@/app/actions/groupActions"
 import { 
   Users, 
@@ -43,6 +44,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useTranslation } from "@/lib/i18n/LanguageContext"
 
 const ROLE_COLORS: Record<string, string> = {
   AGENT: "hsl(220 10% 50%)",
@@ -127,13 +129,16 @@ function ConfirmModal({
   description,
   members = [],
   isDestructive = true,
-  confirmText = "Confirmar",
-  cancelText = "Cancelar",
+  confirmText,
+  cancelText,
   isPending = false,
   errorMessage = null,
   onConfirm,
   onCancel
 }: ConfirmModalProps) {
+  const { t } = useTranslation()
+  const resolvedConfirmText = confirmText || t("groups.confirm.confirmBtn")
+  const resolvedCancelText = cancelText || t("groups.confirm.cancelBtn")
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     setMounted(true)
@@ -291,7 +296,7 @@ function ConfirmModal({
               color: "#94a3b8"
             }}
           >
-            {cancelText}
+            {resolvedCancelText}
           </button>
           <button 
             type="button"
@@ -319,12 +324,12 @@ function ConfirmModal({
             {isPending ? (
               <>
                 <span style={{ animation: "spin 1s linear infinite" }}>⚙️</span>
-                <span>Procesando...</span>
+                <span>{t("groups.confirm.processing")}</span>
               </>
             ) : (
               <>
                 {isDestructive ? <Trash2 size={16} /> : <Check size={16} />}
-                <span>{confirmText}</span>
+                <span>{resolvedConfirmText}</span>
               </>
             )}
           </button>
@@ -346,6 +351,7 @@ interface AddMembersModalProps {
 }
 
 function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMembersModalProps) {
+  const { t } = useTranslation()
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     setMounted(true)
@@ -364,13 +370,15 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
   // Available users (not already a member in this group)
   const availableUsers = useMemo(() => {
     return allUsers.filter(u => {
-      // Must not be already a member or supervisor of this exact group
+      // Must not be already a member of this exact group
       if (currentMemberIds.has(u.id)) return false
-      if (currentSupervisorIds.has(u.id)) return false
+
+      const userGroups = u.projects || (u.project ? [u.project] : [])
+      const hasAnyGroup = userGroups.length > 0 || Boolean(u.projectId)
 
       // Filter tabs
-      if (filterMode === "unassigned" && u.projectId) return false
-      if (filterMode === "otherGroup" && (!u.projectId || u.projectId === group.id)) return false
+      if (filterMode === "unassigned" && hasAnyGroup) return false
+      if (filterMode === "otherGroup" && !hasAnyGroup) return false
 
       // Search match
       if (search.trim()) {
@@ -383,7 +391,7 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
       }
       return true
     })
-  }, [allUsers, currentMemberIds, currentSupervisorIds, filterMode, search, group.id])
+  }, [allUsers, currentMemberIds, filterMode, search])
 
   // Toggle single user
   const toggleUser = (userId: string) => {
@@ -440,7 +448,7 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
         if (onMembersAdded) onMembersAdded(group.id, userIds)
         setFeedback({ 
           type: "success", 
-          message: `¡Se añadieron ${userIds.length} integrante(s) exitosamente a ${group.name}!` 
+          message: t("groups.addModal.success", { count: userIds.length, group: group.name }) 
         })
         setTimeout(() => {
           onClose()
@@ -448,7 +456,7 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
       } else {
         setFeedback({ 
           type: "error", 
-          message: errorMsg || "Error al agregar los integrantes." 
+          message: errorMsg || t("groups.addModal.error") 
         })
       }
     })
@@ -523,10 +531,10 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#ffffff", letterSpacing: "-0.01em" }}>
-                Sumar integrantes a {group.name}
+                {t("groups.addModal.title", { name: group.name })}
               </h3>
               <p style={{ margin: "0.2rem 0 0", fontSize: "0.8rem", color: "#94a3b8" }}>
-                Selecciona uno o más colaboradores para integrarlos de inmediato
+                {t("groups.addModal.subtitle")}
               </p>
             </div>
           </div>
@@ -555,7 +563,7 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
             />
             <input 
               className="input" 
-              placeholder="Buscar por nombre, correo, cargo o rol..." 
+              placeholder={t("groups.addModal.searchPlaceholder")} 
               value={search} 
               onChange={e => setSearch(e.target.value)}
               autoFocus
@@ -599,7 +607,7 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
                   transition: "all 0.15s"
                 }}
               >
-                Todos ({allUsers.length - currentMemberIds.size})
+                {t("groups.addModal.tabAll", { count: allUsers.length - currentMemberIds.size })}
               </button>
               <button
                 type="button"
@@ -616,7 +624,7 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
                   transition: "all 0.15s"
                 }}
               >
-                Sin grupo asignado
+                {t("groups.addModal.tabUnassigned")}
               </button>
               <button
                 type="button"
@@ -633,7 +641,7 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
                   transition: "all 0.15s"
                 }}
               >
-                En otro grupo
+                {t("groups.addModal.tabOtherGroup")}
               </button>
             </div>
 
@@ -656,11 +664,11 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
               >
                 {selectedUserIds.size === availableUsers.length && availableUsers.length > 0 ? (
                   <>
-                    <CheckSquare size={14} /> Deseleccionar visibles
+                    <CheckSquare size={14} /> {t("groups.addModal.deselectVisible")}
                   </>
                 ) : (
                   <>
-                    <Square size={14} /> Seleccionar todos ({availableUsers.length})
+                    <Square size={14} /> {t("groups.addModal.selectAll", { count: availableUsers.length })}
                   </>
                 )}
               </button>
@@ -705,10 +713,10 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
             <div style={{ textAlign: "center", padding: "4rem 1rem", color: "#94a3b8" }}>
               <Users size={44} style={{ opacity: 0.25, margin: "0 auto 1rem", display: "block" }} />
               <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "#f8fafc" }}>
-                No se encontraron colaboradores disponibles
+                {t("groups.addModal.noAvailable")}
               </div>
               <p style={{ fontSize: "0.8rem", color: "#64748b", margin: "0.35rem 0 0" }}>
-                {search ? `Ningún usuario coincide con "${search}".` : "Todos los colaboradores ya están asignados a este grupo."}
+                {search ? t("groups.addModal.noMatchQuery", { search }) : t("groups.addModal.allAlreadyAssigned")}
               </p>
             </div>
           ) : (
@@ -786,15 +794,23 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
                         </span>
                       )}
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginTop: "0.2rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginTop: "0.2rem", flexWrap: "wrap" }}>
                       <span style={{ fontSize: "0.75rem", color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {u.email}
                       </span>
-                      {u.project?.name && (
+                      {u.projects && u.projects.length > 0 ? (
+                        <div style={{ display: "flex", gap: "0.25rem", flexWrap: "wrap" }}>
+                          {u.projects.map((p: any) => (
+                            <span key={p.id} style={{ fontSize: "0.68rem", color: p.color || "#38bdf8", backgroundColor: "rgba(56, 189, 248, 0.12)", padding: "0.05rem 0.4rem", borderRadius: "0.3rem" }}>
+                              {p.icon || "📍"} {p.name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : u.project?.name ? (
                         <span style={{ fontSize: "0.7rem", color: "#f59e0b", backgroundColor: "rgba(245, 158, 11, 0.12)", padding: "0.1rem 0.4rem", borderRadius: "0.3rem", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
                           📍 {u.project.name}
                         </span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -818,8 +834,8 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
           <div>
             <span style={{ fontSize: "0.85rem", fontWeight: 700, color: selectedUserIds.size > 0 ? "hsl(var(--primary))" : "#94a3b8" }}>
               {selectedUserIds.size === 0 
-                ? "Ningún colaborador seleccionado" 
-                : `${selectedUserIds.size} colaborador(es) seleccionado(s)`}
+                ? t("groups.addModal.noneSelected") 
+                : t("groups.addModal.selectedCount", { count: selectedUserIds.size })}
             </span>
           </div>
 
@@ -831,7 +847,7 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
               className="btn btn-surface"
               style={{ padding: "0.65rem 1.25rem", borderRadius: "0.75rem", fontSize: "0.85rem", fontWeight: 700 }}
             >
-              Cancelar
+              {t("groups.addModal.cancelBtn")}
             </button>
             <button
               type="button"
@@ -854,16 +870,458 @@ function AddMembersModal({ group, allUsers, onClose, onMembersAdded }: AddMember
               {isPending ? (
                 <>
                   <span style={{ animation: "spin 1s linear infinite" }}>⚙️</span>
-                  <span>Sumando...</span>
+                  <span>{t("groups.addModal.adding")}</span>
                 </>
               ) : (
                 <>
                   <UserPlus size={16} />
-                  <span>Añadir {selectedUserIds.size > 0 ? `(${selectedUserIds.size})` : ""} al grupo</span>
+                  <span>{t("groups.addModal.addBtn", { count: selectedUserIds.size > 0 ? `(${selectedUserIds.size})` : "" })}</span>
                 </>
               )}
             </button>
           </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+// =========================================================================
+// MODAL ASIGNAR MÚLTIPLES GRUPOS A UN COLABORADOR
+// =========================================================================
+interface AssignMultiGroupModalProps {
+  allUsers: any[]
+  groups: any[]
+  onClose: () => void
+  onUserGroupsUpdated?: (userId: string, updatedGroupIds: string[]) => void
+}
+
+function AssignMultiGroupModal({ allUsers, groups, onClose, onUserGroupsUpdated }: AssignMultiGroupModalProps) {
+  const { t } = useTranslation()
+  const [mounted, setMounted] = useState(false)
+  const [selectedUserId, setSelectedUserId] = useState<string>("")
+  const [userSearch, setUserSearch] = useState("")
+  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set())
+  const [isPending, startTransition] = useTransition()
+  const [feedback, setFeedback] = useState<{ type: "success" | "error", message: string } | null>(null)
+
+  useEffect(() => {
+    setMounted(true)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !isPending) onClose()
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [isPending, onClose])
+
+  const selectedUser = useMemo(() => {
+    return allUsers.find(u => u.id === selectedUserId)
+  }, [allUsers, selectedUserId])
+
+  const handleSelectUser = (user: any) => {
+    setSelectedUserId(user.id)
+    setFeedback(null)
+    const gIds = new Set<string>()
+    if (user.projects && Array.isArray(user.projects)) {
+      user.projects.forEach((p: any) => gIds.add(p.id))
+    }
+    if (user.projectId) {
+      gIds.add(user.projectId)
+    }
+    groups.forEach(g => {
+      if ((g.members || []).some((m: any) => m.id === user.id)) {
+        gIds.add(g.id)
+      }
+    })
+    setSelectedGroupIds(gIds)
+  }
+
+  const toggleGroup = (groupId: string) => {
+    setSelectedGroupIds(prev => {
+      const next = new Set(prev)
+      if (next.has(groupId)) next.delete(groupId)
+      else next.add(groupId)
+      return next
+    })
+  }
+
+  const handleSave = () => {
+    if (!selectedUserId) return
+    const groupIds = Array.from(selectedGroupIds)
+    startTransition(async () => {
+      const res = await assignUserToGroups(selectedUserId, groupIds)
+      if (res && res.success) {
+        setFeedback({ 
+          type: "success", 
+          message: t("groups.multiGroup.saveSuccess", { name: selectedUser?.name || "Colaborador", count: groupIds.length }) 
+        })
+        if (onUserGroupsUpdated) {
+          onUserGroupsUpdated(selectedUserId, groupIds)
+        }
+        setTimeout(() => {
+          onClose()
+        }, 1200)
+      } else {
+        setFeedback({ type: "error", message: res?.error || t("groups.multiGroup.saveError") })
+      }
+    })
+  }
+
+  const filteredUsers = useMemo(() => {
+    if (!userSearch.trim()) return allUsers.slice(0, 20)
+    const q = userSearch.toLowerCase().trim()
+    return allUsers.filter(u => 
+      u.name?.toLowerCase().includes(q) || 
+      u.email?.toLowerCase().includes(q) || 
+      u.position?.toLowerCase().includes(q) ||
+      u.role?.toLowerCase().includes(q)
+    ).slice(0, 30)
+  }, [allUsers, userSearch])
+
+  if (!mounted) return null
+
+  return createPortal(
+    <div 
+      style={{ 
+        position: "fixed", 
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: "100vw",
+        height: "100vh",
+        backgroundColor: "rgba(0, 0, 0, 0.78)", 
+        backdropFilter: "blur(14px)",
+        WebkitBackdropFilter: "blur(14px)",
+        display: "flex", 
+        alignItems: "center", 
+        justifyContent: "center", 
+        zIndex: 9999999,
+        padding: "1rem",
+        animation: "fadeIn 0.2s ease-out"
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isPending) onClose()
+      }}
+    >
+      <div 
+        style={{ 
+          width: "min(740px, 96vw)", 
+          height: "min(740px, 92vh)", 
+          display: "flex", 
+          flexDirection: "column", 
+          backgroundColor: "#0b1329",
+          border: "1px solid hsl(var(--primary) / 0.4)", 
+          borderRadius: "1.5rem",
+          boxShadow: "0 30px 70px -15px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.08)",
+          overflow: "hidden",
+          animation: "scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)"
+        }}
+      >
+        {/* Header */}
+        <div 
+          style={{ 
+            padding: "1.25rem 1.75rem", 
+            borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+            background: "linear-gradient(90deg, rgba(59, 130, 246, 0.12), transparent)",
+            display: "flex", 
+            justifyContent: "space-between", 
+            alignItems: "center" 
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.875rem" }}>
+            <div 
+              style={{ 
+                width: 44, 
+                height: 44, 
+                borderRadius: "0.875rem", 
+                backgroundColor: "hsl(var(--primary) / 0.2)",
+                border: "1px solid hsl(var(--primary) / 0.35)",
+                display: "flex", 
+                alignItems: "center", 
+                justifyContent: "center", 
+                color: "hsl(var(--primary))" 
+              }}
+            >
+              <Layers size={22} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: "1.2rem", fontWeight: 800, color: "#f8fafc", margin: 0, letterSpacing: "-0.01em" }}>
+                {t("groups.multiGroup.title")}
+              </h2>
+              <p style={{ fontSize: "0.78rem", color: "#94a3b8", margin: "0.2rem 0 0" }}>
+                {t("groups.multiGroup.subtitle")}
+              </p>
+            </div>
+          </div>
+          <button 
+            type="button"
+            onClick={onClose}
+            disabled={isPending}
+            style={{ 
+              width: 34, 
+              height: 34, 
+              borderRadius: "50%", 
+              backgroundColor: "rgba(255, 255, 255, 0.05)", 
+              border: "1px solid rgba(255, 255, 255, 0.08)", 
+              color: "#94a3b8", 
+              cursor: "pointer", 
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "center",
+              transition: "all 0.2s"
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Feedback message */}
+        {feedback && (
+          <div 
+            style={{
+              margin: "1rem 1.75rem 0",
+              padding: "0.75rem 1rem",
+              borderRadius: "0.75rem",
+              backgroundColor: feedback.type === "success" ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)",
+              border: `1px solid ${feedback.type === "success" ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`,
+              color: feedback.type === "success" ? "#10b981" : "#ef4444",
+              fontSize: "0.85rem",
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem"
+            }}
+          >
+            {feedback.type === "success" ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+            {feedback.message}
+          </div>
+        )}
+
+        {/* Content Body */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "1.25rem 1.75rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+          {/* User Selection Box */}
+          <div style={{ backgroundColor: "rgba(15, 23, 42, 0.6)", borderRadius: "1rem", padding: "1rem", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+            <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>
+              1. {t("groups.multiGroup.selectUserPrompt")}
+            </label>
+            <div style={{ position: "relative", marginBottom: "0.75rem" }}>
+              <Search size={15} style={{ position: "absolute", left: "0.85rem", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+              <input
+                className="input"
+                placeholder={t("groups.multiGroup.searchUserPlaceholder")}
+                value={userSearch}
+                onChange={e => setUserSearch(e.target.value)}
+                style={{
+                  width: "100%",
+                  paddingLeft: "2.4rem",
+                  fontSize: "0.85rem",
+                  borderRadius: "0.75rem",
+                  backgroundColor: "rgba(10, 17, 38, 0.8)",
+                  border: "1px solid rgba(255, 255, 255, 0.12)"
+                }}
+              />
+            </div>
+
+            {/* User chips or selected user banner */}
+            {selectedUser ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1rem", borderRadius: "0.75rem", backgroundColor: "hsl(var(--primary) / 0.12)", border: "1.5px solid hsl(var(--primary))" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <Avatar user={selectedUser} size={36} />
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: "0.92rem", color: "#ffffff" }}>{selectedUser.name}</div>
+                    <div style={{ fontSize: "0.72rem", color: "#94a3b8", display: "flex", gap: "0.4rem", alignItems: "center", marginTop: "0.1rem" }}>
+                      <span>{selectedUser.email}</span>
+                      <span style={{ padding: "0.05rem 0.4rem", borderRadius: "9999px", backgroundColor: "hsl(var(--primary) / 0.2)", color: "hsl(var(--primary))", fontWeight: 700 }}>
+                        {selectedUser.role}
+                      </span>
+                      {selectedUser.position && <span>• {selectedUser.position}</span>}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setSelectedUserId(""); setSelectedGroupIds(new Set()); }}
+                  style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "0.75rem", textDecoration: "underline" }}
+                >
+                  Cambiar
+                </button>
+              </div>
+            ) : (
+              <div style={{ maxHeight: "150px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                {filteredUsers.map(u => (
+                  <div
+                    key={u.id}
+                    onClick={() => handleSelectUser(u)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "0.45rem 0.75rem",
+                      borderRadius: "0.6rem",
+                      backgroundColor: "rgba(255, 255, 255, 0.03)",
+                      border: "1px solid rgba(255, 255, 255, 0.06)",
+                      cursor: "pointer",
+                      transition: "background 0.15s"
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.08)"}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.03)"}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                      <Avatar user={u} size={28} />
+                      <div>
+                        <span style={{ fontWeight: 700, fontSize: "0.82rem", color: "#ffffff" }}>{u.name}</span>
+                        <span style={{ fontSize: "0.7rem", color: "#94a3b8", marginLeft: "0.5rem" }}>{u.position || u.role}</span>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: "0.72rem", color: "hsl(var(--primary))", fontWeight: 700 }}>
+                      Seleccionar →
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Group Checklist (Available when a user is selected) */}
+          {selectedUser && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    2. {t("groups.multiGroup.selectGroupsTitle")}
+                  </label>
+                  <span style={{ fontSize: "0.74rem", color: "#64748b" }}>
+                    {t("groups.multiGroup.selectGroupsHelp")}
+                  </span>
+                </div>
+                <span style={{ fontSize: "0.75rem", fontWeight: 800, color: selectedGroupIds.size > 0 ? "#10b981" : "#f59e0b" }}>
+                  {t("groups.multiGroup.assignedToGroups", { count: selectedGroupIds.size })}
+                </span>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.65rem", maxHeight: "300px", overflowY: "auto", paddingRight: "4px" }}>
+                {groups.map(g => {
+                  const isChecked = selectedGroupIds.has(g.id)
+                  const isSupervisor = (g.supervisors || []).some((s: any) => s.id === selectedUser.id)
+                  const isSubLeader = (g.subLeaders || []).some((sl: any) => sl.id === selectedUser.id)
+
+                  return (
+                    <div
+                      key={g.id}
+                      onClick={() => toggleGroup(g.id)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.75rem",
+                        padding: "0.75rem 0.85rem",
+                        borderRadius: "0.85rem",
+                        backgroundColor: isChecked ? `${g.color || "#3b82f6"}18` : "rgba(15, 23, 42, 0.5)",
+                        border: isChecked ? `1.5px solid ${g.color || "#3b82f6"}` : "1px solid rgba(255, 255, 255, 0.08)",
+                        cursor: "pointer",
+                        transition: "all 0.15s"
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: "5px",
+                          border: isChecked ? "none" : "1.5px solid rgba(255, 255, 255, 0.3)",
+                          backgroundColor: isChecked ? (g.color || "hsl(var(--primary))") : "transparent",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "#ffffff",
+                          flexShrink: 0
+                        }}
+                      >
+                        {isChecked && <Check size={13} strokeWidth={3} />}
+                      </div>
+
+                      <div style={{ fontSize: "1.2rem", flexShrink: 0 }}>
+                        {g.icon || "🏢"}
+                      </div>
+
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {g.name}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", marginTop: "0.15rem", flexWrap: "wrap" }}>
+                          {isSupervisor && (
+                            <span style={{ fontSize: "0.62rem", color: "#f59e0b", backgroundColor: "rgba(245, 158, 11, 0.15)", padding: "0.05rem 0.35rem", borderRadius: "0.25rem", fontWeight: 700 }}>
+                              👑 {t("groups.multiGroup.roleSupervisor")}
+                            </span>
+                          )}
+                          {isSubLeader && (
+                            <span style={{ fontSize: "0.62rem", color: "#818cf8", backgroundColor: "rgba(129, 140, 248, 0.15)", padding: "0.05rem 0.35rem", borderRadius: "0.25rem", fontWeight: 700 }}>
+                              🛡️ {t("groups.multiGroup.roleSubLeader")}
+                            </span>
+                          )}
+                          <span style={{ fontSize: "0.68rem", color: "#94a3b8" }}>
+                            {(g.members || []).length} miembros
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div 
+          style={{ 
+            padding: "1rem 1.75rem", 
+            borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+            backgroundColor: "rgba(10, 17, 38, 0.95)",
+            display: "flex", 
+            justifyContent: "space-between", 
+            alignItems: "center" 
+          }}
+        >
+          <button 
+            type="button"
+            onClick={onClose}
+            disabled={isPending}
+            className="btn btn-surface"
+            style={{ padding: "0.65rem 1.25rem", borderRadius: "0.75rem", fontWeight: 700, fontSize: "0.85rem" }}
+          >
+            {t("common.cancel") || "Cancelar"}
+          </button>
+
+          <button 
+            type="button"
+            onClick={handleSave}
+            disabled={isPending || !selectedUserId}
+            className="btn btn-primary"
+            style={{ 
+              padding: "0.65rem 1.5rem", 
+              borderRadius: "0.75rem", 
+              fontWeight: 800, 
+              fontSize: "0.88rem",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              cursor: (isPending || !selectedUserId) ? "not-allowed" : "pointer",
+              opacity: (isPending || !selectedUserId) ? 0.6 : 1
+            }}
+          >
+            {isPending ? (
+              <>
+                <span style={{ animation: "spin 1s linear infinite" }}>⚙️</span>
+                <span>Guardando...</span>
+              </>
+            ) : (
+              <>
+                <Check size={16} />
+                <span>{t("groups.multiGroup.saveBtn", { count: selectedGroupIds.size })}</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>,
@@ -882,6 +1340,7 @@ interface ManageLeadersModalProps {
 }
 
 function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: ManageLeadersModalProps) {
+  const { t } = useTranslation()
   const [mounted, setMounted] = useState(false)
   const [search, setSearch] = useState("")
   const [filterMode, setFilterMode] = useState<"leadership" | "group_members" | "all">("leadership")
@@ -1077,7 +1536,7 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
         onLeadersUpdated?.(group.id, finalSupervisors, finalSubLeaders)
         onClose()
       } else {
-        setErrorMessage(errorMsg || "No fue posible actualizar los líderes del grupo.")
+        setErrorMessage(errorMsg || t("groups.leadersModal.saveError"))
       }
     })
   }
@@ -1155,11 +1614,11 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#ffffff", letterSpacing: "-0.01em", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <span>Líderes de {group.name}</span>
+                <span>{t("groups.leadersModal.title", { name: group.name })}</span>
                 {group.icon && <span style={{ fontSize: "1.1rem" }}>{group.icon}</span>}
               </h3>
               <p style={{ margin: "0.2rem 0 0", fontSize: "0.8rem", color: "#94a3b8" }}>
-                Asigna supervisores y sub-líderes responsables de la gestión y permisos del equipo
+                {t("groups.leadersModal.subtitle")}
               </p>
             </div>
           </div>
@@ -1204,12 +1663,12 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#f59e0b", textTransform: "uppercase", letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                <Crown size={13} /> Líderes Principales ({selectedSupervisors.length})
+                <Crown size={13} /> {t("groups.leadersModal.primaryLeaders", { count: selectedSupervisors.length })}
               </span>
             </div>
             {selectedSupervisors.length === 0 ? (
               <span style={{ fontSize: "0.75rem", color: "#64748b", fontStyle: "italic" }}>
-                Ningún líder principal asignado
+                {t("groups.leadersModal.noPrimaryLeaders")}
               </span>
             ) : (
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", maxHeight: "85px", overflowY: "auto" }}>
@@ -1236,7 +1695,7 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
                     <button
                       type="button"
                       onClick={() => handleRemoveSupervisor(sup.id)}
-                      title="Quitar de líderes"
+                      title={t("groups.leadersModal.removeSupervisorTitle")}
                       style={{
                         background: "none",
                         border: "none",
@@ -1270,12 +1729,12 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                <Shield size={13} /> Sub-Líderes ({selectedSubLeaders.length})
+                <Shield size={13} /> {t("groups.leadersModal.subLeaders", { count: selectedSubLeaders.length })}
               </span>
             </div>
             {selectedSubLeaders.length === 0 ? (
               <span style={{ fontSize: "0.75rem", color: "#64748b", fontStyle: "italic" }}>
-                Ningún sub-líder asignado
+                {t("groups.leadersModal.noSubLeaders")}
               </span>
             ) : (
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", maxHeight: "85px", overflowY: "auto" }}>
@@ -1302,7 +1761,7 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
                     <button
                       type="button"
                       onClick={() => handleRemoveSubLeader(sub.id)}
-                      title="Quitar de sub-líderes"
+                      title={t("groups.leadersModal.removeSubLeaderTitle")}
                       style={{
                         background: "none",
                         border: "none",
@@ -1333,7 +1792,7 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
             />
             <input 
               className="input" 
-              placeholder="Buscar colaborador por nombre, correo, cargo o rol..." 
+              placeholder={t("groups.leadersModal.searchPlaceholder")} 
               value={search} 
               onChange={e => setSearch(e.target.value)}
               autoFocus
@@ -1380,7 +1839,7 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
               }}
             >
               <Crown size={12} />
-              <span>Roles de Liderazgo</span>
+              <span>{t("groups.leadersModal.tabLeadership")}</span>
             </button>
 
             <button
@@ -1402,7 +1861,7 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
               }}
             >
               <Users size={12} />
-              <span>Integrantes del Grupo ({group.members?.length || 0})</span>
+              <span>{t("groups.leadersModal.tabGroupMembers")} ({group.members?.length || 0})</span>
             </button>
 
             <button
@@ -1423,7 +1882,7 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
                 transition: "all 0.15s"
               }}
             >
-              <span>Todos los usuarios ({allUsers.length})</span>
+              <span>{t("groups.leadersModal.tabAll")} ({allUsers.length})</span>
             </button>
           </div>
         </div>
@@ -1466,8 +1925,7 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
           {candidateUsers.length === 0 ? (
             <div style={{ textAlign: "center", padding: "2.5rem 1rem", color: "#94a3b8" }}>
               <Search size={32} style={{ opacity: 0.3, margin: "0 auto 0.5rem", display: "block" }} />
-              <p style={{ margin: 0, fontWeight: 700, fontSize: "0.9rem" }}>No se encontraron colaboradores</p>
-              <p style={{ margin: "0.25rem 0 0", fontSize: "0.8rem", color: "#64748b" }}>Prueba cambiando la búsqueda o seleccionando la pestaña "Todos".</p>
+              <p style={{ margin: 0, fontWeight: 700, fontSize: "0.9rem" }}>{t("groups.leadersModal.noMatches")}</p>
             </div>
           ) : (
             candidateUsers.map(u => {
@@ -1556,7 +2014,7 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
                             fontSize: "0.72rem", 
                             fontWeight: 800, 
                             color: "#f59e0b", 
-                            backgroundColor: "rgba(245, 158, 11, 0.18)",
+                            backgroundColor: "rgba(245, 158, 11, 0.18)", 
                             border: "1px solid rgba(245, 158, 11, 0.4)",
                             padding: "0.3rem 0.6rem",
                             borderRadius: "0.5rem",
@@ -1566,12 +2024,11 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
                           }}
                         >
                           <Crown size={12} />
-                          <span>Líder</span>
+                          <span>{t("groups.leadersModal.isSupervisor")}</span>
                         </span>
                         <button
                           type="button"
                           onClick={() => handleAssignSubLeader(u.id)}
-                          title="Cambiar a Sub-Líder"
                           style={{
                             padding: "0.3rem 0.55rem",
                             borderRadius: "0.5rem",
@@ -1583,12 +2040,11 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
                             cursor: "pointer"
                           }}
                         >
-                          A Sub-Líder
+                          {t("groups.leadersModal.assignSubLeader")}
                         </button>
                         <button
                           type="button"
                           onClick={() => handleRemoveSupervisor(u.id)}
-                          title="Quitar rol de líder"
                           style={{
                             padding: "0.3rem 0.55rem",
                             borderRadius: "0.5rem",
@@ -1600,7 +2056,7 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
                             cursor: "pointer"
                           }}
                         >
-                          Quitar
+                          {t("common.remove")}
                         </button>
                       </>
                     ) : isSubLeader ? (
@@ -1620,12 +2076,11 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
                           }}
                         >
                           <Shield size={12} />
-                          <span>Sub-Líder</span>
+                          <span>{t("groups.leadersModal.isSubLeader")}</span>
                         </span>
                         <button
                           type="button"
                           onClick={() => handleAssignSupervisor(u.id)}
-                          title="Promover a Líder Principal"
                           style={{
                             padding: "0.3rem 0.55rem",
                             borderRadius: "0.5rem",
@@ -1637,12 +2092,11 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
                             cursor: "pointer"
                           }}
                         >
-                          A Líder
+                          {t("groups.leadersModal.assignSupervisor")}
                         </button>
                         <button
                           type="button"
                           onClick={() => handleRemoveSubLeader(u.id)}
-                          title="Quitar rol de sub-líder"
                           style={{
                             padding: "0.3rem 0.55rem",
                             borderRadius: "0.5rem",
@@ -1654,7 +2108,7 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
                             cursor: "pointer"
                           }}
                         >
-                          Quitar
+                          {t("common.remove")}
                         </button>
                       </>
                     ) : (
@@ -1680,7 +2134,7 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
                           onMouseLeave={e => e.currentTarget.style.backgroundColor = "rgba(245, 158, 11, 0.12)"}
                         >
                           <Crown size={12} />
-                          <span>+ Líder</span>
+                          <span>{t("groups.leadersModal.assignSupervisor")}</span>
                         </button>
                         <button
                           type="button"
@@ -1703,7 +2157,7 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
                           onMouseLeave={e => e.currentTarget.style.backgroundColor = "rgba(139, 92, 246, 0.12)"}
                         >
                           <Shield size={12} />
-                          <span>+ Sub-Líder</span>
+                          <span>{t("groups.leadersModal.assignSubLeader")}</span>
                         </button>
                       </>
                     )}
@@ -1728,13 +2182,13 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
         >
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
             <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "#94a3b8" }}>
-              Total seleccionados:
+              Total:
             </span>
             <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#f59e0b" }}>
-              👑 {selectedSupervisorIds.size} Líder(es)
+              👑 {selectedSupervisorIds.size}
             </span>
             <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#a78bfa" }}>
-              🛡️ {selectedSubLeaderIds.size} Sub-Líder(es)
+              🛡️ {selectedSubLeaderIds.size}
             </span>
           </div>
 
@@ -1746,7 +2200,7 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
               className="btn btn-surface"
               style={{ padding: "0.65rem 1.25rem", borderRadius: "0.75rem", fontSize: "0.85rem", fontWeight: 700 }}
             >
-              Cancelar
+              {t("groups.leadersModal.cancelBtn")}
             </button>
             <button
               type="button"
@@ -1771,12 +2225,12 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
               {isPending ? (
                 <>
                   <span style={{ animation: "spin 1s linear infinite" }}>⚙️</span>
-                  <span>Guardando liderazgo...</span>
+                  <span>{t("groups.leadersModal.saving")}</span>
                 </>
               ) : (
                 <>
                   <Check size={16} />
-                  <span>Guardar Liderazgo</span>
+                  <span>{t("groups.leadersModal.saveBtn")}</span>
                 </>
               )}
             </button>
@@ -1792,6 +2246,7 @@ function ManageLeadersModal({ group, allUsers, onClose, onLeadersUpdated }: Mana
 // PANEL PARA CREAR GRUPO
 // =========================================================================
 function CreateGroupPanel({ allUsers }: { allUsers: any[] }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
@@ -1803,12 +2258,62 @@ function CreateGroupPanel({ allUsers }: { allUsers: any[] }) {
   const [isPending, startTransition] = useTransition()
   const [message, setMessage] = useState<{ type: "success" | "error", text: string } | null>(null)
 
-  const supervisors = allUsers.filter(u => 
-    ["SUPERVISOR", "TEAM_LEAD", "MANAGER", "HR", "TECHNOLOGY", "IT_MANAGER"].includes(u.role)
-  )
+  // Lookup map for fast user resolution
+  const userMap = useMemo(() => {
+    const map = new Map<string, any>()
+    for (const u of allUsers) {
+      map.set(u.id, u)
+    }
+    return map
+  }, [allUsers])
+
+  const selectedSupervisors = useMemo(() => {
+    return supervisorIds.map(id => userMap.get(id)).filter(Boolean)
+  }, [supervisorIds, userMap])
+
+  const selectedSubLeaders = useMemo(() => {
+    return subLeaderIds.map(id => userMap.get(id)).filter(Boolean)
+  }, [subLeaderIds, userMap])
+
+  const addSupervisor = (userId: string) => {
+    if (!userId) return
+    setSupervisorIds(prev => prev.includes(userId) ? prev : [...prev, userId])
+    setSubLeaderIds(prev => prev.filter(id => id !== userId))
+  }
+
+  const removeSupervisor = (userId: string) => {
+    setSupervisorIds(prev => prev.filter(id => id !== userId))
+  }
+
+  const addSubLeader = (userId: string) => {
+    if (!userId) return
+    setSubLeaderIds(prev => prev.includes(userId) ? prev : [...prev, userId])
+    setSupervisorIds(prev => prev.filter(id => id !== userId))
+  }
+
+  const removeSubLeader = (userId: string) => {
+    setSubLeaderIds(prev => prev.filter(id => id !== userId))
+  }
+
+  const isLeaderRole = (role: string) =>
+    ["SUPERVISOR", "TEAM_LEAD", "MANAGER", "HR", "TECHNOLOGY", "IT_MANAGER", "TECHNOLOGY_ADMIN", "DIRECTOR", "ADMIN", "SUPERADMIN"].includes(role)
+
+  const availableForSupervisors = useMemo(() => {
+    const selected = new Set([...supervisorIds, ...subLeaderIds])
+    return allUsers.filter(u => !selected.has(u.id))
+  }, [allUsers, supervisorIds, subLeaderIds])
+
+  const availableForSubLeaders = useMemo(() => {
+    const selected = new Set([...supervisorIds, ...subLeaderIds])
+    return allUsers.filter(u => !selected.has(u.id))
+  }, [allUsers, supervisorIds, subLeaderIds])
 
   const handleCreate = () => {
     if (!name.trim()) return
+    if (supervisorIds.length === 0) {
+      setMessage({ type: "error", text: t("groups.create.supervisorsHelp") })
+      return
+    }
     const fd = new FormData()
     fd.set("name", name)
     fd.set("description", description)
@@ -1821,7 +2326,7 @@ function CreateGroupPanel({ allUsers }: { allUsers: any[] }) {
     startTransition(async () => {
       const result = await createGroup(fd)
       if (result.success) {
-        setMessage({ type: "success", text: "¡Grupo creado exitosamente! ✨" })
+        setMessage({ type: "success", text: t("groups.create.successMessage") })
         setName("")
         setDescription("")
         setEmail("")
@@ -1834,7 +2339,7 @@ function CreateGroupPanel({ allUsers }: { allUsers: any[] }) {
           setMessage(null) 
         }, 1500)
       } else {
-        setMessage({ type: "error", text: result.error || "Error al crear el grupo." })
+        setMessage({ type: "error", text: result.error || t("groups.create.errorMessage") })
       }
     })
   }
@@ -1889,10 +2394,10 @@ function CreateGroupPanel({ allUsers }: { allUsers: any[] }) {
           </div>
           <div>
             <div style={{ fontWeight: 800, fontSize: "1.15rem", color: "#f8fafc", letterSpacing: "-0.01em" }}>
-              Crear Nuevo Grupo de Trabajo
+              {t("groups.create.title")}
             </div>
             <div style={{ fontSize: "0.8rem", color: "#94a3b8", marginTop: "0.15rem" }}>
-              Configura nombre, identidad visual, líderes y sub-líderes
+              {t("groups.create.subtitle")}
             </div>
           </div>
         </div>
@@ -1906,25 +2411,25 @@ function CreateGroupPanel({ allUsers }: { allUsers: any[] }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1rem" }}>
             <div>
               <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 800, marginBottom: "0.4rem", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                NOMBRE DEL GRUPO *
+                {t("groups.create.nameLabel")}
               </label>
               <input 
                 className="input" 
                 value={name} 
                 onChange={e => setName(e.target.value)} 
-                placeholder="Ej: ACI, NuOrder, Soporte..." 
+                placeholder={t("groups.create.namePlaceholder")} 
                 style={{ width: "100%", fontSize: "0.9rem", borderRadius: "0.75rem", padding: "0.75rem 1rem", backgroundColor: "rgba(15, 23, 42, 0.8)", border: "1px solid rgba(255, 255, 255, 0.12)" }} 
               />
             </div>
             <div>
               <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 800, marginBottom: "0.4rem", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                DESCRIPCIÓN / MISIÓN
+                {t("groups.create.descLabel")}
               </label>
               <input 
                 className="input" 
                 value={description} 
                 onChange={e => setDescription(e.target.value)} 
-                placeholder="Misión u objetivo del grupo..." 
+                placeholder={t("groups.create.descPlaceholder")} 
                 style={{ width: "100%", fontSize: "0.9rem", borderRadius: "0.75rem", padding: "0.75rem 1rem", backgroundColor: "rgba(15, 23, 42, 0.8)", border: "1px solid rgba(255, 255, 255, 0.12)" }} 
               />
             </div>
@@ -1933,13 +2438,13 @@ function CreateGroupPanel({ allUsers }: { allUsers: any[] }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1rem" }}>
             <div>
               <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 800, marginBottom: "0.4rem", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                CORREO DE CONTACTO
+                {t("groups.create.emailLabel")}
               </label>
               <input 
                 className="input" 
                 value={email} 
                 onChange={e => setEmail(e.target.value)} 
-                placeholder="equipo@telecom.com" 
+                placeholder={t("groups.create.emailPlaceholder")} 
                 style={{ width: "100%", fontSize: "0.9rem", borderRadius: "0.75rem", padding: "0.75rem 1rem", backgroundColor: "rgba(15, 23, 42, 0.8)", border: "1px solid rgba(255, 255, 255, 0.12)" }} 
               />
             </div>
@@ -1947,7 +2452,7 @@ function CreateGroupPanel({ allUsers }: { allUsers: any[] }) {
             {/* Color & Icon Picker */}
             <div>
               <label style={{ display: "block", fontSize: "0.72rem", fontWeight: 800, marginBottom: "0.4rem", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                COLOR E ÍCONO
+                {t("groups.create.colorAndIconLabel")}
               </label>
               <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
                 <input 
@@ -1988,7 +2493,7 @@ function CreateGroupPanel({ allUsers }: { allUsers: any[] }) {
 
           {/* Quick Icons */}
           <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
-            <span style={{ fontSize: "0.72rem", color: "#94a3b8", fontWeight: 700 }}>Íconos sugeridos:</span>
+            <span style={{ fontSize: "0.72rem", color: "#94a3b8", fontWeight: 700 }}>{t("groups.create.suggestedIcons")}</span>
             {ICON_PRESETS.slice(0, 12).map(ic => (
               <button
                 key={ic}
@@ -2006,6 +2511,232 @@ function CreateGroupPanel({ allUsers }: { allUsers: any[] }) {
                 {ic}
               </button>
             ))}
+          </div>
+
+          {/* Liderazgo del Grupo (Supervisores y Sub-líderes) */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.25rem", padding: "1.25rem", backgroundColor: "rgba(255, 255, 255, 0.03)", borderRadius: "1rem", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+            {/* Supervisores Principales */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.72rem", fontWeight: 800, color: "#f59e0b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  <Crown size={14} />
+                  <span>{t("groups.create.supervisorsLabel")}</span>
+                </label>
+                <span style={{ fontSize: "0.7rem", color: supervisorIds.length > 0 ? "#10b981" : "#ef4444", fontWeight: 700 }}>
+                  {supervisorIds.length > 0 ? `${supervisorIds.length} asignado(s)` : "Requerido"}
+                </span>
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "#94a3b8", lineHeight: 1.3 }}>
+                {t("groups.create.supervisorsHelp")}
+              </div>
+
+              <select
+                className="input"
+                value=""
+                onChange={e => {
+                  if (e.target.value) {
+                    addSupervisor(e.target.value)
+                  }
+                }}
+                style={{
+                  width: "100%",
+                  fontSize: "0.85rem",
+                  borderRadius: "0.75rem",
+                  padding: "0.65rem 0.85rem",
+                  backgroundColor: "rgba(15, 23, 42, 0.8)",
+                  border: supervisorIds.length === 0 ? "1px solid rgba(245, 158, 11, 0.4)" : "1px solid rgba(255, 255, 255, 0.12)",
+                  color: "#f8fafc",
+                  cursor: "pointer"
+                }}
+              >
+                <option value="" disabled>{t("groups.create.selectSupervisorPlaceholder")}</option>
+                {availableForSupervisors.filter(u => isLeaderRole(u.role)).length > 0 && (
+                  <optgroup label={t("groups.create.recommendedLeadership")}>
+                    {availableForSupervisors
+                      .filter(u => isLeaderRole(u.role))
+                      .map(u => (
+                        <option key={u.id} value={u.id} style={{ backgroundColor: "#0f172a", color: "#f8fafc" }}>
+                          {u.name} — {u.position || u.role}
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
+                {availableForSupervisors.filter(u => !isLeaderRole(u.role)).length > 0 && (
+                  <optgroup label={t("groups.create.otherMembers")}>
+                    {availableForSupervisors
+                      .filter(u => !isLeaderRole(u.role))
+                      .map(u => (
+                        <option key={u.id} value={u.id} style={{ backgroundColor: "#0f172a", color: "#f8fafc" }}>
+                          {u.name} — {u.position || u.role}
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
+              </select>
+
+              {/* Chips de Supervisores seleccionados */}
+              <div style={{ minHeight: "36px", display: "flex", flexWrap: "wrap", gap: "0.4rem", alignItems: "center" }}>
+                {selectedSupervisors.length === 0 ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.75rem", color: "#f87171", padding: "0.35rem 0.65rem", borderRadius: "0.5rem", backgroundColor: "rgba(239, 68, 68, 0.08)", border: "1px dashed rgba(239, 68, 68, 0.3)" }}>
+                    <AlertTriangle size={13} />
+                    <span>{t("groups.create.noSupervisorsSelected")}</span>
+                  </div>
+                ) : (
+                  selectedSupervisors.map(u => (
+                    <div
+                      key={u.id}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.45rem",
+                        backgroundColor: "rgba(245, 158, 11, 0.12)",
+                        border: "1px solid rgba(245, 158, 11, 0.35)",
+                        borderRadius: "2rem",
+                        padding: "0.25rem 0.65rem 0.25rem 0.35rem",
+                        fontSize: "0.8rem",
+                        color: "#f8fafc"
+                      }}
+                    >
+                      <Avatar user={u} size={22} />
+                      <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
+                        <span style={{ fontWeight: 700, fontSize: "0.78rem" }}>{u.name}</span>
+                        <span style={{ fontSize: "0.65rem", color: "#fcd34d" }}>{u.position || u.role}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeSupervisor(u.id)}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          color: "#cbd5e1",
+                          cursor: "pointer",
+                          padding: "2px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderRadius: "50%",
+                          marginLeft: "0.2rem"
+                        }}
+                        title="Remover líder"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Sub-Líderes de Apoyo */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.72rem", fontWeight: 800, color: "#818cf8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  <Shield size={14} />
+                  <span>{t("groups.create.subLeadersLabel")}</span>
+                </label>
+                <span style={{ fontSize: "0.7rem", color: "#94a3b8", fontWeight: 600 }}>
+                  {subLeaderIds.length > 0 ? `${subLeaderIds.length} seleccionado(s)` : "Opcional"}
+                </span>
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "#94a3b8", lineHeight: 1.3 }}>
+                {t("groups.create.subLeadersHelp")}
+              </div>
+
+              <select
+                className="input"
+                value=""
+                onChange={e => {
+                  if (e.target.value) {
+                    addSubLeader(e.target.value)
+                  }
+                }}
+                style={{
+                  width: "100%",
+                  fontSize: "0.85rem",
+                  borderRadius: "0.75rem",
+                  padding: "0.65rem 0.85rem",
+                  backgroundColor: "rgba(15, 23, 42, 0.8)",
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  color: "#f8fafc",
+                  cursor: "pointer"
+                }}
+              >
+                <option value="" disabled>{t("groups.create.selectSubLeaderPlaceholder")}</option>
+                {availableForSubLeaders.filter(u => isLeaderRole(u.role)).length > 0 && (
+                  <optgroup label={t("groups.create.recommendedLeadership")}>
+                    {availableForSubLeaders
+                      .filter(u => isLeaderRole(u.role))
+                      .map(u => (
+                        <option key={u.id} value={u.id} style={{ backgroundColor: "#0f172a", color: "#f8fafc" }}>
+                          {u.name} — {u.position || u.role}
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
+                {availableForSubLeaders.filter(u => !isLeaderRole(u.role)).length > 0 && (
+                  <optgroup label={t("groups.create.otherMembers")}>
+                    {availableForSubLeaders
+                      .filter(u => !isLeaderRole(u.role))
+                      .map(u => (
+                        <option key={u.id} value={u.id} style={{ backgroundColor: "#0f172a", color: "#f8fafc" }}>
+                          {u.name} — {u.position || u.role}
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
+              </select>
+
+              {/* Chips de Sub-Líderes seleccionados */}
+              <div style={{ minHeight: "36px", display: "flex", flexWrap: "wrap", gap: "0.4rem", alignItems: "center" }}>
+                {selectedSubLeaders.length === 0 ? (
+                  <div style={{ fontSize: "0.75rem", color: "#64748b", padding: "0.35rem 0.65rem" }}>
+                    {t("groups.create.noSubLeadersSelected")}
+                  </div>
+                ) : (
+                  selectedSubLeaders.map(u => (
+                    <div
+                      key={u.id}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.45rem",
+                        backgroundColor: "rgba(99, 102, 241, 0.12)",
+                        border: "1px solid rgba(99, 102, 241, 0.35)",
+                        borderRadius: "2rem",
+                        padding: "0.25rem 0.65rem 0.25rem 0.35rem",
+                        fontSize: "0.8rem",
+                        color: "#f8fafc"
+                      }}
+                    >
+                      <Avatar user={u} size={22} />
+                      <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
+                        <span style={{ fontWeight: 700, fontSize: "0.78rem" }}>{u.name}</span>
+                        <span style={{ fontSize: "0.65rem", color: "#a5b4fc" }}>{u.position || u.role}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeSubLeader(u.id)}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          color: "#cbd5e1",
+                          cursor: "pointer",
+                          padding: "2px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderRadius: "50%",
+                          marginLeft: "0.2rem"
+                        }}
+                        title="Remover sub-líder"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
 
           {message && (
@@ -2032,7 +2763,7 @@ function CreateGroupPanel({ allUsers }: { allUsers: any[] }) {
             <button 
               type="button"
               onClick={handleCreate} 
-              disabled={isPending || !name.trim()} 
+              disabled={isPending || !name.trim() || supervisorIds.length === 0} 
               className="btn btn-primary" 
               style={{ 
                 flex: 1, 
@@ -2044,18 +2775,20 @@ function CreateGroupPanel({ allUsers }: { allUsers: any[] }) {
                 alignItems: "center", 
                 justifyContent: "center", 
                 gap: "0.5rem",
-                boxShadow: "0 4px 18px hsl(var(--primary) / 0.35)"
+                boxShadow: "0 4px 18px hsl(var(--primary) / 0.35)",
+                opacity: (isPending || !name.trim() || supervisorIds.length === 0) ? 0.6 : 1,
+                cursor: (isPending || !name.trim() || supervisorIds.length === 0) ? "not-allowed" : "pointer"
               }}
             >
               {isPending ? (
                 <>
                   <span style={{ animation: "spin 1s linear infinite" }}>⚙️</span>
-                  <span>Construyendo grupo...</span>
+                  <span>{t("groups.create.buildingGroup")}</span>
                 </>
               ) : (
                 <>
                   <Sparkles size={18} />
-                  <span>Crear y Publicar Grupo</span>
+                  <span>{t("groups.create.submitBtn")}</span>
                 </>
               )}
             </button>
@@ -2065,7 +2798,7 @@ function CreateGroupPanel({ allUsers }: { allUsers: any[] }) {
               className="btn btn-surface" 
               style={{ padding: "0.85rem 1.5rem", borderRadius: "0.75rem", fontWeight: 700 }}
             >
-              Cancelar
+              {t("groups.create.cancelBtn")}
             </button>
           </div>
         </div>
@@ -2096,6 +2829,7 @@ function GroupCard({
   onMembersAdded?: (groupId: string, userIds: string[]) => void
   onLeadersUpdated?: (groupId: string, supervisors: any[], subLeaders: any[]) => void
 }) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showLeaderModal, setShowLeaderModal] = useState(false)
@@ -2251,7 +2985,7 @@ function GroupCard({
                   />
                 ) : (
                   <p style={{ margin: "0.2rem 0 0", color: "#94a3b8", fontSize: "0.8rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {group.description || "Escuadrón operativo"}
+                    {group.description || t("groups.card.defaultMission")}
                   </p>
                 )}
               </div>
@@ -2279,7 +3013,7 @@ function GroupCard({
                 onMouseLeave={e => e.currentTarget.style.backgroundColor = "hsl(var(--primary) / 0.2)"}
               >
                 <ExternalLink size={13} />
-                <span>Tablero</span>
+                <span>{t("groups.card.dashboard")}</span>
               </Link>
 
               {editing ? (
@@ -2326,7 +3060,7 @@ function GroupCard({
                       e.currentTarget.style.backgroundColor = "rgba(245, 158, 11, 0.1)"
                       e.currentTarget.style.borderColor = "rgba(245, 158, 11, 0.3)"
                     }}
-                    title="Asignar y gestionar líderes del grupo"
+                    title={t("groups.card.leadersTooltip")}
                   >
                     <Crown size={14} />
                   </button>
@@ -2343,7 +3077,7 @@ function GroupCard({
                       display: "flex",
                       alignItems: "center"
                     }}
-                    title="Editar grupo"
+                    title={t("groups.card.editTooltip")}
                   >
                     <Settings size={14} />
                   </button>
@@ -2360,7 +3094,7 @@ function GroupCard({
                       display: "flex",
                       alignItems: "center"
                     }}
-                    title="Eliminar grupo"
+                    title={t("groups.card.deleteTooltip")}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -2424,7 +3158,7 @@ function GroupCard({
                     }}
                   >
                     <Crown size={13} />
-                    <span>Líderes ({supervisorsCount})</span>
+                    <span>{t("groups.card.tabSupervisors", { count: supervisorsCount })}</span>
                   </button>
                   <button
                     type="button"
@@ -2447,14 +3181,14 @@ function GroupCard({
                     }}
                   >
                     <Shield size={13} />
-                    <span>Sub-Líderes ({subLeadersCount})</span>
+                    <span>{t("groups.card.tabSubLeaders", { count: subLeadersCount })}</span>
                   </button>
                 </div>
                 <div style={{ display: "flex", gap: "0.3rem", alignItems: "center" }}>
                   <button
                     type="button"
                     onClick={() => setViewBothLeaders(!viewBothLeaders)}
-                    title={viewBothLeaders ? "Ver en pestañas" : "Ver ambos a la vez"}
+                    title={viewBothLeaders ? t("groups.card.viewTabsTooltip") : t("groups.card.viewBothTooltip")}
                     style={{
                       padding: "0.35rem 0.55rem",
                       borderRadius: "0.5rem",
@@ -2467,12 +3201,12 @@ function GroupCard({
                       whiteSpace: "nowrap"
                     }}
                   >
-                    {viewBothLeaders ? "Pestañas" : "Ver ambos"}
+                    {viewBothLeaders ? t("groups.card.viewTabs") : t("groups.card.viewBoth")}
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowLeaderModal(true)}
-                    title="Gestionar líderes y sub-líderes"
+                    title={t("groups.card.leadersTooltip")}
                     style={{
                       padding: "0.35rem 0.65rem",
                       borderRadius: "0.5rem",
@@ -2489,19 +3223,19 @@ function GroupCard({
                     }}
                   >
                     <Crown size={12} />
-                    <span>Gestionar</span>
+                    <span>{t("groups.card.manage")}</span>
                   </button>
                 </div>
               </div>
             ) : supervisorsCount > 0 ? (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
                 <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "hsl(var(--primary))", textTransform: "uppercase", letterSpacing: "0.06em", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                  <Crown size={14} /> Líderes de Equipo ({supervisorsCount})
+                  <Crown size={14} /> {t("groups.card.teamLeaders", { count: supervisorsCount })}
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowLeaderModal(true)}
-                  title="Gestionar líderes"
+                  title={t("groups.card.leadersTooltip")}
                   style={{
                     padding: "0.25rem 0.65rem",
                     borderRadius: "0.5rem",
@@ -2517,18 +3251,18 @@ function GroupCard({
                   }}
                 >
                   <Crown size={12} />
-                  <span>Gestionar</span>
+                  <span>{t("groups.card.manage")}</span>
                 </button>
               </div>
             ) : subLeadersCount > 0 ? (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
                 <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.06em", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                  <Shield size={14} /> Sub-Líderes de Equipo ({subLeadersCount})
+                  <Shield size={14} /> {t("groups.card.teamSubLeaders", { count: subLeadersCount })}
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowLeaderModal(true)}
-                  title="Gestionar líderes"
+                  title={t("groups.card.leadersTooltip")}
                   style={{
                     padding: "0.25rem 0.65rem",
                     borderRadius: "0.5rem",
@@ -2544,13 +3278,13 @@ function GroupCard({
                   }}
                 >
                   <Crown size={12} />
-                  <span>Gestionar</span>
+                  <span>{t("groups.card.manage")}</span>
                 </button>
               </div>
             ) : (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", padding: "0.2rem 0" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.75rem", color: "#64748b", fontStyle: "italic" }}>
-                  <Shield size={14} /> Sin líderes asignados
+                  <Shield size={14} /> {t("groups.card.noLeaders")}
                 </div>
                 <button
                   type="button"
@@ -2572,7 +3306,7 @@ function GroupCard({
                   }}
                 >
                   <Crown size={13} />
-                  <span>Asignar Líderes</span>
+                  <span>{t("groups.card.assignLeaders")}</span>
                 </button>
               </div>
             )}
@@ -2614,7 +3348,7 @@ function GroupCard({
                       <button 
                         type="button"
                         onClick={() => onRequestRemoveMember(group, sup)}
-                        title={`Quitar a ${sup.name} de líderes`}
+                        title={t("groups.card.removeLeaderTitle", { name: sup.name })}
                         style={{
                           width: 24,
                           height: 24,
@@ -2682,7 +3416,7 @@ function GroupCard({
                       <button 
                         type="button"
                         onClick={() => onRequestRemoveMember(group, sub)}
-                        title={`Quitar a ${sub.name} de sub-líderes`}
+                        title={t("groups.card.removeSubLeaderTitle", { name: sub.name })}
                         style={{
                           width: 24,
                           height: 24,
@@ -2754,7 +3488,7 @@ function GroupCard({
               <div style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}>
                 <Users2 size={16} color="hsl(var(--primary))" />
                 <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#ffffff", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Integrantes ({group.members.length})
+                  {t("groups.card.membersSection", { count: group.members.length })}
                 </span>
               </div>
 
@@ -2774,7 +3508,7 @@ function GroupCard({
                       cursor: "pointer"
                     }}
                   >
-                    {multiSelectMode ? "Cancelar selección" : "Seleccionar varios"}
+                    {multiSelectMode ? t("groups.card.cancelSelection") : t("groups.card.multiSelect")}
                   </button>
                 )}
 
@@ -2794,7 +3528,7 @@ function GroupCard({
                   }}
                 >
                   <Plus size={13} strokeWidth={2.5} />
-                  <span>Sumar</span>
+                  <span>{t("groups.card.addBtn")}</span>
                 </button>
               </div>
             </div>
@@ -2815,7 +3549,7 @@ function GroupCard({
                 }}
               >
                 <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#f87171" }}>
-                  {selectedMemberIds.size} seleccionado(s)
+                  {t("groups.card.selectedCount", { count: selectedMemberIds.size })}
                 </span>
                 <button
                   type="button"
@@ -2835,7 +3569,7 @@ function GroupCard({
                   }}
                 >
                   <Trash2 size={12} />
-                  <span>Quitar seleccionados</span>
+                  <span>{t("groups.card.removeSelectedBtn")}</span>
                 </button>
               </div>
             )}
@@ -2843,7 +3577,7 @@ function GroupCard({
             {/* Members Scrollable List */}
             {!group.members.length ? (
               <div style={{ textAlign: "center", padding: "1.25rem 0", color: "#64748b", fontSize: "0.78rem" }}>
-                Sin integrantes asignados aún. Haz clic en <strong>+ Sumar</strong>.
+                {t("groups.card.noMembers")}
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
@@ -2925,7 +3659,7 @@ function GroupCard({
                       <button 
                         type="button"
                         onClick={() => onRequestRemoveMember(group, member)} 
-                        title={`Quitar a ${member.name} del grupo`}
+                        title={t("groups.card.removeMemberTooltip", { name: member.name })}
                         style={{ 
                           width: 28,
                           height: 28,
@@ -2972,7 +3706,7 @@ function GroupCard({
                     justifyContent: "center",
                     gap: "0.35rem"
                   }}>
-                    <span>↕ Desliza para explorar los {group.members.length} integrantes</span>
+                    <span>{t("groups.card.scrollHint", { count: group.members.length })}</span>
                   </div>
                 )}
               </div>
@@ -2989,10 +3723,12 @@ function GroupCard({
 // =========================================================================
 export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: any[] }) {
   const router = useRouter()
+  const { t, locale } = useTranslation()
   const [localGroups, setLocalGroups] = useState(groups)
   const [search, setSearch] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<"all" | "withMembers" | "empty" | "withLeaders">("all")
   const [toastMessage, setToastMessage] = useState<{ type: "success" | "error", text: string } | null>(null)
+  const [showMultiGroupModal, setShowMultiGroupModal] = useState(false)
 
   // Sync when prop updates
   useEffect(() => {
@@ -3116,14 +3852,16 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
     if (success) {
       setToastMessage({
         type: "success",
-        text: memberIds.length === 1 ? "Integrante desvinculado del grupo." : `${memberIds.length} integrantes desvinculados.`
+        text: memberIds.length === 1 
+          ? t("groups.confirm.singleRemovedSuccess") 
+          : t("groups.confirm.multiRemovedSuccess", { count: memberIds.length })
       })
       router.refresh()
       return true
     } else {
       setToastMessage({
         type: "error",
-        text: errorMsg || "No se pudo remover el integrante. Inténtalo de nuevo."
+        text: errorMsg || t("groups.confirm.removeError")
       })
       // Re-sync with server
       router.refresh()
@@ -3135,11 +3873,11 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
   const handleRequestRemoveMember = (group: any, member: any) => {
     setConfirmModalState({
       isOpen: true,
-      title: `¿Remover a ${member.name}?`,
-      description: `¿Estás seguro de que deseas quitar a este usuario del grupo "${group.name}"? Podrás volver a agregarlo en cualquier momento.`,
+      title: t("groups.confirm.removeSingleTitle", { name: member.name }),
+      description: t("groups.confirm.removeSingleDesc", { group: group.name }),
       members: [member],
       isDestructive: true,
-      confirmText: "Quitar del grupo",
+      confirmText: t("groups.confirm.removeSingleBtn"),
       errorMessage: null,
       onConfirm: () => {
         startActionTransition(async () => {
@@ -3149,7 +3887,7 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
           } else {
             setConfirmModalState(prev => ({ 
               ...prev, 
-              errorMessage: "Hubo un problema al desvincular. Por favor inténtalo nuevamente." 
+              errorMessage: t("groups.confirm.removeError") 
             }))
           }
         })
@@ -3162,11 +3900,11 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
     const memberIds = members.map(m => m.id)
     setConfirmModalState({
       isOpen: true,
-      title: `¿Remover ${members.length} integrantes?`,
-      description: `¿Estás seguro de que deseas quitar a los ${members.length} integrantes seleccionados del grupo "${group.name}"?`,
+      title: t("groups.confirm.removeMultiTitle", { count: members.length }),
+      description: t("groups.confirm.removeMultiDesc", { count: members.length, group: group.name }),
       members,
       isDestructive: true,
-      confirmText: `Quitar ${members.length} integrantes`,
+      confirmText: t("groups.confirm.removeMultiBtn", { count: members.length }),
       errorMessage: null,
       onConfirm: () => {
         startActionTransition(async () => {
@@ -3176,7 +3914,7 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
           } else {
             setConfirmModalState(prev => ({ 
               ...prev, 
-              errorMessage: "Hubo un problema al desvincular en lote. Por favor inténtalo de nuevo." 
+              errorMessage: t("groups.confirm.removeError") 
             }))
           }
         })
@@ -3188,11 +3926,11 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
   const handleRequestDeleteGroup = (group: any) => {
     setConfirmModalState({
       isOpen: true,
-      title: `¿Eliminar grupo "${group.name}"?`,
-      description: `Esta acción eliminará el grupo permanentemente. Los integrantes asignados (${group.members?.length || 0}) quedarán sin grupo pero no se borrarán sus cuentas.`,
+      title: t("groups.confirm.deleteGroupTitle", { name: group.name }),
+      description: t("groups.confirm.deleteGroupDesc", { count: group.members?.length || 0 }),
       members: group.members,
       isDestructive: true,
-      confirmText: "Eliminar grupo",
+      confirmText: t("groups.confirm.deleteGroupBtn"),
       errorMessage: null,
       onConfirm: () => {
         startActionTransition(async () => {
@@ -3218,19 +3956,19 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
               })
               const data = await res.json()
               if (data && data.success) success = true
-              else errorMsg = data?.error || "Error al eliminar el grupo."
+              else errorMsg = data?.error || t("groups.confirm.groupDeleteError")
             } catch (apiErr: any) {
-              errorMsg = apiErr?.message || "Error de red al eliminar grupo."
+              errorMsg = apiErr?.message || t("groups.confirm.groupDeleteError")
             }
           }
 
           if (success) {
             setLocalGroups(prev => prev.filter(g => g.id !== group.id))
             setConfirmModalState(prev => ({ ...prev, isOpen: false, errorMessage: null }))
-            setToastMessage({ type: "success", text: `Grupo "${group.name}" eliminado correctamente.` })
+            setToastMessage({ type: "success", text: t("groups.confirm.groupDeletedSuccess", { name: group.name }) })
             router.refresh()
           } else {
-            setConfirmModalState(prev => ({ ...prev, errorMessage: errorMsg || "Error al eliminar el grupo." }))
+            setConfirmModalState(prev => ({ ...prev, errorMessage: errorMsg || t("groups.confirm.groupDeleteError") }))
             router.refresh()
           }
         })
@@ -3254,7 +3992,9 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
     }))
     setToastMessage({
       type: "success",
-      text: userIds.length === 1 ? "1 nuevo integrante incorporado." : `${userIds.length} nuevos integrantes incorporados.`
+      text: userIds.length === 1 
+        ? t("groups.confirm.memberAddedSuccess") 
+        : t("groups.confirm.membersAddedSuccess", { count: userIds.length })
     })
     router.refresh()
   }
@@ -3273,7 +4013,40 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
     }))
     setToastMessage({
       type: "success",
-      text: "Líderes del grupo actualizados correctamente. 👑"
+      text: t("groups.confirm.leadersUpdatedSuccess")
+    })
+    router.refresh()
+  }
+
+  // Handle multi-group assignments per user
+  const handleUserGroupsUpdated = (userId: string, updatedGroupIds: string[]) => {
+    const targetUser = allUsers.find(u => u.id === userId)
+    if (!targetUser) return
+
+    setLocalGroups(prev => prev.map(g => {
+      const isNowMember = updatedGroupIds.includes(g.id)
+      const currentMembers = g.members || []
+      const isAlreadyMember = currentMembers.some((m: any) => m.id === userId)
+
+      if (isNowMember && !isAlreadyMember) {
+        return { ...g, members: [...currentMembers, { ...targetUser, projectId: g.id }] }
+      } else if (!isNowMember && isAlreadyMember) {
+        return { ...g, members: currentMembers.filter((m: any) => m.id !== userId) }
+      }
+      return g
+    }))
+
+    // Keep user's projects updated in memory
+    targetUser.projects = localGroups.filter(g => updatedGroupIds.includes(g.id)).map(g => ({
+      id: g.id,
+      name: g.name,
+      color: g.color,
+      icon: g.icon
+    }))
+
+    setToastMessage({
+      type: "success",
+      text: t("groups.multiGroup.saveSuccess", { name: targetUser.name, count: updatedGroupIds.length })
     })
     router.refresh()
   }
@@ -3329,6 +4102,47 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
         }}
       />
 
+      {/* Multi-Group Assignment Modal */}
+      {showMultiGroupModal && (
+        <AssignMultiGroupModal
+          allUsers={allUsers}
+          groups={localGroups}
+          onClose={() => setShowMultiGroupModal(false)}
+          onUserGroupsUpdated={handleUserGroupsUpdated}
+        />
+      )}
+
+      {/* Page Header */}
+      <header style={{ marginBottom: "1rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.5rem" }}>
+          <div 
+            style={{ 
+              padding: "0.75rem", 
+              borderRadius: "1rem", 
+              backgroundColor: "hsl(var(--primary) / 0.15)",
+              border: "1px solid hsl(var(--primary) / 0.3)",
+              boxShadow: "0 0 25px hsl(var(--primary) / 0.15)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+          >
+            <Users size={26} style={{ color: "hsl(var(--primary))" }} />
+          </div>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+              <h1 style={{ margin: 0, fontSize: "2.2rem", fontWeight: 900, letterSpacing: "-0.02em" }}>{t("groups.title")}</h1>
+              <span style={{ padding: "0.2rem 0.65rem", borderRadius: "9999px", backgroundColor: "rgba(245, 158, 11, 0.12)", color: "#f59e0b", border: "1px solid rgba(245, 158, 11, 0.25)", fontSize: "0.75rem", fontWeight: 800 }}>
+                {t("groups.masterControl")}
+              </span>
+            </div>
+            <p style={{ color: "hsl(var(--muted-foreground))", margin: "0.35rem 0 0", fontSize: "0.95rem" }}>
+              {t("groups.subtitle")}
+            </p>
+          </div>
+        </div>
+      </header>
+
       {/* KPI Stats Cards Banner */}
       <div 
         style={{ 
@@ -3353,7 +4167,7 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
           </div>
           <div>
             <div style={{ fontSize: "1.6rem", fontWeight: 900, color: "#ffffff", lineHeight: 1 }}>{totalGroups}</div>
-            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#94a3b8", marginTop: "0.25rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Escuadrones / Grupos</div>
+            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#94a3b8", marginTop: "0.25rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>{t("groups.stats.squadsAndGroups")}</div>
           </div>
         </div>
 
@@ -3373,7 +4187,7 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
           </div>
           <div>
             <div style={{ fontSize: "1.6rem", fontWeight: 900, color: "#ffffff", lineHeight: 1 }}>{totalAssignedMembers}</div>
-            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#94a3b8", marginTop: "0.25rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Miembros Asignados</div>
+            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#94a3b8", marginTop: "0.25rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>{t("groups.stats.assignedMembers")}</div>
           </div>
         </div>
 
@@ -3393,7 +4207,7 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
           </div>
           <div>
             <div style={{ fontSize: "1.6rem", fontWeight: 900, color: "#ffffff", lineHeight: 1 }}>{totalLeaders}</div>
-            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#94a3b8", marginTop: "0.25rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Líderes Activos</div>
+            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#94a3b8", marginTop: "0.25rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>{t("groups.stats.activeLeaders")}</div>
           </div>
         </div>
 
@@ -3415,9 +4229,43 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
             <div style={{ fontSize: "1.6rem", fontWeight: 900, color: "#ffffff", lineHeight: 1 }}>
               {totalGroups > 0 ? (totalAssignedMembers / totalGroups).toFixed(1) : 0}
             </div>
-            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#94a3b8", marginTop: "0.25rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Promedio / Grupo</div>
+            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#94a3b8", marginTop: "0.25rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>{t("groups.stats.averagePerGroup")}</div>
           </div>
         </div>
+      </div>
+
+      {/* Action Bar: Asignación Multi-Grupos */}
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: "-0.75rem" }}>
+        <button
+          type="button"
+          onClick={() => setShowMultiGroupModal(true)}
+          style={{
+            padding: "0.65rem 1.25rem",
+            borderRadius: "0.85rem",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.55rem",
+            fontWeight: 800,
+            fontSize: "0.85rem",
+            backgroundColor: "rgba(59, 130, 246, 0.12)",
+            border: "1px solid rgba(59, 130, 246, 0.3)",
+            color: "#60a5fa",
+            cursor: "pointer",
+            transition: "all 0.2s",
+            boxShadow: "0 4px 15px rgba(59, 130, 246, 0.1)"
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.backgroundColor = "rgba(59, 130, 246, 0.2)"
+            e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.5)"
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.backgroundColor = "rgba(59, 130, 246, 0.12)"
+            e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.3)"
+          }}
+        >
+          <Layers size={17} />
+          <span>{t("groups.multiGroup.openBtn")}</span>
+        </button>
       </div>
 
       {/* Collapsible Create Group Panel */}
@@ -3443,7 +4291,7 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
           <Search size={16} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
           <input 
             className="input" 
-            placeholder="Buscar por nombre de grupo, líderes o integrantes..." 
+            placeholder={t("groups.search.placeholder")} 
             value={search} 
             onChange={e => setSearch(e.target.value)} 
             style={{ 
@@ -3475,7 +4323,7 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
               transition: "all 0.15s"
             }}
           >
-            Todos ({filteredGroups.length})
+            {t("groups.search.filterAll", { count: filteredGroups.length })}
           </button>
           <button
             type="button"
@@ -3492,7 +4340,7 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
               transition: "all 0.15s"
             }}
           >
-            Con integrantes
+            {t("groups.search.filterWithMembers")}
           </button>
           <button
             type="button"
@@ -3509,7 +4357,7 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
               transition: "all 0.15s"
             }}
           >
-            Vacíos
+            {t("groups.search.filterEmpty")}
           </button>
           <button
             type="button"
@@ -3526,7 +4374,7 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
               transition: "all 0.15s"
             }}
           >
-            Con líderes
+            {t("groups.search.filterWithLeaders")}
           </button>
         </div>
       </div>
@@ -3544,10 +4392,10 @@ export function GroupManager({ groups, allUsers }: { groups: any[], allUsers: an
         >
           <Building size={48} style={{ color: "#94a3b8", opacity: 0.25, margin: "0 auto 1rem", display: "block" }} />
           <h3 style={{ fontSize: "1.2rem", fontWeight: 800, margin: 0, color: "#ffffff" }}>
-            No se encontraron grupos
+            {t("groups.search.noGroupsFound")}
           </h3>
           <p style={{ color: "#94a3b8", margin: "0.5rem 0 0", fontSize: "0.9rem" }}>
-            Prueba ajustando los términos de búsqueda o filtros.
+            {t("groups.search.noGroupsHelp")}
           </p>
         </div>
       ) : (

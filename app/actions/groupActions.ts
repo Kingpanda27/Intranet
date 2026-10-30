@@ -1,28 +1,66 @@
 "use server"
 
 import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { authOptions, isSuperAdminEmail } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { createAuditLog } from "./auditActions"
 
 async function assertTechnology() {
   const session = await getServerSession(authOptions)
-  const isMasterAdmin = (session?.user as any)?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (session?.user as any)?.isSuperAdmin
+  const isMasterAdmin = isSuperAdminEmail((session?.user as any)?.email) || (session?.user as any)?.isSuperAdmin
   const role = (session?.user as any)?.role
-  if (!session?.user || (role !== "TECHNOLOGY" && role !== "IT_MANAGER" && role !== "TECHNOLOGY_ADMIN" && !isMasterAdmin)) {
-    throw new Error("Acceso denegado. Solo Tecnología o IT Manager pueden gestionar grupos.")
+  if (!session?.user || (role !== "TECHNOLOGY" && role !== "IT_MANAGER" && role !== "TECHNOLOGY_ADMIN" && role !== "ADMIN" && !isMasterAdmin)) {
+    throw new Error("Acceso denegado. Solo Tecnología, Administradores o IT Manager pueden gestionar grupos.")
   }
   return session
+}
+
+export async function assertCanEditGroup(groupId: string) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) {
+    throw new Error("No autenticado: Inicia sesión para realizar esta acción.")
+  }
+
+  const user = session.user as any
+  const isMasterAdmin = isSuperAdminEmail(user.email) || user.isSuperAdmin
+  const role = user.role
+  const isIntranetAdmin = isMasterAdmin || role === "TECHNOLOGY" || role === "IT_MANAGER" || role === "TECHNOLOGY_ADMIN" || role === "ADMIN"
+
+  if (isIntranetAdmin) {
+    return { session, user, isIntranetAdmin: true, isGroupLeader: false }
+  }
+
+  const userId = user.id
+  if (!userId || !groupId) {
+    throw new Error("Acceso denegado: Parámetros inválidos.")
+  }
+
+  const isLeader = await prisma.project.findFirst({
+    where: {
+      id: groupId,
+      OR: [
+        { supervisors: { some: { id: userId } } },
+        { subLeaders: { some: { id: userId } } }
+      ]
+    },
+    select: { id: true }
+  })
+
+  if (!isLeader) {
+    throw new Error("Acceso denegado: Solo los líderes de este grupo o los administradores del intranet pueden editarlo.")
+  }
+
+  return { session, user, isIntranetAdmin: false, isGroupLeader: true }
 }
 
 export async function getGroups() {
   await assertTechnology()
   const groups = await prisma.project.findMany({
     include: {
-      supervisors: { select: { id: true, name: true, email: true, role: true, image: true } },
-      subLeaders: { select: { id: true, name: true, email: true, role: true, image: true } },
-      members: { select: { id: true, name: true, email: true, role: true, image: true, lastSeen: true, requests: { where: { status: "APPROVED" }, select: { type: true, startDate: true, endDate: true, status: true } } } }
+      supervisors: { where: { isActive: true }, select: { id: true, name: true, email: true, role: true, image: true, isActive: true } },
+      subLeaders: { where: { isActive: true }, select: { id: true, name: true, email: true, role: true, image: true, isActive: true } },
+      members: { where: { isActive: true }, select: { id: true, name: true, email: true, role: true, image: true, lastSeen: true, isActive: true, requests: { where: { status: "APPROVED" }, select: { type: true, startDate: true, endDate: true, status: true } } } }
     },
     orderBy: { createdAt: "desc" }
   })
@@ -89,7 +127,7 @@ export async function createGroup(formData: FormData) {
 }
 
 export async function updateGroup(groupId: string, formData: FormData) {
-  await assertTechnology()
+  await assertCanEditGroup(groupId)
 
   const name = formData.get("name") as string
   const description = formData.get("description") as string
@@ -121,7 +159,7 @@ export async function updateGroup(groupId: string, formData: FormData) {
         ...(image !== undefined ? { image: image?.trim() || null } : {}),
         ...(icon !== undefined ? { icon: icon?.trim() || null } : {}),
         ...(color !== undefined ? { color: color?.trim() || null } : {}),
-        ...(supervisorIds.length > 0 ? { supervisors: { set: supervisorIds.map(id => ({ id })) } } : {}),
+        ...(supervisorIdsStr ? { supervisors: { set: supervisorIds.map(id => ({ id })) } } : {}),
         ...(subLeaderIdsStr ? { subLeaders: { set: subLeaderIds.map(id => ({ id })) } } : {})
       }
     })
@@ -135,6 +173,7 @@ export async function updateGroup(groupId: string, formData: FormData) {
     })
 
     revalidatePath("/admin/groups")
+    revalidatePath(`/groups/${groupId}`)
     return { success: true }
   } catch (error) {
     console.error(error)
@@ -189,13 +228,27 @@ export async function deleteGroup(groupId: string) {
 }
 
 export async function addMembersToGroup(groupId: string, userIds: string[]) {
-  await assertTechnology()
+  await assertCanEditGroup(groupId)
   if (!groupId || !Array.isArray(userIds) || userIds.length === 0) {
     return { error: "Debes seleccionar al menos un usuario para agregar." }
   }
   try {
+    // 1. Conectar usuarios al grupo en la relación muchos a muchos (_ProjectMembers)
+    await prisma.project.update({
+      where: { id: groupId },
+      data: {
+        members: {
+          connect: userIds.map(id => ({ id }))
+        }
+      }
+    })
+
+    // 2. Mantener compatibilidad con campo legado (si no tiene ninguno asignado)
     await prisma.user.updateMany({
-      where: { id: { in: userIds } },
+      where: { 
+        id: { in: userIds },
+        projectId: null
+      },
       data: { projectId: groupId }
     })
 
@@ -227,7 +280,6 @@ export async function removeMembersFromGroup(
   arg1: string | string[], 
   arg2?: string[]
 ) {
-  await assertTechnology()
   let groupId: string | null = null
   let userIds: string[] = []
 
@@ -241,31 +293,52 @@ export async function removeMembersFromGroup(
     userIds = [arg1]
   }
 
+  if (groupId) {
+    await assertCanEditGroup(groupId)
+  } else {
+    await assertTechnology()
+  }
+
   if (userIds.length === 0) {
     return { error: "Debes seleccionar al menos un integrante para remover." }
   }
 
   try {
-    // 1. Quitar de integrantes asignados al proyecto
-    await prisma.user.updateMany({
-      where: { 
-        id: { in: userIds },
-        ...(groupId ? { projectId: groupId } : {})
-      },
-      data: { projectId: null }
-    })
-
-    // 2. Si se pasó groupId, también desvincular de supervisores o sub-líderes del proyecto
     if (groupId) {
+      // 1. Desconectar de la relación muchos a muchos de este grupo
       await prisma.project.update({
         where: { id: groupId },
         data: {
+          members: { disconnect: userIds.map(id => ({ id })) },
           supervisors: { disconnect: userIds.map(id => ({ id })) },
           subLeaders: { disconnect: userIds.map(id => ({ id })) }
         }
       }).catch(err => {
-        console.warn("Notice on disconnecting supervisors/subLeaders in action:", err?.message)
+        console.warn("Notice on disconnecting members/supervisors in action:", err?.message)
       })
+
+      // 2. Si el projectId legado era este grupo, reasignar a otro grupo restante o null
+      const usersToReassign = await prisma.user.findMany({
+        where: { id: { in: userIds }, projectId: groupId },
+        select: { id: true, projects: { select: { id: true }, take: 1 } }
+      })
+      for (const u of usersToReassign) {
+        await prisma.user.update({
+          where: { id: u.id },
+          data: { projectId: u.projects[0]?.id || null }
+        })
+      }
+    } else {
+      // Desvinculación total de todos los grupos si no se pasó groupId
+      for (const userId of userIds) {
+        await prisma.user.update({
+          where: { id: userId },
+          data: {
+            projects: { set: [] },
+            projectId: null
+          }
+        })
+      }
     }
 
     await createAuditLog({
@@ -290,9 +363,45 @@ export async function removeMemberFromGroup(groupIdOrUserId: string, userIdOptio
   return await removeMembersFromGroup([groupIdOrUserId])
 }
 
-export async function getAllUsersForGroups() {
+export async function assignUserToGroups(userId: string, groupIds: string[]) {
   await assertTechnology()
+  if (!userId) return { error: "ID de usuario inválido." }
+
+  try {
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        projects: {
+          set: groupIds.map(id => ({ id }))
+        },
+        projectId: groupIds[0] || null
+      },
+      include: {
+        projects: { select: { id: true, name: true, color: true, icon: true } }
+      }
+    })
+
+    await createAuditLog({
+      action: "USER_GROUPS_UPDATED",
+      target: updated.name || userId,
+      metadata: { userId, groupIds, groupsCount: groupIds.length }
+    })
+
+    revalidatePath("/admin/groups")
+    return { success: true, user: updated }
+  } catch (err: any) {
+    console.error("Error asignando grupos al usuario:", err)
+    return { error: err?.message || "Error al asignar los grupos." }
+  }
+}
+
+export async function getAllUsersForGroups() {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) {
+    throw new Error("No autenticado: Inicia sesión para ver los colaboradores.")
+  }
   return await prisma.user.findMany({
+    where: { isActive: true },
     select: { 
       id: true, 
       name: true, 
@@ -301,7 +410,10 @@ export async function getAllUsersForGroups() {
       position: true,
       image: true, 
       projectId: true,
-      project: { select: { id: true, name: true } }
+      project: { select: { id: true, name: true, color: true } },
+      projects: { select: { id: true, name: true, color: true, icon: true } },
+      supervisedProjects: { select: { id: true, name: true } },
+      subLedProjects: { select: { id: true, name: true } }
     },
     orderBy: { name: "asc" }
   })
@@ -312,7 +424,7 @@ export async function setGroupLeaders(
   supervisorIds: string[], 
   subLeaderIds: string[] = []
 ) {
-  await assertTechnology()
+  await assertCanEditGroup(groupId)
   if (!groupId) return { error: "ID de grupo inválido." }
 
   try {

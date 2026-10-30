@@ -3,8 +3,10 @@
 import { useState, useEffect } from "react"
 import { Bot, Sparkles, RefreshCw } from "lucide-react"
 import { generateDailySummary } from "@/app/actions/ollamaActions"
+import { useTranslation } from "@/lib/i18n/LanguageContext"
 
 export function DailySummary() {
+  const { t } = useTranslation()
   const [summary, setSummary] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -43,7 +45,7 @@ export function DailySummary() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h3 style={{ fontSize: "1.2rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "0.5rem", margin: 0, color: "hsl(var(--primary))" }}>
           <Sparkles size={20} />
-          Resumen Diario por IA
+          {t("home.dailySummaryTitle")}
         </h3>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <button 
@@ -53,7 +55,7 @@ export function DailySummary() {
             className="btn btn-surface hover-scale"
             style={{ padding: "0.4rem 0.85rem", borderRadius: "999px", fontSize: "0.85rem", color: "hsl(var(--primary))", cursor: "pointer" }}
           >
-            {loading ? "Generando..." : isExpanded ? "Ocultar" : "Generar Resumen"}
+            {loading ? t("home.generatingSummary") : isExpanded ? t("home.hideSummary") : t("home.generateSummary")}
           </button>
           {isExpanded && (
             <button 
@@ -62,7 +64,7 @@ export function DailySummary() {
               disabled={loading}
               className="btn btn-ghost hover-scale" 
               style={{ padding: "0.5rem", borderRadius: "50%", color: "hsl(var(--muted-foreground))", cursor: "pointer" }}
-              title="Actualizar resumen"
+              title={t("home.refreshSummary")}
             >
               <RefreshCw size={16} style={{ animation: loading ? "spin 1s linear infinite" : "none" }} />
             </button>
@@ -75,7 +77,7 @@ export function DailySummary() {
           {loading && !summary ? (
             <div style={{ display: "flex", gap: "1rem", color: "hsl(var(--muted-foreground))", alignItems: "center", padding: "1rem 0" }}>
               <div className="spinner" style={{ width: 20, height: 20 }} />
-              <span style={{ fontSize: "0.9rem" }}>Analizando novedades de la empresa...</span>
+              <span style={{ fontSize: "0.9rem" }}>{t("home.analyzingNews")}</span>
             </div>
           ) : error ? (
             <div style={{ color: "hsl(var(--destructive))", fontSize: "0.9rem" }}>{error}</div>

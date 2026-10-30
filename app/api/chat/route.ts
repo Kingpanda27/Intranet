@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { semanticSearch } from '@/app/actions/embeddingActions';
 import { isCEO } from '@/lib/authorizationRoles';
+import { NON_ABSENCE_REQUEST_TYPES } from '@/lib/userUtils';
 
 export const maxDuration = 60;
 
@@ -175,7 +176,12 @@ export async function POST(req: Request) {
         const endOfDay = new Date(today);
         endOfDay.setHours(23, 59, 59, 999);
         const absents = await prisma.timeOffRequest.findMany({
-          where: { status: "APPROVED", startDate: { lte: endOfDay }, endDate: { gte: startOfDay } },
+          where: { 
+            status: "APPROVED", 
+            startDate: { lte: endOfDay }, 
+            endDate: { gte: startOfDay },
+            type: { notIn: NON_ABSENCE_REQUEST_TYPES }
+          },
           include: { user: { select: { name: true } } }
         });
         absentsContext = "\n\nEmpleados Ausentes Hoy:\n" + (absents.length > 0 ? absents.map(a => `- ${a.user.name} (${a.type})`).join("\n") : "No hay empleados ausentes hoy.");

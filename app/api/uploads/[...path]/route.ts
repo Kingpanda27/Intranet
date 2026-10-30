@@ -9,6 +9,15 @@ export async function GET(
 ) {
   const { path } = await params;
   
+  // Bloqueo de seguridad: Los documentos médicos y justificantes no se sirven públicamente
+  // y deben ser consultados mediante el endpoint seguro /api/attachments/[requestId]
+  if (path.length > 0 && (path[0] === "medical" || path[0] === "documents")) {
+    return new NextResponse(
+      "Acceso no autorizado: los documentos adjuntos están protegidos y requieren consulta mediante /api/attachments/[requestId]",
+      { status: 403 }
+    );
+  }
+
   const baseUploadsDir = resolve(process.cwd(), "public", "uploads");
   const targetPath = resolve(baseUploadsDir, ...path);
 

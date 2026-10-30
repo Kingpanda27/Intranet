@@ -4,10 +4,11 @@ import { useState, useTransition, useRef } from "react"
 import { updateUserAdmin, deleteUser, createUser, inviteUser, processBulkUsers, deleteBulkUsers } from "@/app/actions/userActions"
 import { createRoleChangeRequest } from "@/app/actions/roleRequestActions"
 import { updateUserVacationBalance } from "@/app/actions/timeOffActions"
-import { Shield, Mail, Edit3, Trash2, Check, X, User, UserPlus, ChevronDown, ChevronUp, FileUp, Send, Calendar, UserCheck, ShieldAlert, ArrowRight, AlertTriangle } from "lucide-react"
+import { Shield, Mail, Edit3, Trash2, Check, X, User, Users, UserPlus, ChevronDown, ChevronUp, FileUp, Send, Calendar, UserCheck, ShieldAlert, ArrowRight, AlertTriangle } from "lucide-react"
 import Papa from "papaparse"
+import { useTranslation } from "@/lib/i18n/LanguageContext"
 
-const ROLES = ["AGENT", "USER", "SUPERVISOR", "TEAM_LEAD", "MANAGER", "HR", "TECHNOLOGY", "TECHNOLOGY_ADMIN", "IT_MANAGER", "NO_ROLE"]
+const ROLES = ["AGENT", "USER", "SUPERVISOR", "TEAM_LEAD", "MANAGER", "HR", "TECHNOLOGY", "TECHNOLOGY_ADMIN", "ADMIN", "IT_MANAGER", "NO_ROLE"]
 
 const ROLE_COLORS: Record<string, string> = {
   AGENT: "hsl(220 10% 50%)",
@@ -16,6 +17,7 @@ const ROLE_COLORS: Record<string, string> = {
   TEAM_LEAD: "hsl(var(--primary))",
   MANAGER: "hsl(262 60% 55%)",
   HR: "hsl(165 60% 40%)",
+  ADMIN: "hsl(280 85% 60%)",
   TECHNOLOGY: "hsl(25 90% 55%)",
   TECHNOLOGY_ADMIN: "hsl(200 80% 50%)",
   IT_MANAGER: "hsl(200 80% 50%)",
@@ -23,6 +25,7 @@ const ROLE_COLORS: Record<string, string> = {
 }
 
 function BulkUploadPanel() {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isPending, startTransition] = useTransition()
@@ -101,7 +104,7 @@ function BulkUploadPanel() {
         }).filter((u: any) => u.email && u.email.includes("@"))
 
         if (validUsers.length === 0) {
-          setMessage({ type: "error", text: "No se encontraron usuarios válidos o activos en el CSV." })
+          setMessage({ type: "error", text: t("users.bulk.noValidUsers") })
           return
         }
 
@@ -111,16 +114,16 @@ function BulkUploadPanel() {
             const blockedCount = data.length - activeRows.length
             setMessage({ 
               type: "success", 
-              text: `¡Proceso completado! Creados: ${result.created}. Existentes actualizados: ${result.existing || 0}. Omitidos/Bloqueados: ${blockedCount}.` 
+              text: t("users.bulk.success", { created: result.created, existing: result.existing || 0, blocked: blockedCount })
             })
             if (fileInputRef.current) fileInputRef.current.value = ""
           } else {
-            setMessage({ type: "error", text: result.error || "Error al procesar el archivo." })
+            setMessage({ type: "error", text: result.error || t("users.bulk.error") })
           }
         })
       },
       error: (err) => {
-        setMessage({ type: "error", text: "Error al leer el archivo CSV." })
+        setMessage({ type: "error", text: t("users.bulk.fileReadError") })
         console.error(err)
       }
     })
@@ -131,7 +134,7 @@ function BulkUploadPanel() {
       <button onClick={() => setOpen(!open)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", border: "none", background: "none", cursor: "pointer", padding: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", fontWeight: 700, fontSize: "0.95rem", color: "hsl(var(--foreground))" }}>
           <FileUp size={18} style={{ color: "hsl(var(--primary))" }} />
-          Subir Usuarios por CSV
+          {t("users.bulk.title")}
         </div>
         {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
       </button>
@@ -139,7 +142,7 @@ function BulkUploadPanel() {
       {open && (
         <div style={{ marginTop: "1.25rem" }} className="animate-in">
           <p style={{ fontSize: "0.8rem", color: "hsl(var(--muted-foreground))", marginBottom: "1rem", lineHeight: "1.4" }}>
-            Selecciona un archivo <b>.csv</b>. Compatible de forma nativa con la exportación de <b>Microsoft 365 Admin Center</b> (<code>Display name</code>, <code>User principal name</code>, <code>Block credential</code>) o formato estándar (<code>nombre</code>, <code>correo</code>, <code>rol</code>). Solo se importarán usuarios activos.
+            {t("users.bulk.description")}
           </p>
           <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
             <input 
@@ -151,7 +154,7 @@ function BulkUploadPanel() {
               className="input"
               style={{ fontSize: "0.85rem", padding: "0.5rem 0.75rem", maxWidth: "300px" }}
             />
-            {isPending && <span style={{ fontSize: "0.8rem", color: "hsl(var(--primary))", fontWeight: 600 }}>Procesando...</span>}
+            {isPending && <span style={{ fontSize: "0.8rem", color: "hsl(var(--primary))", fontWeight: 600 }}>{t("users.bulk.processing")}</span>}
           </div>
           {message && (
             <div style={{ 
@@ -174,6 +177,7 @@ function BulkUploadPanel() {
 }
 
 function CreateUserPanel() {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -192,12 +196,12 @@ function CreateUserPanel() {
       setMessage(null)
       const result = await createUser(fd)
       if (result.success) {
-        setMessage({ type: "success", text: "Usuario creado exitosamente e invitación enviada." })
+        setMessage({ type: "success", text: t("users.create.success") })
         setName("")
         setEmail("")
         setRole("AGENT")
       } else {
-        setMessage({ type: "error", text: result.error || "Error al crear usuario." })
+        setMessage({ type: "error", text: result.error || t("users.create.error") })
       }
     })
   }
@@ -207,7 +211,7 @@ function CreateUserPanel() {
       <button onClick={() => setOpen(!open)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", border: "none", background: "none", cursor: "pointer", padding: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", fontWeight: 700, fontSize: "0.95rem", color: "hsl(var(--foreground))" }}>
           <UserPlus size={18} style={{ color: "hsl(var(--primary))" }} />
-          Crear Nuevo Usuario
+          {t("users.create.title")}
         </div>
         {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
       </button>
@@ -216,21 +220,21 @@ function CreateUserPanel() {
         <div style={{ marginTop: "1.25rem" }} className="animate-in">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.875rem", alignItems: "end" }}>
             <div>
-              <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, marginBottom: "0.35rem", color: "hsl(var(--muted-foreground))" }}>NOMBRE COMPLETO</label>
-              <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="Juan Pérez" style={{ fontSize: "0.85rem" }} />
+              <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, marginBottom: "0.35rem", color: "hsl(var(--muted-foreground))" }}>{t("users.create.nameLabel")}</label>
+              <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder={t("users.create.namePlaceholder")} style={{ fontSize: "0.85rem" }} />
             </div>
             <div>
-              <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, marginBottom: "0.35rem", color: "hsl(var(--muted-foreground))" }}>CORREO ELECTRÓNICO</label>
-              <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="usuario@correo.com" style={{ fontSize: "0.85rem" }} />
+              <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, marginBottom: "0.35rem", color: "hsl(var(--muted-foreground))" }}>{t("users.create.emailLabel")}</label>
+              <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder={t("users.create.emailPlaceholder")} style={{ fontSize: "0.85rem" }} />
             </div>
             <div>
-              <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, marginBottom: "0.35rem", color: "hsl(var(--muted-foreground))" }}>ROL ASIGNADO</label>
+              <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, marginBottom: "0.35rem", color: "hsl(var(--muted-foreground))" }}>{t("users.create.roleLabel")}</label>
               <select className="input" value={role} onChange={e => setRole(e.target.value)} style={{ fontSize: "0.85rem", padding: "0.5rem 0.75rem" }}>
                 {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
             <button onClick={handleCreate} disabled={isPending || !name.trim() || !email.trim()} className="btn btn-primary" style={{ height: "38px", display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8rem", whiteSpace: "nowrap" }}>
-              <UserPlus size={14} /> {isPending ? "Creando..." : "Crear"}
+              <UserPlus size={14} /> {isPending ? t("users.create.creatingBtn") : t("users.create.createBtn")}
             </button>
           </div>
           {message && (
@@ -270,6 +274,7 @@ function UserRow({
   onDeleteRequest: (user: any) => void
   onRequestRole: (user: any) => void
 }) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(user.name || "")
   const [email, setEmail] = useState(user.email || "")
@@ -300,11 +305,11 @@ function UserRow({
         if (vacationBalance !== user.vacationBalance) {
           await updateUserVacationBalance(user.id, Number(vacationBalance))
         }
-        setMessage({ type: "success", text: "Guardado" })
+        setMessage({ type: "success", text: t("users.actions.saved") })
         setEditing(false)
         setTimeout(() => setMessage(null), 3000)
       } else {
-        setMessage({ type: "error", text: result.error || "Error" })
+        setMessage({ type: "error", text: result.error || t("users.actions.error") })
       }
     })
   }
@@ -313,10 +318,10 @@ function UserRow({
     startTransition(async () => {
       const result = await inviteUser(user.id)
       if (result.success) {
-        setMessage({ type: "success", text: "Enviada ✅" })
+        setMessage({ type: "success", text: t("users.actions.inviteSent") })
         setTimeout(() => setMessage(null), 4000)
       } else {
-        setMessage({ type: "error", text: result.error || "Error al invitar" })
+        setMessage({ type: "error", text: result.error || t("users.actions.inviteError") })
         setTimeout(() => setMessage(null), 5000)
       }
     })
@@ -337,7 +342,7 @@ function UserRow({
               cursor: isSelf ? "not-allowed" : "pointer",
               accentColor: "hsl(var(--primary))"
             }}
-            title={isSelf ? "No puedes seleccionarte a ti mismo" : `Seleccionar a ${user.name}`}
+            title={isSelf ? t("users.table.selectSelfTooltip") : t("users.table.selectUserTooltip", { name: user.name })}
           />
         </td>
       )}
@@ -363,16 +368,31 @@ function UserRow({
                   className="user-edit-input" 
                   style={{ fontSize: "0.85rem", width: "170px" }} 
                   autoFocus
-                  placeholder="Nombre completo"
+                  placeholder={t("users.table.fullNamePlaceholder")}
                 />
                 <span className="user-editing-pill-badge">
-                  Editando
+                  {t("users.table.editing")}
                 </span>
               </div>
             ) : (
-              <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>{user.name}</div>
+              <div style={{ fontWeight: 700, fontSize: "0.9rem", display: "inline-flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" }}>
+                {user.name}
+                {(user.isActive === false || user.status === "INACTIVE") && (
+                  <span style={{
+                    fontSize: "0.68rem",
+                    fontWeight: 700,
+                    padding: "0.1rem 0.45rem",
+                    borderRadius: "0.35rem",
+                    backgroundColor: "rgba(239, 68, 68, 0.12)",
+                    color: "#ef4444",
+                    border: "1px solid rgba(239, 68, 68, 0.25)"
+                  }}>
+                    {t("users.table.inactiveBadge")}
+                  </span>
+                )}
+              </div>
             )}
-            <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>{user.position || "Empleado"}</div>
+            <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>{user.position || t("users.table.defaultPosition")}</div>
           </div>
         </div>
       </td>
@@ -384,7 +404,7 @@ function UserRow({
             onChange={e => setEmail(e.target.value)} 
             className="user-edit-input" 
             style={{ fontSize: "0.85rem", width: "100%", maxWidth: "230px" }} 
-            placeholder="correo@empresa.com"
+            placeholder={t("users.table.emailPlaceholder")}
           />
         ) : (
           user.email
@@ -428,10 +448,10 @@ function UserRow({
               className="user-edit-input" 
               style={{ width: "70px" }} 
             />
-            <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>días</span>
+            <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>{t("users.table.days")}</span>
           </div>
         ) : (
-          `${user.vacationBalance ?? 0} días`
+          `${user.vacationBalance ?? 0} ${t("users.table.days")}`
         )}
       </td>
 
@@ -461,16 +481,16 @@ function UserRow({
                   className="action-edit-btn-save"
                 >
                   <Check size={13} />
-                  <span>{isPending ? "Guardando..." : "Guardar"}</span>
+                  <span>{isPending ? t("users.actions.saving") : t("users.actions.save")}</span>
                 </button>
                 <button 
                   type="button"
                   onClick={handleCancel} 
                   className="action-edit-btn-cancel"
-                  title="Descartar cambios"
+                  title={t("users.actions.discardChanges")}
                 >
                   <X size={13} />
-                  <span>Cancelar</span>
+                  <span>{t("users.actions.cancel")}</span>
                 </button>
               </div>
             ) : (
@@ -479,10 +499,10 @@ function UserRow({
                   type="button"
                   onClick={() => setEditing(true)} 
                   className="action-dock-btn action-dock-btn-edit"
-                  title={`Editar datos de ${user.name}`}
+                  title={t("users.actions.editTooltip", { name: user.name })}
                 >
                   <Edit3 size={12.5} className="action-dock-icon" />
-                  <span>Editar</span>
+                  <span>{t("users.actions.edit")}</span>
                 </button>
 
                 <span className="action-dock-divider" />
@@ -492,10 +512,10 @@ function UserRow({
                   onClick={handleInvite} 
                   disabled={isPending} 
                   className="action-dock-btn action-dock-btn-invite"
-                  title={`Reenviar invitación a ${user.email}`}
+                  title={t("users.actions.inviteTooltip", { email: user.email })}
                 >
                   <Send size={12} className="action-dock-icon" />
-                  <span>{isPending ? "Enviando..." : "Invitar"}</span>
+                  <span>{isPending ? t("users.actions.inviting") : t("users.actions.invite")}</span>
                 </button>
 
                 <span className="action-dock-divider" />
@@ -505,7 +525,7 @@ function UserRow({
                   onClick={() => onDeleteRequest(user)} 
                   disabled={isPending || isSelf} 
                   className={`action-dock-btn action-dock-btn-delete ${isSelf ? "disabled" : ""}`}
-                  title={isSelf ? "No puedes eliminar tu propia cuenta" : `Eliminar a ${user.name}`}
+                  title={isSelf ? t("users.actions.deleteSelfTooltip") : t("users.actions.deleteTooltip", { name: user.name })}
                 >
                   <Trash2 size={13} className="action-dock-icon" />
                 </button>
@@ -520,10 +540,10 @@ function UserRow({
                   onClick={() => onRequestRole(user)}
                   className="action-dock-btn"
                   style={{ color: "hsl(var(--primary))" }}
-                  title="Solicitar cambio de rol para este usuario"
+                  title={t("users.actions.requestRoleTooltip")}
                 >
                   <UserCheck size={13} style={{ color: "hsl(var(--primary))" }} />
-                  <span>Solicitar rol</span>
+                  <span>{t("users.actions.requestRole")}</span>
                 </button>
               </div>
             )
@@ -801,6 +821,7 @@ export function UserManager({
   currentUserRole?: string
   currentUserId?: string 
 }) {
+  const { t } = useTranslation()
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState("ALL")
   const [requestModalUser, setRequestModalUser] = useState<any | null>(null)
@@ -857,10 +878,10 @@ export function UserManager({
         setSelectedUserIds(prev => prev.filter(id => !idsToDelete.includes(id)))
         setDeleteModalUsers(null)
       } else {
-        setDeleteModalError(result.error || "Ocurrió un error al eliminar los usuarios.")
+        setDeleteModalError(result.error || t("users.deleteModal.error"))
       }
     } catch (err: any) {
-      setDeleteModalError(err?.message || "Error inesperado al eliminar.")
+      setDeleteModalError(err?.message || t("users.deleteModal.error"))
     } finally {
       setIsDeleting(false)
     }
@@ -868,7 +889,7 @@ export function UserManager({
 
   const handleSendRoleRequest = () => {
     if (!requestModalUser || !reason.trim()) {
-      setModalMessage({ type: "error", text: "Por favor especifica el motivo de la solicitud." })
+      setModalMessage({ type: "error", text: t("users.roleRequestModal.reasonRequired") })
       return
     }
 
@@ -881,14 +902,14 @@ export function UserManager({
       })
 
       if (res.success) {
-        setModalMessage({ type: "success", text: "Solicitud enviada correctamente. Pendiente de aprobación por Technology." })
+        setModalMessage({ type: "success", text: t("users.roleRequestModal.success") })
         setReason("")
         setTimeout(() => {
           setRequestModalUser(null)
           setModalMessage(null)
         }, 2500)
       } else {
-        setModalMessage({ type: "error", text: res.error || "Error al enviar la solicitud." })
+        setModalMessage({ type: "error", text: res.error || t("users.roleRequestModal.error") })
       }
     })
   }
@@ -896,6 +917,20 @@ export function UserManager({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
       <style dangerouslySetInnerHTML={{ __html: USER_ACTIONS_STYLES }} />
+      
+      {/* Header reactivo traducible */}
+      <header style={{ marginBottom: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
+          <div style={{ padding: "0.6rem", borderRadius: "0.75rem", backgroundColor: "hsl(25 90% 55% / 0.15)" }}>
+            <Users size={24} style={{ color: "hsl(25 90% 55%)" }} />
+          </div>
+          <h1 style={{ margin: 0, fontSize: "2rem", fontWeight: 800 }}>{t("users.pageTitle")}</h1>
+        </div>
+        <p style={{ color: "hsl(var(--muted-foreground))", margin: 0 }}>
+          {t("users.pageSubtitle")}
+        </p>
+      </header>
+
       {/* Paneles de Creación: Creación individual para Tecnología, Managers y Administradores; Carga masiva para Tecnología */}
       {canCreate && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: "1.25rem" }}>
@@ -909,7 +944,7 @@ export function UserManager({
         <div style={{ position: "relative", flex: 1, minWidth: "260px", maxWidth: "420px" }}>
           <input
             className="input"
-            placeholder="Buscar por nombre o correo corporativo..."
+            placeholder={t("users.searchPlaceholder")}
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{ fontSize: "0.85rem", paddingLeft: "1rem", borderRadius: "999px" }}
@@ -933,7 +968,7 @@ export function UserManager({
                 cursor: "pointer"
               }}
             >
-              {rf === "ALL" ? "Todos los roles" : rf}
+              {rf === "ALL" ? t("users.allRoles") : rf}
             </button>
           ))}
         </div>
@@ -971,7 +1006,7 @@ export function UserManager({
               {selectedUserIds.length}
             </span>
             <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>
-              {selectedUserIds.length === 1 ? "1 usuario seleccionado" : `${selectedUserIds.length} usuarios seleccionados`}
+              {selectedUserIds.length === 1 ? t("users.batch.selectedCount", { count: 1 }) : t("users.batch.selectedCountPlural", { count: selectedUserIds.length })}
             </span>
             <button
               type="button"
@@ -979,7 +1014,7 @@ export function UserManager({
               className="btn btn-ghost"
               style={{ fontSize: "0.8rem", padding: "0.25rem 0.5rem", textDecoration: "underline", color: "hsl(var(--muted-foreground))" }}
             >
-              Deseleccionar todo
+              {t("users.batch.deselectAll")}
             </button>
           </div>
 
@@ -1005,7 +1040,7 @@ export function UserManager({
               boxShadow: "0 4px 14px hsl(0 84% 50% / 0.3)"
             }}
           >
-            <Trash2 size={15} /> Eliminar {selectedUserIds.length} {selectedUserIds.length === 1 ? "usuario" : "usuarios"}
+            <Trash2 size={15} /> {selectedUserIds.length === 1 ? t("users.batch.deleteBtn", { count: 1 }) : t("users.batch.deleteBtnPlural", { count: selectedUserIds.length })}
           </button>
         </div>
       )}
@@ -1025,22 +1060,22 @@ export function UserManager({
                     }}
                     onChange={handleToggleSelectAll}
                     style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "hsl(var(--primary))" }}
-                    title="Seleccionar todos los usuarios visibles"
+                    title={t("users.table.selectAllTooltip")}
                   />
                 </th>
               )}
-              <th>Usuario</th>
-              <th>Correo</th>
-              <th>Rol</th>
-              <th>Vacaciones</th>
-              <th style={{ minWidth: "195px" }}>Acciones</th>
+              <th>{t("users.table.user")}</th>
+              <th>{t("users.table.email")}</th>
+              <th>{t("users.table.role")}</th>
+              <th>{t("users.table.vacations")}</th>
+              <th style={{ minWidth: "195px" }}>{t("users.table.actions")}</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={isTech ? 6 : 5} style={{ padding: "3rem", textAlign: "center", color: "hsl(var(--muted-foreground))" }}>
-                  No se encontraron usuarios coincidentes.
+                  {t("users.table.noUsersFound")}
                 </td>
               </tr>
             ) : (
@@ -1111,12 +1146,12 @@ export function UserManager({
               <div style={{ flex: 1 }}>
                 <h3 style={{ margin: "0 0 0.4rem", fontSize: "1.2rem", fontWeight: 700, color: "hsl(var(--foreground))" }}>
                   {deleteModalUsers.length === 1 
-                    ? `¿Eliminar a ${deleteModalUsers[0].name}?`
-                    : `¿Eliminar ${deleteModalUsers.length} usuarios?`
+                    ? t("users.deleteModal.titleSingle", { name: deleteModalUsers[0].name })
+                    : t("users.deleteModal.titleMulti", { count: deleteModalUsers.length })
                   }
                 </h3>
                 <p style={{ margin: 0, fontSize: "0.85rem", color: "hsl(var(--muted-foreground))", lineHeight: 1.45 }}>
-                  Esta acción es <b>irreversible</b>. Se eliminarán permanentemente las cuentas, accesos, sesiones y datos vinculados en la intranet.
+                  {t("users.deleteModal.description")}
                 </p>
               </div>
             </div>
@@ -1159,8 +1194,8 @@ export function UserManager({
                     fontSize: "0.7rem",
                     fontWeight: 700,
                     backgroundColor: `${ROLE_COLORS[u.role] || "hsl(var(--primary))"}22`,
-                    color: ROLE_COLORS[u.role] || "hsl(var(--primary))",
-                    flexShrink: 0
+                    color: ROLE_COLORS[u.role] || "hsl(var(--primary))"
+                    ,flexShrink: 0
                   }}>
                     {u.role}
                   </span>
@@ -1194,7 +1229,7 @@ export function UserManager({
                 className="btn btn-surface"
                 style={{ padding: "0.55rem 1.25rem", borderRadius: "0.6rem", fontSize: "0.85rem", cursor: isDeleting ? "not-allowed" : "pointer" }}
               >
-                Cancelar
+                {t("users.deleteModal.cancelBtn")}
               </button>
 
               <button
@@ -1217,7 +1252,7 @@ export function UserManager({
                 }}
               >
                 <Trash2 size={15} />
-                {isDeleting ? "Eliminando..." : "Sí, eliminar definitivamente"}
+                {isDeleting ? t("users.deleteModal.deletingBtn") : t("users.deleteModal.confirmBtn")}
               </button>
             </div>
           </div>
@@ -1235,10 +1270,10 @@ export function UserManager({
         }}>
           <div className="card glass animate-in" style={{ width: "100%", maxWidth: "480px", padding: "2rem", borderRadius: "1.25rem", boxShadow: "var(--shadow-xl)" }}>
             <h3 style={{ margin: "0 0 0.5rem", fontSize: "1.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <UserCheck size={20} style={{ color: "hsl(var(--primary))" }} /> Solicitar Cambio de Rol
+              <UserCheck size={20} style={{ color: "hsl(var(--primary))" }} /> {t("users.roleRequestModal.title")}
             </h3>
             <p style={{ fontSize: "0.85rem", color: "hsl(var(--muted-foreground))", marginBottom: "1.25rem" }}>
-              La solicitud será enviada al equipo de Tecnología para su revisión y aprobación.
+              {t("users.roleRequestModal.subtitle")}
             </p>
 
             {modalMessage && (
@@ -1253,14 +1288,14 @@ export function UserManager({
 
             <div style={{ display: "flex", flexDirection: "column", gap: "1rem", fontSize: "0.875rem" }}>
               <div>
-                <b>Usuario:</b> {requestModalUser.name} ({requestModalUser.email})
+                <b>{t("users.roleRequestModal.userLabel")}</b> {requestModalUser.name} ({requestModalUser.email})
               </div>
               <div>
-                <b>Rol actual:</b> <span style={{ padding: "0.15rem 0.5rem", borderRadius: "4px", backgroundColor: "hsl(var(--muted))", fontWeight: 700 }}>{requestModalUser.role}</span>
+                <b>{t("users.roleRequestModal.currentRoleLabel")}</b> <span style={{ padding: "0.15rem 0.5rem", borderRadius: "4px", backgroundColor: "hsl(var(--muted))", fontWeight: 700 }}>{requestModalUser.role}</span>
               </div>
 
               <div>
-                <label style={{ display: "block", fontWeight: 600, marginBottom: "0.35rem" }}>Nuevo rol solicitado:</label>
+                <label style={{ display: "block", fontWeight: 600, marginBottom: "0.35rem" }}>{t("users.roleRequestModal.targetRoleLabel")}</label>
                 <select
                   value={targetRole}
                   onChange={(e) => setTargetRole(e.target.value)}
@@ -1275,12 +1310,12 @@ export function UserManager({
               </div>
 
               <div>
-                <label style={{ display: "block", fontWeight: 600, marginBottom: "0.35rem" }}>Motivo de la solicitud (obligatorio):</label>
+                <label style={{ display: "block", fontWeight: 600, marginBottom: "0.35rem" }}>{t("users.roleRequestModal.reasonLabel")}</label>
                 <textarea
                   rows={3}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="Explica la justificación operativa o ascenso del colaborador..."
+                  placeholder={t("users.roleRequestModal.reasonPlaceholder")}
                   className="input"
                   style={{ width: "100%", padding: "0.6rem", resize: "vertical" }}
                 />
@@ -1294,7 +1329,7 @@ export function UserManager({
                 className="btn btn-surface"
                 style={{ padding: "0.5rem 1.25rem", borderRadius: "0.6rem", cursor: "pointer" }}
               >
-                Cancelar
+                {t("users.roleRequestModal.cancelBtn")}
               </button>
               <button
                 type="button"
@@ -1303,7 +1338,7 @@ export function UserManager({
                 className="btn btn-primary"
                 style={{ padding: "0.5rem 1.25rem", borderRadius: "0.6rem", fontWeight: 700, cursor: (isPending || !reason.trim()) ? "not-allowed" : "pointer" }}
               >
-                {isPending ? "Enviando..." : "Enviar Solicitud"}
+                {isPending ? t("users.roleRequestModal.submittingBtn") : t("users.roleRequestModal.submitBtn")}
               </button>
             </div>
           </div>

@@ -5,6 +5,17 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import AzureADProvider from "next-auth/providers/azure-ad"
 import bcrypt from "bcryptjs"
 
+export const SUPERADMIN_EMAILS = [
+  "ireyes@tnoutsourcing.com",
+  "rurena@tnoutsourcing.com",
+  "pbrun@tnoutsourcing.com"
+]
+
+export function isSuperAdminEmail(email?: string | null): boolean {
+  if (!email) return false
+  return SUPERADMIN_EMAILS.includes(email.toLowerCase().trim())
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
@@ -54,8 +65,8 @@ export const authOptions: NextAuthOptions = {
         }
 
         const cleanRole = (user.role || "USER").trim()
-        if (cleanRole === "NO_ROLE" || user.status === "INACTIVE") {
-          throw new Error("Tu cuenta está inactiva y no tiene acceso.")
+        if (cleanRole === "NO_ROLE" || user.status === "INACTIVE" || user.isActive === false) {
+          throw new Error("Tu cuenta ha causado baja o está inactiva y no tiene acceso al sistema.")
         }
 
         const isPasswordValid = await bcrypt.compare(credentials.password, user.password)
@@ -127,9 +138,9 @@ export const authOptions: NextAuthOptions = {
                 })
               }
 
-              // Verificar si la cuenta está inactiva
-              if (dbUser.status === "INACTIVE" || dbUser.role === "NO_ROLE") {
-                console.warn(`Intento de login de usuario inactivo: ${userEmail}`);
+              // Verificar si la cuenta está inactiva o ha causado baja
+              if (dbUser.status === "INACTIVE" || dbUser.role === "NO_ROLE" || dbUser.isActive === false) {
+                console.warn(`Intento de login de usuario inactivo o dado de baja: ${userEmail}`);
                 return false
               }
             } else {
@@ -195,7 +206,11 @@ export const authOptions: NextAuthOptions = {
               ...(email ? [{ email: String(email).trim().toLowerCase() }] : [])
             ]
           },
-          select: { id: true, email: true, role: true, name: true, status: true, entraObjectId: true, position: true, project: { select: { name: true } } }
+          select: { 
+            id: true, email: true, role: true, name: true, status: true, isActive: true, entraObjectId: true, position: true, 
+            project: { select: { name: true } },
+            projects: { select: { name: true } }
+          }
         })
 
         if (dbUser) {
@@ -203,15 +218,18 @@ export const authOptions: NextAuthOptions = {
           token.role = String(dbUser.role || "AGENT").trim()
           token.name = dbUser.name
           token.status = dbUser.status || "ACTIVE"
+          token.isActive = Boolean(dbUser.isActive ?? true) && dbUser.status !== "INACTIVE"
           token.entraObjectId = dbUser.entraObjectId
           token.position = dbUser.position || ""
-          token.projectName = dbUser.project?.name || "Telecom Networks"
-          token.isSuperAdmin = String(email || dbUser.email || '').toLowerCase().trim() === "ireyes@tnoutsourcing.com"
+          token.projectName = (dbUser.projects && dbUser.projects.length > 0)
+            ? dbUser.projects.map((p: any) => p.name).join(", ")
+            : (dbUser.project?.name || "Telecom Networks")
+          token.isSuperAdmin = isSuperAdminEmail(String(email || dbUser.email || ''))
         }
       }
 
       const emailStr = String(email || token.email || '').toLowerCase().trim()
-      if (emailStr === "ireyes@tnoutsourcing.com") {
+      if (isSuperAdminEmail(emailStr)) {
         token.isSuperAdmin = true
       }
 
@@ -223,11 +241,12 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).id = token.id
         ;(session.user as any).role = token.role
         ;(session.user as any).status = token.status || "ACTIVE"
+        ;(session.user as any).isActive = token.isActive !== false
         ;(session.user as any).entraObjectId = token.entraObjectId
         ;(session.user as any).name = token.name || session.user.name
         ;(session.user as any).position = (token as any).position || ""
         ;(session.user as any).projectName = (token as any).projectName || "Telecom Networks"
-        ;(session.user as any).isSuperAdmin = Boolean(token.isSuperAdmin || (session.user?.email && session.user.email.toLowerCase().trim() === "ireyes@tnoutsourcing.com"))
+        ;(session.user as any).isSuperAdmin = Boolean(token.isSuperAdmin || (session.user?.email && isSuperAdminEmail(session.user.email)))
       }
       return session
     },

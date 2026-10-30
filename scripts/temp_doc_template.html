@@ -1,0 +1,1433 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Documentación Oficial: Intranet Corporativa v1.2.9</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    @page {
+      size: A4 portrait;
+      margin: 14mm 13mm 14mm 13mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      letter-spacing: normal !important;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #1e293b;
+      background-color: #ffffff;
+      font-size: 8.8pt;
+      line-height: 1.5;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      word-break: normal;
+      overflow-wrap: break-word;
+      hyphens: none;
+    }
+
+    /* Print Break Utilities */
+    .page-break {
+      page-break-before: always;
+      break-before: page;
+    }
+
+    .avoid-break {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    /* Header & Footer styling for pages */
+    .running-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 7.2pt;
+      color: #64748b;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 3px;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+    }
+
+    .running-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 7.2pt;
+      color: #94a3b8;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 4px;
+      margin-top: 14px;
+    }
+
+    /* Cover Page */
+    .cover-container {
+      min-height: 258mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 14mm 12mm 12mm 12mm;
+      border: 2px solid #0284c7;
+      border-radius: 14px;
+      background: linear-gradient(145deg, #ffffff 0%, #f0f9ff 45%, #e0f2fe 100%);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cover-container::before {
+      content: "";
+      position: absolute;
+      top: -100px;
+      right: -100px;
+      width: 280px;
+      height: 280px;
+      background: radial-gradient(circle, rgba(14, 165, 233, 0.18) 0%, rgba(255, 255, 255, 0) 70%);
+      border-radius: 50%;
+    }
+
+    .cover-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .cover-logo {
+      max-height: 58px;
+      object-fit: contain;
+    }
+
+    .cover-badge-top {
+      background: #0284c7;
+      color: #ffffff;
+      font-size: 7.8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 5px 12px;
+      border-radius: 20px;
+      box-shadow: 0 4px 10px rgba(2, 132, 199, 0.25);
+    }
+
+    .cover-main {
+      margin-top: 30px;
+      margin-bottom: 25px;
+    }
+
+    .cover-kicker {
+      font-size: 10pt;
+      font-weight: 800;
+      color: #0369a1;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .cover-title {
+      font-size: 26pt;
+      font-weight: 800;
+      line-height: 1.15;
+      color: #0f172a;
+      margin-bottom: 14px;
+    }
+
+    .cover-title span {
+      color: #0284c7;
+    }
+
+    .cover-subtitle {
+      font-size: 11.5pt;
+      font-weight: 500;
+      color: #334155;
+      line-height: 1.45;
+      max-width: 580px;
+      margin-bottom: 20px;
+    }
+
+    .cover-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .cover-tag {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      color: #1e293b;
+      font-size: 7.5pt;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 5px;
+    }
+
+    .cover-card-info {
+      background: #ffffff;
+      border: 1px solid #bae6fd;
+      border-radius: 10px;
+      padding: 14px 18px;
+      box-shadow: 0 8px 20px -4px rgba(2, 132, 199, 0.1);
+    }
+
+    .cover-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .cover-meta-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .cover-meta-label {
+      font-size: 7.4pt;
+      font-weight: 700;
+      color: #64748b;
+      margin-bottom: 2px;
+    }
+
+    .cover-meta-value {
+      font-size: 9pt;
+      font-weight: 600;
+      color: #0f172a;
+    }
+
+    .cover-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 12px;
+      border-top: 1px solid #cbd5e1;
+      font-size: 7.5pt;
+      color: #64748b;
+    }
+
+    /* Headings */
+    h1 {
+      font-size: 15.5pt;
+      font-weight: 800;
+      color: #0f172a;
+      margin-top: 14px;
+      margin-bottom: 10px;
+      padding-bottom: 5px;
+      border-bottom: 2px solid #0284c7;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    h2 {
+      font-size: 11.5pt;
+      font-weight: 700;
+      color: #1e293b;
+      margin-top: 12px;
+      margin-bottom: 6px;
+    }
+
+    h3 {
+      font-size: 9.8pt;
+      font-weight: 700;
+      color: #0369a1;
+      margin-top: 10px;
+      margin-bottom: 4px;
+    }
+
+    p {
+      margin-bottom: 7px;
+      text-align: left;
+      word-break: normal;
+      overflow-wrap: break-word;
+      hyphens: none;
+    }
+
+    ul, ol {
+      margin-left: 18px;
+      margin-bottom: 8px;
+    }
+
+    li {
+      margin-bottom: 3px;
+    }
+
+    /* Table of Contents */
+    .toc-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-top: 10px;
+      margin-bottom: 16px;
+    }
+
+    .toc-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 4px 0;
+      border-bottom: 1px dashed #e2e8f0;
+      font-size: 8.4pt;
+    }
+
+    .toc-item.level-1 {
+      font-weight: 700;
+      color: #0f172a;
+      margin-top: 3px;
+    }
+
+    .toc-item.level-2 {
+      padding-left: 12px;
+      color: #334155;
+      font-size: 7.8pt;
+    }
+
+    .toc-dots {
+      flex: 1;
+      margin: 0 6px;
+      border-bottom: 1px dotted #cbd5e1;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0 12px 0;
+      font-size: 8pt;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid #e2e8f0;
+    }
+
+    th {
+      background-color: #0f172a;
+      color: #ffffff;
+      font-weight: 700;
+      text-align: left;
+      padding: 6px 8px;
+      font-size: 7.5pt;
+      text-transform: uppercase;
+    }
+
+    td {
+      padding: 5px 8px;
+      border-bottom: 1px solid #f1f5f9;
+      color: #334155;
+      vertical-align: top;
+    }
+
+    tr:nth-child(even) td {
+      background-color: #f8fafc;
+    }
+
+    /* Alerts / Callouts */
+    .alert {
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin: 8px 0 10px 0;
+      font-size: 8.2pt;
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .alert-icon {
+      font-size: 11pt;
+      line-height: 1;
+    }
+
+    .alert-content {
+      flex: 1;
+    }
+
+    .alert-info {
+      background-color: #f0f9ff;
+      border-left: 3px solid #0284c7;
+      color: #0369a1;
+    }
+
+    .alert-success {
+      background-color: #f0fdf4;
+      border-left: 3px solid #16a34a;
+      color: #15803d;
+    }
+
+    .alert-warning {
+      background-color: #fffbeb;
+      border-left: 3px solid #f59e0b;
+      color: #b45309;
+    }
+
+    .alert-danger {
+      background-color: #fef2f2;
+      border-left: 3px solid #ef4444;
+      color: #b91c1c;
+    }
+
+    /* Code blocks */
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 7.5pt;
+      line-height: 1.4;
+      margin: 6px 0 10px 0;
+      overflow-x: auto;
+      border: 1px solid #1e293b;
+    }
+
+    code {
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 7.6pt;
+      background: #f1f5f9;
+      color: #0f172a;
+      padding: 1px 4px;
+      border-radius: 3px;
+      border: 1px solid #e2e8f0;
+    }
+
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+      border: none;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      font-size: 7pt;
+      font-weight: 700;
+      border-radius: 3px;
+      text-transform: uppercase;
+    }
+
+    .badge-primary { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+    .badge-success { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .badge-warning { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+    .badge-danger  { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+
+    /* Visual Diagram Card */
+    .diagram-card {
+      background: #0f172a;
+      color: #f8fafc;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin: 8px 0 12px 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 7.2pt;
+      line-height: 1.3;
+      border: 1px solid #334155;
+    }
+
+    .module-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+
+    .module-card-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 700;
+      color: #0f172a;
+      font-size: 8.5pt;
+      margin-bottom: 3px;
+    }
+
+    .color-chip {
+      width: 9px;
+      height: 9px;
+      border-radius: 2px;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- COVER PAGE -->
+  <div class="cover-container avoid-break">
+    <div class="cover-top">
+      <img src="data:image/png;base64,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" alt="Telecom Networks" class="cover-logo">
+      <div class="cover-badge-top">Manual de Operación & Arquitectura</div>
+    </div>
+
+    <div class="cover-main">
+      <div class="cover-kicker">Documento Técnico & Administrativo Oficial</div>
+      <h1 class="cover-title" style="border:none; margin:0; padding:0;">
+        Plataforma: <span>Intranet Corporativa</span>
+      </h1>
+      <p class="cover-subtitle">
+        Guía Completa de Referencia del Sistema: Arquitectura de Software, Modelo de Seguridad RBAC, Operación de Módulos, Inteligencia Artificial Híbrida y Despliegue de Alta Disponibilidad.
+      </p>
+
+      <div class="cover-tags">
+        <span class="cover-tag">Next.js 15 App Router</span>
+        <span class="cover-tag">React 19</span>
+        <span class="cover-tag">MySQL 8.x & Prisma 5.22</span>
+        <span class="cover-tag">Redis 7.x</span>
+        <span class="cover-tag">NVIDIA NIM AI Cloud</span>
+        <span class="cover-tag">Ollama Local</span>
+        <span class="cover-tag">Row-Level Authorization</span>
+        <span class="cover-tag">OWASP Security</span>
+      </div>
+    </div>
+
+    <div class="cover-card-info">
+      <div class="cover-meta-grid">
+        <div class="cover-meta-item">
+          <span class="cover-meta-label">Versión del Sistema:</span>
+          <span class="cover-meta-value">v1.2.9 (Build de Producción)</span>
+        </div>
+        <div class="cover-meta-item">
+          <span class="cover-meta-label">Fecha de Actualización:</span>
+          <span class="cover-meta-value">27 de Octubre de 2026</span>
+        </div>
+        <div class="cover-meta-item">
+          <span class="cover-meta-label">Organización:</span>
+          <span class="cover-meta-value">Telecom Networks</span>
+        </div>
+        <div class="cover-meta-item">
+          <span class="cover-meta-label">Desarrollo & Autoría:</span>
+          <span class="cover-meta-value">Iván Reyes (AI & Software Development)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="cover-bottom">
+      <span>Telecom Networks © 2026 — Todos los derechos reservados.</span>
+      <span>Confidencial — Uso Interno Exclusivo</span>
+    </div>
+  </div>
+
+  <!-- PAGE BREAK TO TOC -->
+  <div class="page-break"></div>
+
+  <!-- TABLE OF CONTENTS -->
+  <div class="running-header">
+    <span>Intranet Corporativa — Manual de Operación y Arquitectura v1.2.9</span>
+    <span>Página 2 de 14</span>
+  </div>
+
+  <h1>Índice de Contenido General</h1>
+  <p>Esta documentación técnica y funcional unifica los estándares arquitectónicos, operacionales y de seguridad de la Intranet Corporativa de Telecom Networks.</p>
+
+  <div class="toc-card avoid-break">
+    <div class="toc-item level-1"><span>1. Introducción & Visión General del Sistema</span><div class="toc-dots"></div><span>Pág. 3</span></div>
+    <div class="toc-item level-2"><span>1.1 Nombre y Propósito Corporativo | 1.2 Objetivos | 1.3 Ficha Técnica v1.2.9</span></div>
+    
+    <div class="toc-item level-1"><span>2. Arquitectura General & Stack Tecnológico</span><div class="toc-dots"></div><span>Pág. 4</span></div>
+    <div class="toc-item level-2"><span>2.1 Diagrama de Arquitectura de Sistemas | 2.2 Componentes del Stack</span></div>
+
+    <div class="toc-item level-1"><span>3. Modelo de Seguridad, RBAC y Data Scoping</span><div class="toc-dots"></div><span>Pág. 5</span></div>
+    <div class="toc-item level-2"><span>3.1 Jerarquía de Roles | 3.2 Matriz de Permisos | 3.3 Aislamiento de Datos & IDOR</span></div>
+
+    <div class="toc-item level-1"><span>4. Instalación, Configuración y Variables de Entorno</span><div class="toc-dots"></div><span>Pág. 6</span></div>
+    <div class="toc-item level-2"><span>4.1 Requisitos de Hardware | 4.2 Catálogo .env | 4.3 Puesta en Marcha & Docker</span></div>
+
+    <div class="toc-item level-1"><span>5. Estructura del Proyecto y Convenciones de Código</span><div class="toc-dots"></div><span>Pág. 7</span></div>
+    <div class="toc-item level-2"><span>5.1 Árbol de Directorios | 5.2 Server Actions vs API Routes | 5.3 Sistema de Diseño HSL</span></div>
+
+    <div class="toc-item level-1"><span>6. Manual Detallado de Módulos Funcionales</span><div class="toc-dots"></div><span>Pág. 8</span></div>
+    <div class="toc-item level-2"><span>6.1 Feed Corporativo & Muro Social | 6.2 Directorio Corporativo & Centro Social</span></div>
+    <div class="toc-item level-2"><span>6.3 Gestión Documental & RAG | 6.4 Vacaciones, Permisos e Incidencias Remotas</span></div>
+    <div class="toc-item level-2"><span>6.5 Panel de Control & Aprobaciones | 6.6 Gestión de Grupos & Sync DeskTime</span></div>
+    <div class="toc-item level-2"><span>6.7 Administración de Usuarios & M365 | 6.8 Calendario Corporativo & Feriados</span></div>
+    <div class="toc-item level-2"><span>6.9 Centro de IA (TN Assistant & Soporte AILlama) | 6.10 Auditoría & Trazabilidad</span></div>
+    <div class="toc-item level-2"><span>6.11 Configuración de TI & Consola de Proveedores</span></div>
+
+    <div class="toc-item level-1"><span>7. Administración y Operaciones del Sistema</span><div class="toc-dots"></div><span>Pág. 12</span></div>
+    <div class="toc-item level-2"><span>7.1 Gestión de Políticas y Sesiones | 7.2 Pasarela de Correos SMTP</span></div>
+
+    <div class="toc-item level-1"><span>8. Mantenimiento y Solución de Problemas (Troubleshooting)</span><div class="toc-dots"></div><span>Pág. 12</span></div>
+    <div class="toc-item level-2"><span>8.1 Matriz de Diagnóstico y Contingencias Comunes</span></div>
+
+    <div class="toc-item level-1"><span>9. Políticas de Respaldo, Restauración y Disaster Recovery</span><div class="toc-dots"></div><span>Pág. 13</span></div>
+    <div class="toc-item level-2"><span>9.1 Respaldo de Base de Datos y Uploads | 9.2 Protocolo de Restauración</span></div>
+
+    <div class="toc-item level-1"><span>10. Buenas Prácticas de Desarrollo y Despliegue</span><div class="toc-dots"></div><span>Pág. 13</span></div>
+    <div class="toc-item level-2"><span>10.1 Cero Tiempo de Inactividad (PM2) | 10.2 Seguridad OWASP</span></div>
+
+    <div class="toc-item level-1"><span>11. Historial de Versiones & Registro de Cambios</span><div class="toc-dots"></div><span>Pág. 14</span></div>
+    <div class="toc-item level-2"><span>11.1 Resumen Cronológico de Versiones (v1.0.0 a v1.2.9)</span></div>
+  </div>
+
+  <div class="alert alert-info avoid-break">
+    <div class="alert-icon">ℹ️</div>
+    <div class="alert-content">
+      <strong>Nota de Integridad Técnica:</strong> Este documento sustituye formalmente todas las revisiones preliminares de la intranet, consolidando las refactorizaciones de seguridad, arquitectura de base de datos MySQL, orquestación de IA con NVIDIA NIM y la suite de auditoría integral desplegadas en la versión <strong>1.2.9</strong>.
+    </div>
+  </div>
+
+  <div class="running-footer">
+    <span>Confidencial — Telecom Networks</span>
+    <span>Uso Interno Exclusivo</span>
+  </div>
+
+  <!-- PAGE BREAK TO CHAPTER 1 -->
+  <div class="page-break"></div>
+
+  <!-- CHAPTER 1 -->
+  <div class="running-header">
+    <span>Intranet Corporativa — Manual de Operación y Arquitectura v1.2.9</span>
+    <span>Página 3 de 14</span>
+  </div>
+
+  <h1>1. Introducción & Visión General del Sistema</h1>
+  
+  <h2>1.1 Nombre y Propósito Corporativo</h2>
+  <p>
+    La <strong>Intranet Corporativa de Telecom Networks</strong> es una plataforma de software empresarial concebida como el epicentro digital y operativo de la organización. Su propósito central es brindar a todos los colaboradores, supervisores y equipos ejecutivos un espacio seguro, intuitivo y colaborativo que simplifique la autogestión de solicitudes laborales, la consulta de normativas internas, el reporte de incidencias técnicas en teletrabajo y la comunicación organizacional de alto impacto.
+  </p>
+
+  <h2>1.2 Objetivos Estratégicos</h2>
+  <ul>
+    <li><strong>Unificación Operacional:</strong> Eliminar el uso fragmentado de hojas de cálculo aisladas, chats informales y correos dispersos para la solicitud de ausencias y aprobaciones de turnos.</li>
+    <li><strong>Soporte Proactivo y Diagnóstico Guiado:</strong> Asistir a los colaboradores que realizan teletrabajo mediante el agente inteligente <em>Soporte AILlama</em> con metodología progresiva en 3 niveles y resolución de emergencias técnicas.</li>
+    <li><strong>Gobernanza de Datos y Seguridad:</strong> Implementar un modelo de control de acceso basado en roles (RBAC) con aislamiento por escuadrón (Row-Level Authorization) y trazabilidad inmutable mediante logs de auditoría en tiempo real.</li>
+    <li><strong>Transparencia Directiva:</strong> Facilitar a managers y recursos humanos reportes dinámicos, exportación de nómina a CSV compatible con Microsoft Excel y visualización de indicadores clave (KPIs) en tiempo real.</li>
+  </ul>
+
+  <h2>1.3 Ficha Técnica de la Versión Activa (v1.2.9)</h2>
+  <table class="avoid-break">
+    <thead>
+      <tr>
+        <th style="width: 25%;">Parámetro</th>
+        <th style="width: 35%;">Especificación Oficial</th>
+        <th style="width: 40%;">Propósito / Observaciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Versión de Producción</strong></td>
+        <td><code>v1.2.9 (SemVer)</code></td>
+        <td>Revisión activa con búsqueda omnisciente y soporte para Dirección y Desarrollador.</td>
+      </tr>
+      <tr>
+        <td><strong>Organización</strong></td>
+        <td>Telecom Networks</td>
+        <td>Entidad corporativa de la plataforma.</td>
+      </tr>
+      <tr>
+        <td><strong>Desarrollo & Autoría</strong></td>
+        <td>Iván Reyes (AI & Software Development)</td>
+        <td>Desarrollador de software de la intranet con credencial maestra.</td>
+      </tr>
+      <tr>
+        <td><strong>Núcleo Web</strong></td>
+        <td>Next.js 15.1.0 + React 19 + TypeScript</td>
+        <td>Renderizado híbrido SSR, Server Actions y App Router.</td>
+      </tr>
+      <tr>
+        <td><strong>Base de Datos Relacional</strong></td>
+        <td>MySQL 8.0 / MariaDB 10.11+ (Prisma ORM 5.22)</td>
+        <td>Soporte UTF-8mb4, transacciones atómicas e integridad referencial.</td>
+      </tr>
+      <tr>
+        <td><strong>Caché & Sesiones</strong></td>
+        <td>Redis 7.x en memoria</td>
+        <td>Aceleración de tokens JWT y snapshots de telemetría.</td>
+      </tr>
+      <tr>
+        <td><strong>Motores de IA Primario</strong></td>
+        <td>NVIDIA NIM API (<code>llama-3.2-11b-vision-instruct</code>)</td>
+        <td>Inferencia ultrarrápida con streaming SSE para TN Assistant.</td>
+      </tr>
+      <tr>
+        <td><strong>Motor de IA Fallback</strong></td>
+        <td>Ollama On-Premise (<code>llama3.2</code> en puerto 11434)</td>
+        <td>Conmutación por error ante desconexión o latencia en nube.</td>
+      </tr>
+      <tr>
+        <td><strong>Motor Analítico WhatsApp</strong></td>
+        <td>Google Gemini 1.5 Flash</td>
+        <td>Generación periódica de resúmenes ejecutivos semanales y mensuales.</td>
+      </tr>
+      <tr>
+        <td><strong>Servidor de Aplicación</strong></td>
+        <td>Node.js v20.x LTS con PM2 Process Manager</td>
+        <td>Despliegue sin caída de servicio (Zero-Downtime Reload).</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="running-footer">
+    <span>Confidencial — Telecom Networks</span>
+    <span>Uso Interno Exclusivo</span>
+  </div>
+
+  <!-- PAGE BREAK TO CHAPTER 2 -->
+  <div class="page-break"></div>
+
+  <!-- CHAPTER 2 -->
+  <div class="running-header">
+    <span>Intranet Corporativa — Manual de Operación y Arquitectura v1.2.9</span>
+    <span>Página 4 de 14</span>
+  </div>
+
+  <h1>2. Arquitectura General & Stack Tecnológico</h1>
+  <p>
+    La plataforma adopta una topología de capas desacopladas que garantiza alta concurrencia, respuesta inmediata en milisegundos y resiliencia ante contingencias externas de red o caídas de servicios de terceros.
+  </p>
+
+  <h2>2.1 Diagrama de Arquitectura de Sistemas y Flujos de Datos</h2>
+  <div class="diagram-card avoid-break">
++---------------------------------------------------------------------------------------+
+|                              CAPA DE CLIENTE / NAVEGADOR                              |
+|   - Plus Jakarta Sans Typography        - Glassmorphism & Tokens HSL                  |
+|   - Formularios Reactivos React 19       - Streaming SSE (Chat en Tiempo Real)        |
++-------------------------------------------+-------------------------------------------+
+                                            |
+                         Peticiones HTTPS   | Server Actions & REST API
+                                            v
++---------------------------------------------------------------------------------------+
+|                    CAPA DE APLICACIÓN Y PERÍMETRO (NEXT.JS 15)                        |
+|  - middleware.ts: Verificación perimetral, expiración de sesión y control de acceso   |
+|  - Server Actions: timeOffActions, userActions, groupActions, auditActions            |
+|  - Route Handlers: /api/chat (SSE Stream), /api/requests/* (IDOR Shield)              |
++-------------------+-----------------------+--------------------+----------------------+
+                    |                       |                    |
+      Consultas SQL |         Caché Sesión  |      Streaming SSE | Fallback Auto
+      vía Prisma    |         y Snapshots   |                    |
+                    v                       v                    v                      v
++------------------------+   +-------------------+   +--------------------+  +--------------------+
+|   BASE DE DATOS MYSQL  |   |    REDIS 7.X      |   |   NVIDIA NIM API   |  |   OLLAMA LOCAL     |
+| - Usuarios & Roles     |   | - Sesiones Rápidas|   | - Llama 3.2 11B    |  | - Instancia local  |
+| - 12 Tipos Permisos    |   | - Throttling      |   | - Streaming SSE    |  |   en puerto 11434  |
+| - Historial Auditoría  |   +-------------------+   +--------------------+  +--------------------+
+| - Índices Collation    |
++-----------+------------+
+            ^
+            | Sincronización Solo Lectura (SELECT)
++-----------+------------+
+|  WFM PLATFORM MYSQL    |
+| - 49 Grupos DeskTime   |
+| - 274 Empleados        |
++------------------------+
+  </div>
+
+  <h2>2.2 Componentes Esenciales del Stack</h2>
+  <ul>
+    <li><strong>Capa de Presentación:</strong> Renderizado reactivo en Next.js 15.1 con TypeScript y soporte nativo para temas claro y oscuro mediante tokens variables HSL. El sistema de diseño no requiere utilidades externas pesadas, garantizando una carga veloz y libre de dependencias no controladas.</li>
+    <li><strong>Capa de Lógica Transaccional (Server Actions):</strong> Todas las mutaciones de datos se ejecutan en el servidor mediante funciones tipadas seguras con control de acceso por sesión, eliminación de riesgo CSRF y manejo transaccional de excepciones.</li>
+    <li><strong>Persistencia de Datos (MySQL 8.x):</strong> La base de datos opera bajo el motor InnoDB con transacciones ACID, soporte nativo de collation <code>utf8mb4_unicode_ci</code> e índices en campos de búsqueda rápida (nombres, correos, estados y tipos de solicitud).</li>
+    <li><strong>Sincronización Externa WFM (DeskTime):</strong> Integración unidireccional de solo lectura con la base de datos <code>wfm_platform</code>, manteniendo homologados en tiempo real los 49 grupos corporativos y los 274 colaboradores de la organización.</li>
+    <li><strong>Arquitectura de Inteligencia Artificial Dual:</strong> Inferencia primaria en la nube de NVIDIA NIM con respuesta inmediata en streaming y conmutación transparente hacia Ollama local si la API externa experimenta degradación de red.</li>
+  </ul>
+
+  <div class="running-footer">
+    <span>Confidencial — Telecom Networks</span>
+    <span>Uso Interno Exclusivo</span>
+  </div>
+
+  <!-- PAGE BREAK TO CHAPTER 3 -->
+  <div class="page-break"></div>
+
+  <!-- CHAPTER 3 -->
+  <div class="running-header">
+    <span>Intranet Corporativa — Manual de Operación y Arquitectura v1.2.9</span>
+    <span>Página 5 de 14</span>
+  </div>
+
+  <h1>3. Modelo de Seguridad, RBAC y Data Scoping</h1>
+  <p>
+    La Intranet implementa un modelo de seguridad por capas que combina autenticación criptográfica basada en cookies HTTP-only, control de acceso basado en roles jerárquicos (RBAC) y autorización a nivel de fila (Row-Level Authorization / Data Scoping) para prevenir accesos indebidos e IDOR.
+  </p>
+
+  <h2>3.1 Jerarquía Numérica de Roles</h2>
+  <p>Cada rol dispone de un nivel jerárquico entero que regula la subordinación, privilegios y protección de cuentas:</p>
+  <pre><code>NO_ROLE (0) &lt; USER / AGENT (10) &lt; SUPERVISOR / TEAM_LEAD (20) &lt; MANAGER (30) 
+            &lt; HR (35) &lt; TECHNOLOGY (40) &lt; IT_MANAGER / TECHNOLOGY_ADMIN (50) &lt; DIRECCIÓN / SUPERADMIN</code></pre>
+
+  <h2>3.2 Matriz Exhaustiva de Permisos</h2>
+  <table class="avoid-break">
+    <thead>
+      <tr>
+        <th>Código del Permiso</th>
+        <th>USER</th>
+        <th>SUPERVISOR</th>
+        <th>MANAGER</th>
+        <th>HR</th>
+        <th>TECHNOLOGY</th>
+        <th>IT_MANAGER</th>
+        <th>DIRECCIÓN</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>documents:read</code></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+      </tr>
+      <tr>
+        <td><code>documents:create</code></td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+      </tr>
+      <tr>
+        <td><code>posts:feature</code></td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+      </tr>
+      <tr>
+        <td><code>vacations:approve</code></td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-primary">Equipo</span></td>
+        <td><span class="badge badge-primary">Área</span></td>
+        <td><span class="badge badge-success">Global</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Global</span></td>
+      </tr>
+      <tr>
+        <td><code>vacations:create_on_behalf</code></td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-primary">Masivo</span></td>
+        <td><span class="badge badge-primary">Masivo</span></td>
+        <td><span class="badge badge-success">Global</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Global</span></td>
+      </tr>
+      <tr>
+        <td><code>users:create</code> (Multi-dominio)</td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+      </tr>
+      <tr>
+        <td><code>users:delete</code></td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-warning">Protegido</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+      </tr>
+      <tr>
+        <td><code>audit:view</code></td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+      </tr>
+      <tr>
+        <td><code>config:manage</code> (TI / IA / Bot)</td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-danger">No</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+        <td><span class="badge badge-success">Sí</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3.3 Mecanismos de Aislamiento y Protección (Data Scoping & IDOR)</h2>
+  <div class="alert alert-danger avoid-break">
+    <div class="alert-icon">🛡️</div>
+    <div class="alert-content">
+      <strong>Protección IDOR / BOLA (Insecure Direct Object References):</strong> Ninguna solicitud puede ser aprobada o rechazada mediante el simple conocimiento de su identificador ID. La función <code>authorizeRequestAction()</code> valida en la base de datos que el usuario solicitante sea supervisor legítimo del colaborador mediante las tablas relacionales de escuadrones antes de autorizar cualquier cambio de estado.
+    </div>
+  </div>
+
+  <ul>
+    <li><strong>Cláusula Dinámica de Alcance (<code>getTimeOffScopeFilter</code>):</strong> Al consultar solicitudes de tiempo libre en el panel de control, el sistema intercepta la llamada SQL. Para supervisores y líderes, aplica un filtro restrictivo: <code>userId IN managedUserIds</code>, aislando los datos y garantizando que ningún supervisor pueda ver solicitudes de escuadrones ajenos.</li>
+    <li><strong>Acceso Exclusivo a Configuración TI (<code>canAccessITConfig</code>):</strong> Módulo restringido exclusivamente al personal de Tecnología y administradores autorizados. Si un colaborador de Recursos Humanos, supervisor o empleado común intenta acceder a <code>/configuracion-ti</code> o <code>/admin/config</code>, el servidor intercepta la petición y redirige a la página segura <code>/acceso-denegado</code>.</li>
+    <li><strong>Salvaguarda Jerárquica de TI:</strong> Los usuarios con rol <code>TECHNOLOGY</code> pueden eliminar usuarios regulares, pero tienen vedada la eliminación de cualquier miembro del equipo de Tecnología, facultad reservada de forma estricta para el <code>IT_MANAGER</code> o superadministradores autorizados.</li>
+  </ul>
+
+  <div class="running-footer">
+    <span>Confidencial — Telecom Networks</span>
+    <span>Uso Interno Exclusivo</span>
+  </div>
+
+  <!-- PAGE BREAK TO CHAPTER 4 -->
+  <div class="page-break"></div>
+
+  <!-- CHAPTER 4 -->
+  <div class="running-header">
+    <span>Intranet Corporativa — Manual de Operación y Arquitectura v1.2.9</span>
+    <span>Página 6 de 14</span>
+  </div>
+
+  <h1>4. Instalación, Configuración y Variables de Entorno</h1>
+
+  <h2>4.1 Requisitos de Infraestructura</h2>
+  <ul>
+    <li><strong>Servidor Host Recomendado:</strong> Debian 12 (Bookworm) o Ubuntu 22.04 LTS (x86_64).</li>
+    <li><strong>CPU & Memoria:</strong> 2 vCPU y 4 GB RAM (Mínimo). Recomendado: 4 vCPU y 8 GB RAM para producción.</li>
+    <li><strong>Puertos de Red Requeridos:</strong> <code>80/tcp</code> (HTTP), <code>443/tcp</code> (HTTPS), <code>3000/tcp</code> (Node.js interno), <code>3306/tcp</code> (MySQL), <code>6379/tcp</code> (Redis).</li>
+  </ul>
+
+  <h2>4.2 Catálogo Detallado de Variables de Entorno</h2>
+  <table class="avoid-break">
+    <thead>
+      <tr>
+        <th style="width: 28%;">Variable</th>
+        <th style="width: 42%;">Descripción y Finalidad</th>
+        <th style="width: 30%;">Valor Ejemplo</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>DATABASE_URL</code></td>
+        <td>Cadena de conexión JDBC/MySQL hacia Prisma.</td>
+        <td><code>mysql://[usuario]:[clave]--host:3306/intranet</code></td>
+      </tr>
+      <tr>
+        <td><code>NEXTAUTH_SECRET</code></td>
+        <td>Clave criptográfica para firma de cookies JWT (mínimo 32 caracteres).</td>
+        <td>Hash aleatorio base64 generado con OpenSSL</td>
+      </tr>
+      <tr>
+        <td><code>NEXTAUTH_URL</code></td>
+        <td>URL pública de acceso a la intranet corporativa.</td>
+        <td><code>https://intranet.tnoutsourcing.com</code></td>
+      </tr>
+      <tr>
+        <td><code>SUPERADMIN_EMAIL</code></td>
+        <td>Correo del desarrollador/administrador maestro con pase de soporte.</td>
+        <td><code>ireyes@tnoutsourcing.com</code></td>
+      </tr>
+      <tr>
+        <td><code>NVIDIA_API_KEY</code></td>
+        <td>Clave API de NVIDIA Cloud para inferencia del modelo Llama 3.2.</td>
+        <td><code>nvapi-TU_API_KEY</code></td>
+      </tr>
+      <tr>
+        <td><code>NVIDIA_MODEL</code></td>
+        <td>Identificador del modelo en el catálogo de NVIDIA NIM.</td>
+        <td><code>meta/llama-3.2-11b-vision-instruct</code></td>
+      </tr>
+      <tr>
+        <td><code>OLLAMA_HOST</code></td>
+        <td>Dirección HTTP del servidor Ollama para contingencias.</td>
+        <td><code>http://127.0.0.1:11434</code></td>
+      </tr>
+      <tr>
+        <td><code>REDIS_URL</code></td>
+        <td>Almacén en memoria para snapshots de caché y optimización de llamadas.</td>
+        <td><code>redis://127.0.0.1:6379</code></td>
+      </tr>
+      <tr>
+        <td><code>SMTP_HOST</code> / <code>PORT</code></td>
+        <td>Servidor de correo saliente para alertas transaccionales (Office 365).</td>
+        <td><code>smtp.office365.com</code> (Puerto 587)</td>
+      </tr>
+      <tr>
+        <td><code>DESKTIME_DB_*</code></td>
+        <td>Credenciales de solo lectura para sincronización de <code>wfm_platform</code>.</td>
+        <td>Host, usuario y base de datos DeskTime</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4.3 Procedimiento de Puesta en Marcha Rápida</h2>
+  <pre><code># 1. Instalar dependencias con resolución de pares
+npm install --legacy-peer-deps
+
+# 2. Generar cliente Prisma y sincronizar esquema
+npx prisma generate && npx prisma db push
+
+# 3. Sembrar feriados oficiales y roles del sistema
+node scripts/seed_holidays.js && node scripts/seed_rbac.js
+
+# 4. Compilar para producción y levantar con PM2
+npm run build && pm2 start npm --name "intranet" -- start -- -p 3000</code></pre>
+
+  <div class="running-footer">
+    <span>Confidencial — Telecom Networks</span>
+    <span>Uso Interno Exclusivo</span>
+  </div>
+
+  <!-- PAGE BREAK TO CHAPTER 5 -->
+  <div class="page-break"></div>
+
+  <!-- CHAPTER 5 -->
+  <div class="running-header">
+    <span>Intranet Corporativa — Manual de Operación y Arquitectura v1.2.9</span>
+    <span>Página 7 de 14</span>
+  </div>
+
+  <h1>5. Estructura del Proyecto y Convenciones de Código</h1>
+
+  <h2>5.1 Árbol de Directorios del Código Fuente</h2>
+  <pre><code>Intranet/
+├── app/                           # Rutas y vistas de App Router (Next.js 15)
+│   ├── actions/                   # Server Actions transaccionales (timeOff, user, group, audit)
+│   ├── admin/                     # Vistas administrativas (audit-logs, config, groups, users)
+│   ├── api/                       # Endpoints REST y streaming (chat, requests, whatsapp)
+│   ├── calendar/                  # Calendario laboral y feriados nacionales
+│   ├── configuracion-ti/          # Redirección protegida hacia /admin/config
+│   ├── dashboard/                 # Panel de aprobaciones agrupado por proyecto
+│   ├── documents/                 # Repositorio documental corporativo
+│   ├── groups/                    # Directorio de escuadrones y campañas
+│   ├── social/                    # Centro social, directorio y reconocimientos Kudos
+│   ├── support/                   # Portal de Soporte Técnico AILlama L1
+│   ├── vacations/                 # Formulario de ausencias e incidencias remotas (1560px)
+│   └── globals.css                # Sistema de diseño con tokens CSS HSL y Glassmorphism
+├── lib/                           # Módulos de soporte, seguridad y conectividad
+│   ├── auditPermissions.ts        # Reglas de autorización para visualización de logs
+│   ├── auth.ts                    # Configuración central de NextAuth.js y callbacks
+│   ├── authorizationRoles.ts      # Funciones maestras de comprobación de permisos
+│   ├── permissions.ts             # Matriz RBAC y jerarquía de permisos
+│   ├── prisma.ts                  # Conexión singleton Prisma Client
+│   ├── requestAuthorization.ts    # Control de acceso y protección IDOR por grupo
+│   └── supportAiLlamaService.ts   # Diagnóstico L1 en 3 intentos y crons de WhatsApp
+├── prisma/
+│   └── schema.prisma              # Definición de entidades, relaciones y dialecto MySQL
+├── public/                        # Logos institucionales, imágenes y uploads de usuarios
+├── scripts/                       # Sincronización DeskTime, despliegue y validación
+├── CHANGELOG.md                   # Bitácora histórica de versiones SemVer
+├── DESIGN_SYSTEM.md               # Especificación técnica de componentes y tokens
+└── DOCUMENTACION.md               # Manual técnico oficial maestro</code></pre>
+
+  <h2>5.2 Filosofía de Desarrollo: Server Actions vs. API Routes</h2>
+  <ul>
+    <li><strong>Server Actions (app/actions):</strong> Empleadas de manera preferencial para todas las mutaciones de interfaz (solicitudes de tiempo libre, cambios de miembros de grupo, actualización de perfiles y creación de usuarios). Garantizan validación en el servidor sin serialización insegura de parámetros.</li>
+    <li><strong>Route Handlers (app/api):</strong> Reservados para flujos con streaming continuo de datos (Server-Sent Events en <code>app/api/chat/route.ts</code>), integración de webhooks entrantes de WhatsApp o consumo externo desde servicios satélites.</li>
+    <li><strong>Tokens HSL de Diseño:</strong> No se utilizan librerías CSS invasivas que distorsionen el rendimiento. Toda la interfaz consume variables HSL nativas (<code>--primary</code>, <code>--surface</code>, <code>--background</code>) con soporte para desenfoques de fondo (<code>backdrop-filter: blur(12px)</code>).</li>
+  </ul>
+
+  <div class="running-footer">
+    <span>Confidencial — Telecom Networks</span>
+    <span>Uso Interno Exclusivo</span>
+  </div>
+
+  <!-- PAGE BREAK TO CHAPTER 6 -->
+  <div class="page-break"></div>
+
+  <!-- CHAPTER 6 -->
+  <div class="running-header">
+    <span>Intranet Corporativa — Manual de Operación y Arquitectura v1.2.9</span>
+    <span>Página 8 de 14</span>
+  </div>
+
+  <h1>6. Manual Detallado de Módulos Funcionales</h1>
+
+  <h2>6.1 Inicio / Feed Corporativo & Muro Social</h2>
+  <div class="module-card avoid-break">
+    <div class="module-card-header">📌 Comunicación, Muro Central y Widgets de Inicio</div>
+    <p>
+      El espacio primordial de comunicación empresarial. Permite a los colaboradores autorizados publicar comunicados, noticias y anuncios con soporte de comentarios jerárquicos y reacciones. Recursos Humanos cuenta con la facultad de fijar comunicados prioritarios con distintivo de chincheta.
+    </p>
+    <ul>
+      <li><strong>Normalización de Feriados UTC:</strong> Corrección horaria que muestra siempre la fecha exacta del feriado cívico (ej. 9 de noviembre para el Día de la Constitución).</li>
+      <li><strong>Métricas Verídicas en Tiempo Real:</strong> Conteo fidedigno de eventos de la semana (Lunes a Domingo), colaboradores con actividad registrada hoy y nuevos documentos agregados en el mes en curso.</li>
+      <li><strong>Widgets de Acompañamiento:</strong> Próximos feriados, cumpleaños y aniversarios laborales del personal activo.</li>
+    </ul>
+  </div>
+
+  <h2>6.2 Directorio Corporativo & Centro Social</h2>
+  <div class="module-card avoid-break">
+    <div class="module-card-header">👥 Directorio y Reconocimientos Entre Colaboradores</div>
+    <p>
+      Directorio dinámico que lista al personal activo con buscador en vivo por nombre, cargo o departamento. Muestra indicadores de disponibilidad en tiempo real (*Disponible*, *Ocupado*, *De Vacaciones* o *Home Office*) y habilita el envío de <em>Kudos</em> (reconocimientos institucionales con insignias y felicitaciones asistidas por inteligencia artificial).
+    </p>
+  </div>
+
+  <h2>6.3 Gestión Documental & Base de Conocimiento</h2>
+  <div class="module-card avoid-break">
+    <div class="module-card-header">📁 Repositorio de Documentos & Vectorización RAG</div>
+    <p>
+      Repositorio estructurado de manuales, normativas y políticas internas segmentadas por departamentos. Cada documento incorporado es procesado semánticamente (Embeddings vectoriales en <code>DocumentEmbedding</code>), permitiendo que el asistente corporativo <strong>TN Assistant</strong> cite reglamentos oficiales al responder consultas de los empleados.
+    </p>
+  </div>
+
+  <h2>6.4 Vacaciones, Permisos e Incidencias Técnicas de Teletrabajo</h2>
+  <p>
+    El módulo de ausencias (<code>/vacations</code>) está diseñado en un contenedor ergonómico de 1560px con balance simétrico y catálogo de 12 tipos de solicitudes organizadas en 3 categorías cromáticas:
+  </p>
+
+  <table class="avoid-break">
+    <thead>
+      <tr>
+        <th>Categoría</th>
+        <th>Tipo de Solicitud</th>
+        <th>Identidad Cromática</th>
+        <th>Reglas de Negocio / Deducción de Días</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td rowspan="4"><strong>Tiempo Libre</strong></td>
+        <td>Vacaciones Anuales</td>
+        <td><span class="color-chip" style="background:#3b82f6;"></span> Azul Eléctrico (<code>#3b82f6</code>)</td>
+        <td>Requiere 25 días de anticipación. Descuenta días hábiles del balance personal.</td>
+      </tr>
+      <tr>
+        <td>Permiso Especial</td>
+        <td><span class="color-chip" style="background:#6366f1;"></span> Índigo (<code>#6366f1</code>)</td>
+        <td>Opciones: Día completo, Medio turno o Por horas con horario de entrada/salida.</td>
+      </tr>
+      <tr>
+        <td>Reposición de Horas</td>
+        <td><span class="color-chip" style="background:#14b8a6;"></span> Turquesa (<code>#14b8a6</code>)</td>
+        <td>Captura fecha y franja horaria exacta de reposición compensatoria.</td>
+      </tr>
+      <tr>
+        <td>Salir Temprano</td>
+        <td><span class="color-chip" style="background:#f59e0b;"></span> Ámbar (<code>#f59e0b</code>)</td>
+        <td>Solicitud ágil para salida anticipada con motivo justificado.</td>
+      </tr>
+      <tr>
+        <td rowspan="4"><strong>Salud & Familia</strong></td>
+        <td>Enfermedad (Corta)</td>
+        <td><span class="color-chip" style="background:#10b981;"></span> Esmeralda (<code>#10b981</code>)</td>
+        <td>Ausencia médica breve con opción de reposo domiciliario.</td>
+      </tr>
+      <tr>
+        <td>Licencia Médica</td>
+        <td><span class="color-chip" style="background:#f43f5e;"></span> Carmesí (<code>#f43f5e</code>)</td>
+        <td>Exige la subida digital de justificante o certificado médico oficial.</td>
+      </tr>
+      <tr>
+        <td>Maternidad / Paternidad</td>
+        <td><span class="color-chip" style="background:#ec4899;"></span> Fucsia (<code>#ec4899</code>)</td>
+        <td>Periodo prenatal/postnatal según legislación laboral vigente.</td>
+      </tr>
+      <tr>
+        <td>Fallecimiento / Duelo</td>
+        <td><span class="color-chip" style="background:#8b5cf6;"></span> Violeta (<code>#8b5cf6</code>)</td>
+        <td>Licencia por fallecimiento de familiar directo con acompañamiento institucional.</td>
+      </tr>
+      <tr>
+        <td rowspan="4"><strong>Incidencias Remoto / IT</strong></td>
+        <td>Falla de Internet (ISP)</td>
+        <td><span class="color-chip" style="background:#f97316;"></span> Naranja (<code>#f97316</code>)</td>
+        <td rowspan="4">
+          <strong>Tratamiento Exclusivo de Teletrabajo:</strong><br>
+          - Exención automática de los 25 días de anticipación.<br>
+          - Supresión de fecha de fin.<br>
+          - Captura horaria con <code>datetime-local</code>.<br>
+          - Cómputo de <strong>0 días deducidos</strong> (<code>workingDays = 0</code>).<br>
+          - Toggle de reemplazo de hardware para fallas de PC.
+        </td>
+      </tr>
+      <tr>
+        <td>Corte de Energía</td>
+        <td><span class="color-chip" style="background:#eab308;"></span> Amarillo (<code>#eab308</code>)</td>
+      </tr>
+      <tr>
+        <td>Avería Hardware / PC</td>
+        <td><span class="color-chip" style="background:#ef4444;"></span> Rojo Alerta (<code>#ef4444</code>)</td>
+      </tr>
+      <tr>
+        <td>Fallo VPN / Accesos</td>
+        <td><span class="color-chip" style="background:#a855f7;"></span> Púrpura (<code>#a855f7</code>)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="running-footer">
+    <span>Confidencial — Telecom Networks</span>
+    <span>Uso Interno Exclusivo</span>
+  </div>
+
+  <!-- PAGE BREAK TO MODULES CONTINUATION -->
+  <div class="page-break"></div>
+
+  <!-- MODULES CONTINUATION -->
+  <div class="running-header">
+    <span>Intranet Corporativa — Manual de Operación y Arquitectura v1.2.9</span>
+    <span>Página 9 de 14</span>
+  </div>
+
+  <h3>Modo de Registro Administrado Masivo para Supervisores (v1.2.2)</h3>
+  <p>
+    Diseñado para líderes de escuadrón y directores. Permite registrar ausencias o incidencias técnicas de forma grupal:
+  </p>
+  <ul>
+    <li><strong>Selección por Escuadrón / Campaña:</strong> Agrega con un solo clic a todos los integrantes de un proyecto.</li>
+    <li><strong>Selección Individual Múltiple:</strong> Buscador predictivo con tarjetas interactivas (chips) removibles.</li>
+    <li><strong>Gestión de Excepciones:</strong> Menú desplegable con casillas de verificación para excluir de inmediato a colaboradores que no sufrieron la avería eléctrica o de Internet.</li>
+    <li><strong>Confirmación Previa:</strong> Modal descriptivo que resume el horario y los colaboradores afectados antes de consolidar el envío.</li>
+  </ul>
+
+  <h2>6.5 Panel de Control & Aprobaciones (/dashboard)</h2>
+  <div class="module-card avoid-break">
+    <div class="module-card-header">📊 Visualización Agrupada por Campaña y Exportación CSV</div>
+    <ul>
+      <li><strong>Organización por Recuadro de Grupo:</strong> Las solicitudes se agrupan dentro de la tarjeta visual de su respectivo escuadrón (heredando color del grupo, icono, avatar y recuento de colaboradores). Los usuarios sin grupo se alojan ordenadamente en el recuadro <em>Sin Grupo Asignado</em>.</li>
+      <li><strong>Píldoras de Filtrado Rápido:</strong> Barra horizontal interactiva con los colores de cada grupo para aislar un escuadrón con un clic.</li>
+      <li><strong>Modal Interactivo de Exportación CSV (v1.2.7):</strong> Permite configurar filtros por grupo específico o todos los grupos, seleccionar mes y año (botones rápidos: <em>Mes Actual</em>, <em>Mes Anterior</em>, <em>Todo el Año</em>, <em>Histórico</em>) y filtrar por estado (Solo Aprobadas, Pendientes, Rechazadas). Genera archivos con codificación <strong>UTF-8 BOM</strong> para visualización perfecta de tildes en Microsoft Excel.</li>
+    </ul>
+  </div>
+
+  <h2>6.6 Gestión de Grupos & Sincronización DeskTime (/admin/groups)</h2>
+  <div class="module-card avoid-break">
+    <div class="module-card-header">🛡️ Sincronización WFM y Asignación de Liderazgo</div>
+    <ul>
+      <li><strong>Sincronización Automática:</strong> Conecta en solo lectura con la base de datos externa de DeskTime (<code>wfm_platform</code>), manteniendo 49 escuadrones y 274 colaboradores sincronizados con sus cargos reales.</li>
+      <li><strong>Modal de Gestión de Líderes (<code>ManageLeadersModal</code>):</strong> Permite asignar o remover Líderes Principales (<code>👑</code>) y Sub-Líderes (<code>🛡️</code>) en cada grupo mediante una interfaz con buscador predictivo y actualización optimista.</li>
+      <li><strong>Modales Modernos:</strong> Inclusión de <code>AddMembersModal</code> (para altas masivas con pestañas de transferencia) y <code>ConfirmModal</code> con desenfoque de fondo (<code>backdrop-filter: blur(12px)</code>) para desvinculaciones seguras.</li>
+    </ul>
+  </div>
+
+  <h2>6.7 Administración de Usuarios & Compatibilidad M365 (/admin/users)</h2>
+  <div class="module-card avoid-break">
+    <div class="module-card-header">👤 Gestión de Cuentas, Integridad Referencial y Microsoft 365</div>
+    <ul>
+      <li><strong>Creación de Usuarios Multi-Dominio:</strong> Permite que Tecnología y Managers creen usuarios con cualquier correo legítimo (Gmail, Outlook o contratistas), eliminando la restricción obligada de <code>@tnoutsourcing.com</code>.</li>
+      <li><strong>Importación Masiva Nativa desde Microsoft 365 Admin Center:</strong> Soporte directo de archivos CSV de Microsoft Entra / Office 365, mapeando automáticamente identificadores, nombres, cargos y filtrando cuentas bloqueadas.</li>
+      <li><strong>Eliminación Masiva Segura (<code>cleanupUserRelations</code>):</strong> Limpieza en cascada transaccional sobre más de 15 tablas relacionales para erradicar errores de clave foránea SQL al borrar colaboradores.</li>
+    </ul>
+  </div>
+
+  <div class="running-footer">
+    <span>Confidencial — Telecom Networks</span>
+    <span>Uso Interno Exclusivo</span>
+  </div>
+
+  <!-- PAGE BREAK TO AI AND AUDIT MODULES -->
+  <div class="page-break"></div>
+
+  <!-- AI & AUDIT MODULES -->
+  <div class="running-header">
+    <span>Intranet Corporativa — Manual de Operación y Arquitectura v1.2.9</span>
+    <span>Página 10 de 14</span>
+  </div>
+
+  <h2>6.8 Calendario Corporativo & Gestión de Feriados (/calendar)</h2>
+  <div class="module-card avoid-break">
+    <div class="module-card-header">📅 Eventos Corporativos y Feriados Oficiales</div>
+    <p>
+      Vista integrada de eventos institucionales y festividades patrias. Las solicitudes de vacaciones e incidencias aprobadas se sincronizan automáticamente en el calendario, permitiendo que el equipo conozca anticipadamente la disponibilidad del personal en cada fecha laboral.
+    </p>
+  </div>
+
+  <h2>6.9 Centro de Inteligencia Artificial (TN Assistant & Soporte AILlama L1)</h2>
+  
+  <h3>TN Assistant (Asistente Corporativo Omnisciente)</h3>
+  <ul>
+    <li><strong>Búsqueda Multi-Tabla Exhaustiva:</strong> Detección automática de intenciones y consulta directa sobre MySQL para responder con precisión sobre:
+      <ul>
+        <li><em>Colaboradores y Balances:</em> Encuentra a cualquier colaborador por nombre o apellido y responde con su cargo, grupo y balance de días de vacaciones disponibles.</li>
+        <li><em>Grupos y Liderazgo:</em> Informa integrantes, supervisores y sublíderes asignados a cada campaña.</li>
+        <li><em>Publicaciones del Muro & Feriados:</em> Consulta anuncios recientes y festividades oficiales.</li>
+        <li><em>Documentos Internos:</em> Búsqueda semántica (RAG) sobre políticas corporativas.</li>
+      </ul>
+    </li>
+    <li><strong>Reconocimiento de Autorización Maestra:</strong> Reconoce tanto a los roles de alta dirección (CEO / Director) como a Iván Reyes (Desarrollador de AI & Software Development con credenciales maestras de soporte), entregando respuestas ejecutivas con cifras exactas sin evasivas de derivación a Recursos Humanos.</li>
+    <li><strong>Streaming SSE con Tolerancia a Fallos:</strong> Motor primario en NVIDIA NIM Cloud API (<code>meta/llama-3.2-11b-vision-instruct</code>) y conmutación automática hacia Ollama local si la nube externa no responde.</li>
+  </ul>
+
+  <h3>Soporte AILlama L1 (Asistencia Técnica para Teletrabajo)</h3>
+  <ul>
+    <li><strong>Metodología de Diagnóstico en 3 Intentos:</strong> Nivel Físico (inspección de cables) &rarr; Nivel Aplicación (limpieza de navegador) &rarr; Nivel Sesión (modo incógnito o reseteo guiado).</li>
+    <li><strong>Política de Cero Fricción:</strong> Prohibido sugerir comandos de consola (<code>CMD</code>, <code>PowerShell</code>, <code>ping</code>), reinicios forzados de PC o alteraciones en el <code>BIOS</code>.</li>
+    <li><strong>Escalación Automática a L2:</strong> Al completarse el tercer intento sin resolución, genera automáticamente un registro en <code>SupportTicket</code> y despacha una notificación por correo a Helpdesk.</li>
+    <li><strong>Soporte Bilingüe Interactivo:</strong> Selector de idioma en tiempo real (Español / English).</li>
+  </ul>
+
+  <h2>6.10 Centro Integral de Auditoría & Trazabilidad (/admin/audit-logs)</h2>
+  <div class="module-card avoid-break">
+    <div class="module-card-header">🔍 Trazabilidad Operacional e Inspección de Diferencias</div>
+    <ul>
+      <li><strong>4 Tarjetas KPI en Tiempo Real:</strong> Total de Eventos Registrados, Actividad de Hoy con pulso verde, Alertas / Rechazos e Inventario de Acciones del Sistema.</li>
+      <li><strong>Modalidad Dual:</strong> Tabla Dinámica con filtros avanzados y Línea de Tiempo (Timeline Stream) con nodos luminosos interactivos.</li>
+      <li><strong>Inspector de Diferencias (Diff Inspector):</strong> Modal con visor visual comparativo *Antes vs. Después* en modificaciones de registros y visor JSON formateado con botón de copia rápida.</li>
+      <li><strong>Exportación Inmediata:</strong> Descarga de pistas de auditoría en formatos CSV y JSON.</li>
+    </ul>
+  </div>
+
+  <h2>6.11 Configuración de TI & Consola de Proveedores (/admin/config)</h2>
+  <div class="module-card avoid-break">
+    <div class="module-card-header">⚙️ Credenciales de IA, Tickets de Soporte y WhatsApp Bot</div>
+    <p>
+      Módulo reservado para Tecnología y administradores autorizados bajo <code>canAccessITConfig</code>. Administra llaves API (NVIDIA, Ollama, Gemini), monitor centralizado de tickets L2 y parámetros del bot de WhatsApp para resúmenes semanales y mensuales desatendidos.
+    </p>
+  </div>
+
+  <div class="running-footer">
+    <span>Confidencial — Telecom Networks</span>
+    <span>Uso Interno Exclusivo</span>
+  </div>
+
+  <!-- PAGE BREAK TO CHAPTERS 7, 8 -->
+  <div class="page-break"></div>
+
+  <!-- CHAPTER 7 & 8 -->
+  <div class="running-header">
+    <span>Intranet Corporativa — Manual de Operación y Arquitectura v1.2.9</span>
+    <span>Página 11 de 14</span>
+  </div>
+
+  <h1>7. Administración y Operaciones del Sistema</h1>
+  <p>
+    La plataforma opera bajo el gestor de procesos <strong>PM2</strong> en servidores Linux, respaldado por un proxy inverso Apache en el puerto 80 que canaliza el tráfico seguro hacia la instancia Node.js en el puerto 3000.
+  </p>
+  <ul>
+    <li><strong>Gestión de Sesiones JWT:</strong> Sesiones encriptadas con caducidad configurable y rotación automática de credenciales.</li>
+    <li><strong>Servidor de Notificaciones SMTP:</strong> Conectividad TLS autenticada con Exchange Online / Microsoft 365 para despacho de correos transaccionales a supervisores y colaboradores.</li>
+  </ul>
+
+  <h1>8. Mantenimiento y Solución de Problemas (Troubleshooting)</h1>
+  <table class="avoid-break">
+    <thead>
+      <tr>
+        <th style="width: 30%;">Incidencia Detectada</th>
+        <th style="width: 35%;">Causa Raíz Típica</th>
+        <th style="width: 35%;">Acción Correctiva Recomendada</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>La intranet no responde en el navegador</strong></td>
+        <td>Servicio Node.js detenido o Apache caído</td>
+        <td>Ejecutar <code>pm2 status</code> y <code>systemctl status apache2</code>. Reiniciar con <code>pm2 restart intranet</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>Error P1001 en Base de Datos</strong></td>
+        <td>Servicio MySQL detenido o credencial incorrecta</td>
+        <td>Comprobar <code>systemctl status mysql</code> y verificar la variable <code>DATABASE_URL</code> en <code>.env.local</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>TN Assistant indica que la IA no responde</strong></td>
+        <td>Falta de conexión con NVIDIA API y Ollama apagado</td>
+        <td>Revisar <code>NVIDIA_API_KEY</code> en Configuración TI y validar Ollama local con <code>ollama list</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>Modificaciones en estilos no impactan</strong></td>
+        <td>Caché estática de Next.js persistente</td>
+        <td>Purgar el directorio: <code>rm -rf .next/cache</code>, recompilar con <code>npm run build</code> y recargar PM2.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="running-footer">
+    <span>Confidencial — Telecom Networks</span>
+    <span>Uso Interno Exclusivo</span>
+  </div>
+
+  <!-- PAGE BREAK TO CHAPTERS 9, 10 -->
+  <div class="page-break"></div>
+
+  <!-- CHAPTER 9 & 10 -->
+  <div class="running-header">
+    <span>Intranet Corporativa — Manual de Operación y Arquitectura v1.2.9</span>
+    <span>Página 12 de 14</span>
+  </div>
+
+  <h1>9. Políticas de Respaldo, Restauración y Disaster Recovery</h1>
+  <div class="alert alert-warning avoid-break">
+    <div class="alert-icon">⚠️</div>
+    <div class="alert-content">
+      <strong>Estrategia de Respaldos Diarios:</strong>
+      <ol>
+        <li><strong>Base de Datos MySQL:</strong> <code>mysqldump -u root -p --single-transaction --routines --triggers --events intranet &gt; /backups/intranet_$(date +%F).sql</code></li>
+        <li><strong>Directorio Uploads:</strong> <code>tar -czf /backups/uploads_$(date +%F).tar.gz public/uploads/</code></li>
+        <li><strong>Caché Redis:</strong> Copia periódica del archivo de snapshot <code>dump.rdb</code>.</li>
+      </ol>
+    </div>
+  </div>
+
+  <h1>10. Buenas Prácticas de Desarrollo y Despliegue</h1>
+  <ul>
+    <li><strong>Despliegues Zero-Downtime:</strong> Utilizar <code>pm2 reload intranet</code> en producción para renovar trabajadores sin pérdida de sesiones.</li>
+    <li><strong>Seguridad OWASP Mandatoria:</strong> Toda Server Action debe comprobar la sesión y ejecutar <code>authorizeRequestAction</code> antes de alterar registros.</li>
+    <li><strong>Coherencia de Diseño:</strong> Emplear exclusivamente tokens HSL y clases universales (<code>.card</code>, <code>.glass</code>, <code>.btn-primary</code>) definidas en <code>DESIGN_SYSTEM.md</code>.</li>
+  </ul>
+
+  <div class="running-footer">
+    <span>Confidencial — Telecom Networks</span>
+    <span>Uso Interno Exclusivo</span>
+  </div>
+
+  <!-- PAGE BREAK TO CHAPTER 11 -->
+  <div class="page-break"></div>
+
+  <!-- CHAPTER 11 -->
+  <div class="running-header">
+    <span>Intranet Corporativa — Manual de Operación y Arquitectura v1.2.9</span>
+    <span>Página 13 de 14</span>
+  </div>
+
+  <h1>11. Historial de Versiones & Registro de Cambios</h1>
+  <table class="avoid-break">
+    <thead>
+      <tr>
+        <th style="width: 15%;">Versión</th>
+        <th style="width: 20%;">Fecha</th>
+        <th style="width: 65%;">Hitos Principales y Mejoras Implementadas</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>v1.0.0</code></td>
+        <td>16-Oct-2026</td>
+        <td>Lanzamiento de plataforma sobre Next.js 15, React 19 y Prisma ORM. Feed, calendario, feriados y perfiles.</td>
+      </tr>
+      <tr>
+        <td><code>v1.1.0</code></td>
+        <td>21-Oct-2026</td>
+        <td>Integración con NVIDIA NIM Cloud API. Diagnóstico L1 en 3 niveles, tickets Helpdesk y bot de WhatsApp con Gemini.</td>
+      </tr>
+      <tr>
+        <td><code>v1.2.0</code></td>
+        <td>26-Oct-2026</td>
+        <td>Catálogo de 12 solicitudes cromáticas, submódulo de incidencias de teletrabajo y centro de auditoría integral.</td>
+      </tr>
+      <tr>
+        <td><code>v1.2.1</code> - <code>v1.2.3</code></td>
+        <td>26-Oct-2026</td>
+        <td>Ampliación a 1560px, registro masivo de ausencias y sync automática con BD DeskTime (49 grupos, 274 empleados).</td>
+      </tr>
+      <tr>
+        <td><code>v1.2.4</code> - <code>v1.2.5</code></td>
+        <td>26-Oct-2026</td>
+        <td>Data Scoping por escuadrón, protección IDOR/BOLA, acceso exclusivo a TI y creación de usuarios multi-dominio.</td>
+      </tr>
+      <tr>
+        <td><code>v1.2.6</code> - <code>v1.2.7</code></td>
+        <td>26-Oct-2026</td>
+        <td>Panel agrupado por campañas en tarjetas cromáticas y modal interactivo de exportación CSV con UTF-8 BOM.</td>
+      </tr>
+      <tr>
+        <td><code>v1.2.8</code> - <code>v1.2.9</code></td>
+        <td>26-Oct-2026</td>
+        <td>Búsqueda multi-tabla omnisciente en IA, reconocimiento directo de Dirección y desarrollador, y fallback con streaming SSE en NVIDIA NIM.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="running-footer">
+    <span>Documentación Oficial: Intranet Corporativa v1.2.9</span>
+    <span>Telecom Networks — Confidencial</span>
+  </div>
+
+</body>
+</html>

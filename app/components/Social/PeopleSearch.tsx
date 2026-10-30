@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Search, UserPlus, Clock, Check, X, Users, UserCheck, Sparkles, Bot } from "lucide-react"
 import { getPeople, sendFriendRequest, getPendingRequests, acceptFriendRequest, declineFriendRequest } from "@/app/actions/friendActions"
 import { UserStatusBadge } from "@/app/components/UI/UserStatusBadge"
+import { useTranslation } from "@/lib/i18n/LanguageContext"
 
 const ROLE_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   MANAGER:     { label: "Manager",       color: "#f97316", bg: "rgba(249,115,22,0.1)" },
@@ -15,14 +16,16 @@ const ROLE_LABELS: Record<string, { label: string; color: string; bg: string }> 
 }
 
 function RoleBadge({ role }: { role: string }) {
+  const { t } = useTranslation()
   const meta = ROLE_LABELS[role] ?? { label: role, color: "hsl(var(--muted-foreground))", bg: "hsl(var(--muted))" }
+  const localizedLabel = t(`social.roles.${role}` as any) || meta.label
   return (
     <span style={{
       fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.04em",
       textTransform: "uppercase", padding: "0.2rem 0.55rem", borderRadius: "9999px",
       color: meta.color, backgroundColor: meta.bg, display: "inline-block", marginTop: "0.2rem"
     }}>
-      {meta.label}
+      {localizedLabel}
     </span>
   )
 }
@@ -48,12 +51,13 @@ function PersonCard({ person, pending, onRequest, onAccept, onDecline }: {
   person: any, pending: any[], onRequest: (id: string) => void,
   onAccept: (id: string) => void, onDecline: (id: string) => void
 }) {
+  const { t } = useTranslation()
   const [hovered, setHovered] = useState(false)
-  const isSent = person.friendshipsReceived.length > 0
-  const isPendingFromHim = person.friendshipsSent.length > 0
+  const isSent = person.friendshipsReceived.some((f: any) => f.status === "PENDING")
+  const isPendingFromHim = person.friendshipsSent.some((f: any) => f.status === "PENDING")
   const isAccepted =
-    person.friendshipsSent.some((f: any) => f.status === "ACCEPTED") ||
-    person.friendshipsReceived.some((f: any) => f.status === "ACCEPTED")
+    person.friendshipsSent.some((f: any) => f.status === "ACCEPTED" || f.status === "ACCEP ED") ||
+    person.friendshipsReceived.some((f: any) => f.status === "ACCEPTED" || f.status === "ACCEP ED")
 
   const initials = (person.name ?? "U").split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2)
 
@@ -139,13 +143,13 @@ function PersonCard({ person, pending, onRequest, onAccept, onDecline }: {
             backgroundColor: "hsl(var(--primary) / 0.1)", color: "hsl(var(--primary))",
             fontSize: "0.75rem", fontWeight: 700
           }}>
-            <UserCheck size={12} /> Conectados
+            <UserCheck size={12} /> {t("social.connected")}
           </div>
         ) : isSent ? (
           <button
             onClick={() => {
-              const req = person.friendshipsReceived[0]
-              if (req) onDecline(req.id)
+              const req = person.friendshipsReceived.find((f: any) => f.status === "PENDING") || person.friendshipsReceived[0]
+              if (req?.id) onDecline(req.id)
             }}
             style={{
               width: "100%", padding: "0.45rem", borderRadius: "0.625rem",
@@ -156,18 +160,20 @@ function PersonCard({ person, pending, onRequest, onAccept, onDecline }: {
               transition: "all 0.2s"
             }}
           >
-            Cancelar
+            {t("common.cancel")}
           </button>
         ) : isPendingFromHim ? (
           <button
             onClick={() => {
-              const req = pending.find(p => p.senderId === person.id)
-              if (req) onAccept(req.id)
+              const req = person.friendshipsSent.find((f: any) => f.status === "PENDING")
+                || pending.find((p: any) => p.senderId === person.id)
+                || person.friendshipsSent[0]
+              if (req?.id) onAccept(req.id)
             }}
             className="btn btn-primary"
             style={{ width: "100%", borderRadius: "0.625rem", fontSize: "0.75rem", padding: "0.45rem" }}
           >
-            <Check size={12} /> Aceptar
+            <Check size={12} /> {t("common.accept")}
           </button>
         ) : (
           <button
@@ -182,7 +188,7 @@ function PersonCard({ person, pending, onRequest, onAccept, onDecline }: {
               transition: "all 0.2s"
             }}
           >
-            <UserPlus size={12} /> Conectar
+            <UserPlus size={12} /> {t("social.connect")}
           </button>
         )}
       </div>
@@ -191,6 +197,7 @@ function PersonCard({ person, pending, onRequest, onAccept, onDecline }: {
 }
 
 export function PeopleSearch() {
+  const { t } = useTranslation()
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<any[]>([])
   const [pending, setPending] = useState<any[]>([])
@@ -214,34 +221,62 @@ export function PeopleSearch() {
     fetchPending()
     fetchPeople()
     const interval = setInterval(fetchPending, 10000)
-    return () => clearInterval(interval)
+    const onFriendshipUpdated = () => {
+      fetchPending()
+      fetchPeople()
+    }
+    window.addEventListener('friendship-updated', onFriendshipUpdated)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('friendship-updated', onFriendshipUpdated)
+    }
   }, [])
 
   const handleRequest = async (userId: string) => {
     const res = await sendFriendRequest(userId)
-    if (res.success) fetchPeople()
-    else alert(res.error || "Error al enviar solicitud")
+    if (res.success) {
+      await fetchPeople()
+      window.dispatchEvent(new CustomEvent('friendship-updated'))
+    } else {
+      alert(res.error || "Error al enviar solicitud")
+    }
   }
 
   const handleAccept = async (reqId: string) => {
-    const res = await acceptFriendRequest(reqId)
-    if (res.success) fetchPending()
-    else alert(res.error || "Error al aceptar")
+    try {
+      const res = await acceptFriendRequest(reqId)
+      if (res && res.success) {
+        await Promise.all([fetchPending(), fetchPeople()])
+        window.dispatchEvent(new CustomEvent('friendship-updated'))
+      } else {
+        alert(res?.error || "Error al aceptar solicitud")
+      }
+    } catch (e: any) {
+      alert("Error al procesar la solicitud: " + (e?.message || "Desconocido"))
+    }
   }
 
   const handleDecline = async (reqId: string) => {
-    const res = await declineFriendRequest(reqId)
-    if (res.success) fetchPending()
-    else alert(res.error || "Error al declinar")
+    try {
+      const res = await declineFriendRequest(reqId)
+      if (res && res.success) {
+        await Promise.all([fetchPending(), fetchPeople()])
+        window.dispatchEvent(new CustomEvent('friendship-updated'))
+      } else {
+        alert(res?.error || "Error al declinar solicitud")
+      }
+    } catch (e: any) {
+      alert("Error al procesar la solicitud: " + (e?.message || "Desconocido"))
+    }
   }
 
   const FILTER_OPTIONS = [
-    { id: "ALL", label: "Todos" },
-    { id: "AVAILABLE", label: "Disponibles" },
-    { id: "VACATION", label: "Vacaciones" },
-    { id: "SICK_LEAVE", label: "Enfermedad" },
-    { id: "LICENSES", label: "Licencias" },
-    { id: "PERMISSIONS", label: "Permisos Especiales" }
+    { id: "ALL", label: t("social.filters.all") },
+    { id: "AVAILABLE", label: t("social.filters.available") },
+    { id: "VACATION", label: t("social.filters.vacation") },
+    { id: "SICK_LEAVE", label: t("social.filters.sickLeave") },
+    { id: "LICENSES", label: t("social.filters.licenses") },
+    { id: "PERMISSIONS", label: t("social.filters.permissions") }
   ]
 
   const filteredResults = results.filter(p => {
@@ -250,7 +285,7 @@ export function PeopleSearch() {
     if (statusFilter === "AVAILABLE") return p.currentStatus.status === "AVAILABLE"
     if (statusFilter === "VACATION") return p.currentStatus.type === "VACATION"
     if (statusFilter === "SICK_LEAVE") return p.currentStatus.type === "SICK_LEAVE"
-    if (statusFilter === "PERMISSIONS") return p.currentStatus.type === "PERMISSION" || p.currentStatus.type === "EARLY_LEAVE"
+    if (statusFilter === "PERMISSIONS") return p.currentStatus.type === "PERMISSION" || p.currentStatus.type === "EARLY_LEAVE" || p.currentStatus.type === "LATE_ARRIVAL"
     if (statusFilter === "LICENSES") return ["MEDICAL_LEAVE", "MATERNITY_LEAVE", "PATERNITY_LEAVE", "BEREAVEMENT_LEAVE"].includes(p.currentStatus.type)
     return true
   })
@@ -264,10 +299,10 @@ export function PeopleSearch() {
             <div style={{ backgroundColor: "hsl(var(--primary) / 0.1)", padding: "0.35rem", borderRadius: "0.5rem" }}>
               <Users size={18} color="hsl(var(--primary))" />
             </div>
-            Encontrar Colegas
+            {t("social.findColleagues")}
           </h3>
           <p style={{ fontSize: "0.8rem", color: "hsl(var(--muted-foreground))", margin: 0 }}>
-            Conecta con tu equipo y expande tu red interna.
+            {t("social.findColleaguesSub")}
           </p>
         </div>
         {results.length > 0 && !loading && (
@@ -276,7 +311,7 @@ export function PeopleSearch() {
             backgroundColor: "hsl(var(--muted) / 0.5)", padding: "0.25rem 0.6rem",
             borderRadius: "9999px"
           }}>
-            {results.length} personas
+            {t("social.peopleCount", { count: results.length })}
           </span>
         )}
       </div>
@@ -353,7 +388,7 @@ export function PeopleSearch() {
           }} />
           <input
             type="text"
-            placeholder="Buscar por nombre o rol..."
+            placeholder={t("social.searchPlaceholder")}
             className="input"
             style={{ paddingLeft: "2.5rem", borderRadius: "0.75rem", fontSize: "0.875rem", width: "100%" }}
             value={query}
@@ -364,9 +399,9 @@ export function PeopleSearch() {
           onClick={() => window.dispatchEvent(new CustomEvent('open-assistant'))}
           className="btn btn-surface hover-scale"
           style={{ padding: "0.5rem 1rem", borderRadius: "0.75rem", display: "flex", alignItems: "center", gap: "0.5rem", color: "hsl(var(--primary))", border: "1px solid hsl(var(--primary)/0.2)", fontWeight: 700 }}
-          title="Búsqueda Inteligente en el Directorio"
+          title={t("topbar.assistantTitle")}
         >
-          <Bot size={16} /> Búsqueda IA
+          <Bot size={16} /> {t("social.aiSearch")}
         </button>
       </div>
 
@@ -429,7 +464,7 @@ export function PeopleSearch() {
             color: "hsl(var(--muted-foreground))", fontSize: "0.875rem"
           }}>
             <Sparkles size={28} style={{ margin: "0 auto 0.75rem", opacity: 0.3, display: "block" }} />
-            No se encontraron colegas con ese nombre.
+            {t("social.noColleaguesFound")}
           </div>
         ) : (
           filteredResults.map(person => (

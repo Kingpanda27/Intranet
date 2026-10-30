@@ -1,14 +1,15 @@
 "use server"
 
-import { requireAuth, requirePermission } from "@/lib/permissions"
+import { requireAuth, requirePermission, ROLE_HIERARCHY } from "@/lib/permissions"
 import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { authOptions, isSuperAdminEmail } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { invalidateUserSessionsInRedis } from "@/lib/redis"
 import { revalidatePath } from "next/cache"
 import bcrypt from "bcryptjs"
 import { saveFile } from "./fileActions"
 import { sendInvitationEmail } from "@/lib/email"
-import { computeUserStatus } from "@/lib/userUtils"
+import { computeUserStatus, NON_ABSENCE_REQUEST_TYPES } from "@/lib/userUtils"
 import { createAuditLog } from "./auditActions"
 
 export async function updateProfile(formData: FormData) {
@@ -75,7 +76,18 @@ export async function getAllUsers() {
   await requirePermission("users:view_all")
 
   return await prisma.user.findMany({
-    select: { id: true, name: true, email: true, role: true, image: true, vacationBalance: true },
+    select: { 
+      id: true, 
+      name: true, 
+      email: true, 
+      role: true, 
+      image: true, 
+      vacationBalance: true,
+      status: true,
+      isActive: true,
+      deletedAt: true,
+      deactivatedBy: true
+    },
     orderBy: { name: "asc" }
   })
 }
@@ -100,7 +112,7 @@ export async function createUser(formData: FormData) {
     return { error: "Por favor ingresa un correo electrónico válido." }
   }
 
-  const validRoles = ["USER", "SUPERVISOR", "MANAGER", "HR", "TECHNOLOGY", "IT_MANAGER", "NO_ROLE"]
+  const validRoles = ["USER", "SUPERVISOR", "MANAGER", "HR", "TECHNOLOGY", "ADMIN", "IT_MANAGER", "NO_ROLE"]
   if (!validRoles.includes(role)) return { error: "Rol inválido." }
 
   try {
@@ -157,7 +169,7 @@ export async function updateUserAdmin(userId: string, formData: FormData) {
   const role = formData.get("role") as string
   const name = formData.get("name") as string
 
-  const validRoles = ["AGENT", "USER", "SUPERVISOR", "TEAM_LEAD", "TECHNOLOGY", "TECHNOLOGY_ADMIN", "HR", "MANAGER", "IT_MANAGER", "NO_ROLE"]
+  const validRoles = ["AGENT", "USER", "SUPERVISOR", "TEAM_LEAD", "TECHNOLOGY", "TECHNOLOGY_ADMIN", "ADMIN", "HR", "MANAGER", "IT_MANAGER", "NO_ROLE"]
   if (role && !validRoles.includes(role)) {
     return { error: "Rol inválido." }
   }
@@ -166,7 +178,7 @@ export async function updateUserAdmin(userId: string, formData: FormData) {
     const targetUser = await prisma.user.findUnique({ where: { id: userId } })
     if (!targetUser) return { error: "Usuario no encontrado." }
     
-    const isMasterAdmin = currentUser.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || currentUser.isSuperAdmin
+    const isMasterAdmin = isSuperAdminEmail(currentUser.email) || currentUser.isSuperAdmin
     if (targetUser.role === "TECHNOLOGY" && currentUser.role !== "IT_MANAGER" && !isMasterAdmin) {
       return { error: "Solo un IT_MANAGER puede modificar o degradar a un usuario de Tecnología." }
     }
@@ -250,52 +262,120 @@ export async function deleteBulkUsers(userIds: string[]) {
   }
 
   if (!Array.isArray(userIds) || userIds.length === 0) {
-    return { error: "No se proporcionaron usuarios para eliminar." }
+    return { error: "No se proporcionaron usuarios para desactivar." }
   }
 
-  // Prevenir auto-eliminación
+  // Prevenir auto-eliminación o auto-desactivación
   const targetIds = userIds.filter(id => id !== currentUser.id)
   if (targetIds.length === 0) {
-    return { error: "No puedes eliminar tu propia cuenta." }
+    return { error: "No puedes dar de baja tu propia cuenta." }
   }
 
   try {
-    // Si no es IT_MANAGER ni el administrador maestro, no puede eliminar usuarios con rol TECHNOLOGY
-    const isMasterAdmin = currentUser.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || currentUser.isSuperAdmin
+    // Si no es IT_MANAGER ni el administrador maestro, no puede dar de baja a usuarios con rol TECHNOLOGY
+    const isMasterAdmin = isSuperAdminEmail(currentUser.email) || currentUser.isSuperAdmin
     if (currentUser.role !== "IT_MANAGER" && !isMasterAdmin) {
       const techUsers = await prisma.user.findMany({
         where: { id: { in: targetIds }, role: "TECHNOLOGY" },
         select: { id: true, name: true, email: true }
       })
       if (techUsers.length > 0) {
-        return { error: `Solo un IT_MANAGER puede eliminar a usuarios con rol Tecnología (${techUsers.map(u => u.name || u.email).join(", ")}).` }
+        return { error: `Solo un IT_MANAGER puede dar de baja a usuarios con rol Tecnología (${techUsers.map(u => u.name || u.email).join(", ")}).` }
       }
     }
 
-    const deletedUsersInfo = await prisma.user.findMany({
+    // 1. Snapshot Antes de la desactivación
+    const snapshotBefore = await prisma.user.findMany({
       where: { id: { in: targetIds } },
-      select: { id: true, name: true, email: true, role: true }
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        status: true,
+        isActive: true,
+        projectId: true,
+        project: { select: { id: true, name: true } },
+        supervisedProjects: { select: { id: true, name: true } },
+        subLedProjects: { select: { id: true, name: true } }
+      }
     })
 
-    await cleanupUserRelations(targetIds)
-    const result = await prisma.user.deleteMany({
-      where: { id: { in: targetIds } }
+    const now = new Date()
+
+    // 2. Ejecutar Soft Delete y desvinculación de liderazgo para cada usuario
+    for (const targetId of targetIds) {
+      // A. Desvincular de supervisión o sub-liderazgo en Project (manteniendo projectId histórico)
+      await prisma.user.update({
+        where: { id: targetId },
+        data: {
+          isActive: false,
+          status: "INACTIVE",
+          deletedAt: now,
+          deactivatedBy: currentUser.id,
+          supervisedProjects: { set: [] },
+          subLedProjects: { set: [] }
+        }
+      })
+
+      // B. Invalidar sesiones activas en MySQL
+      await prisma.session.deleteMany({ where: { userId: targetId } }).catch(() => {})
+
+      // C. Invalidar de inmediato sesiones, tokens y caché en Redis (REDIS_URL)
+      await invalidateUserSessionsInRedis(targetId)
+    }
+
+    // 3. Snapshot Después de la desactivación
+    const snapshotAfter = await prisma.user.findMany({
+      where: { id: { in: targetIds } },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        status: true,
+        isActive: true,
+        deletedAt: true,
+        deactivatedBy: true,
+        projectId: true,
+        project: { select: { id: true, name: true } },
+        supervisedProjects: { select: { id: true, name: true } },
+        subLedProjects: { select: { id: true, name: true } }
+      }
     })
 
+    // 4. Registro en auditoría con trazabilidad de snapshot Antes vs. Después
     await createAuditLog({
-      action: "USER_DELETED",
-      target: deletedUsersInfo.map(u => `${u.name || u.email} (${u.email})`).join(", ") || `${result.count} usuario(s)`,
+      action: "USER_DEACTIVATED_SOFT_DELETE",
+      target: snapshotBefore.map(u => `${u.name || u.email} (${u.email})`).join(", ") || `${targetIds.length} usuario(s)`,
       metadata: {
-        deletedCount: result.count,
-        users: deletedUsersInfo
+        deactivatedCount: targetIds.length,
+        deactivatedBy: {
+          id: currentUser.id,
+          name: currentUser.name,
+          email: currentUser.email,
+          role: currentUser.role
+        },
+        snapshotBefore,
+        snapshotAfter
       }
     })
 
     revalidatePath("/admin/users")
-    return { success: true, count: result.count }
+    revalidatePath("/admin/groups")
+    revalidatePath("/directory")
+    revalidatePath("/social")
+    revalidatePath("/vacations")
+    revalidatePath("/dashboard")
+
+    return { 
+      success: true, 
+      count: targetIds.length,
+      message: `Se aplicó la baja lógica (Soft Delete) a ${targetIds.length} colaborador(es) conservando su historial corporativo.` 
+    }
   } catch (error: any) {
-    console.error("Error deleting bulk users:", error)
-    return { error: error.message || "Error al eliminar usuarios." }
+    console.error("Error al dar de baja usuarios (Soft Delete):", error)
+    return { error: error.message || "Error al desactivar usuarios." }
   }
 }
 
@@ -303,6 +383,119 @@ export async function deleteUser(userId: string) {
   const res = await deleteBulkUsers([userId])
   if (!res.success) return res
   return { success: true }
+}
+
+/**
+ * Purga Física Definitiva de Usuarios de Prueba (Hard Delete)
+ * 
+ * Restricciones estrictas de seguridad e integridad:
+ * 1. Restringida exclusivamente a IT_MANAGER (nivel 50) y SUPERADMIN.
+ * 2. Bloqueada si el usuario tiene solicitudes históricas aprobadas (TimeOffRequest con status APPROVED)
+ *    o si figura como aprobador oficial en solicitudes históricas.
+ * 3. Ejecuta cleanupUserRelations únicamente si todas las verificaciones son satisfactorias.
+ */
+export async function hardPurgeTestUser(userId: string) {
+  let currentUser: any
+  try {
+    currentUser = await requireAuth()
+  } catch (err: any) {
+    return { error: err.message || "Acceso denegado." }
+  }
+
+  const role = String(currentUser.role || "").toUpperCase().trim()
+  const isMasterAdmin = isSuperAdminEmail(currentUser.email) || currentUser.isSuperAdmin
+  const isItManager = role === "IT_MANAGER" || role === "TECHNOLOGY_ADMIN" || (ROLE_HIERARCHY[role] ?? 0) >= 50
+
+  if (!isMasterAdmin && !isItManager) {
+    return {
+      error: "Acceso denegado (403 Forbidden): La purga física definitiva de usuarios está restringida exclusivamente a IT_MANAGER y SUPERADMIN."
+    }
+  }
+
+  if (!userId || userId === currentUser.id) {
+    return { error: "Identificador de usuario inválido o intento de auto-purga." }
+  }
+
+  try {
+    const targetUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true, role: true }
+    })
+
+    if (!targetUser) {
+      return { error: "El usuario a purgar no existe en la base de datos." }
+    }
+
+    // 1. Bloqueo por integridad: Verificar si tiene solicitudes de vacaciones o incidencias aprobadas
+    const approvedRequestsCount = await prisma.timeOffRequest.count({
+      where: {
+        userId,
+        status: "APPROVED"
+      }
+    })
+
+    if (approvedRequestsCount > 0) {
+      return {
+        error: `Operación bloqueada por integridad corporativa: El usuario tiene ${approvedRequestsCount} solicitud(es) de vacaciones o permisos aprobada(s). Por normativas de auditoría y nómina, solo se permite la baja lógica (Soft Delete).`
+      }
+    }
+
+    // 2. Bloqueo si actuó como aprobador oficial de solicitudes históricas
+    const approvalsAsSignerCount = await prisma.timeOffRequest.count({
+      where: {
+        approvedById: userId,
+        status: "APPROVED"
+      }
+    })
+
+    if (approvalsAsSignerCount > 0) {
+      return {
+        error: `Operación bloqueada: El usuario figura como firmante/aprobador oficial en ${approvalsAsSignerCount} solicitud(es) histórica(s). No se puede destruir la trazabilidad legal.`
+      }
+    }
+
+    // 3. Ejecutar limpieza transaccional de dependencias
+    await cleanupUserRelations([userId])
+
+    // 4. Eliminar físicamente el registro de la tabla User
+    await prisma.user.delete({
+      where: { id: userId }
+    })
+
+    // 5. Invalidar sesiones en Redis
+    await invalidateUserSessionsInRedis(userId)
+
+    // 6. Registro de auditoría
+    await createAuditLog({
+      action: "USER_HARD_PURGED_TEST_ONLY",
+      target: `${targetUser.name || targetUser.email} (${targetUser.email})`,
+      metadata: {
+        purgedUserId: userId,
+        purgedUserEmail: targetUser.email,
+        purgedUserName: targetUser.name,
+        purgedBy: {
+          id: currentUser.id,
+          name: currentUser.name,
+          email: currentUser.email,
+          role: currentUser.role
+        },
+        reason: "Purga física definitiva de usuario de prueba sin historial de solicitudes aprobadas"
+      }
+    })
+
+    revalidatePath("/admin/users")
+    revalidatePath("/admin/groups")
+    revalidatePath("/directory")
+    revalidatePath("/social")
+
+    return {
+      success: true,
+      message: `El usuario de prueba ${targetUser.name || targetUser.email} ha sido purgado físicamente del sistema de forma definitiva.`
+    }
+  } catch (error: any) {
+    console.error("Error en hardPurgeTestUser:", error)
+    return { error: error.message || "Error al purgar físicamente el usuario de prueba." }
+  }
 }
 
 export async function inviteUser(userId: string) {
@@ -401,7 +594,7 @@ export async function processBulkUsers(usersData: {
     }
   }
 
-  const validRoles = ["USER", "SUPERVISOR", "MANAGER", "HR", "TECHNOLOGY", "IT_MANAGER", "NO_ROLE"]
+  const validRoles = ["USER", "SUPERVISOR", "MANAGER", "HR", "TECHNOLOGY", "ADMIN", "IT_MANAGER", "NO_ROLE"]
   const results = {
     created: 0,
     existing: 0,
@@ -481,7 +674,7 @@ export async function processBulkUsers(usersData: {
 
 export async function testSmtp(targetEmail: string) {
   const session = await getServerSession(authOptions)
-  const isMasterAdmin = (session?.user as any)?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (session?.user as any)?.isSuperAdmin
+  const isMasterAdmin = isSuperAdminEmail((session?.user as any)?.email) || (session?.user as any)?.isSuperAdmin
   const role = (session?.user as any)?.role
   if (!session?.user || (role !== "IT_MANAGER" && role !== "TECHNOLOGY" && !isMasterAdmin)) {
     return { error: "Solo IT_MANAGER o TI puede probar el SMTP" }
@@ -503,14 +696,17 @@ export async function getAbsentEmployeesToday() {
     select: {
       id: true, name: true, image: true, role: true, lastSeen: true,
       requests: {
-        where: { status: "APPROVED" },
+        where: { 
+          status: "APPROVED",
+          type: { notIn: NON_ABSENCE_REQUEST_TYPES }
+        },
         select: { type: true, startDate: true, endDate: true, status: true }
       }
     }
   })
 
   return users.map(u => ({ ...u, currentStatus: computeUserStatus(u.requests, u.lastSeen) }))
-    .filter(u => u.currentStatus.status !== "AVAILABLE" && u.currentStatus.status !== "OFFLINE")
+    .filter(u => u.currentStatus.status !== "AVAILABLE" && u.currentStatus.status !== "OFFLINE" && u.currentStatus.status !== "SPECIAL_PERMISSION")
     .sort((a, b) => {
        const da = a.currentStatus.returnDate ? a.currentStatus.returnDate.getTime() : 0
        const db = b.currentStatus.returnDate ? b.currentStatus.returnDate.getTime() : 0

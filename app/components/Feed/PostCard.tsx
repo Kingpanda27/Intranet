@@ -4,13 +4,14 @@ import { useState } from "react"
 import { Heart, MessageCircle, Send, Trash2, MoreHorizontal, Share2, Pin } from "lucide-react"
 import { toggleReaction, addComment, deletePost, togglePostFeatured } from "@/app/actions/postActions"
 import { UserStatusBadge } from "@/app/components/UI/UserStatusBadge"
+import { useTranslation } from "@/lib/i18n/LanguageContext"
 
 export const REACTION_TYPES = {
-  LIKE: { icon: "👍", label: "Me gusta", color: "hsl(210 100% 50%)" },
-  CLAP: { icon: "👏", label: "Celebrar", color: "hsl(150 80% 40%)" },
-  CELEBRATE: { icon: "🎉", label: "Felicitar", color: "hsl(40 90% 50%)" },
-  IDEA: { icon: "💡", label: "Buena idea", color: "hsl(50 90% 45%)" },
-  HEART: { icon: "❤️", label: "Me encanta", color: "hsl(340 80% 60%)" }
+  LIKE: { icon: "👍", labelKey: "feed.like", defaultLabel: "Me gusta", color: "hsl(210 100% 50%)" },
+  CLAP: { icon: "👏", labelKey: "feed.celebrate", defaultLabel: "Celebrar", color: "hsl(150 80% 40%)" },
+  CELEBRATE: { icon: "🎉", labelKey: "feed.congratulate", defaultLabel: "Felicitar", color: "hsl(40 90% 50%)" },
+  IDEA: { icon: "💡", labelKey: "feed.goodIdea", defaultLabel: "Buena idea", color: "hsl(50 90% 45%)" },
+  HEART: { icon: "❤️", labelKey: "feed.love", defaultLabel: "Me encanta", color: "hsl(340 80% 60%)" }
 }
 
 type PostProps = {
@@ -33,6 +34,7 @@ type PostProps = {
 }
 
 export function PostCard({ post, currentUserId, currentUserRole, hasLiked, userReaction, index }: PostProps) {
+  const { t, locale } = useTranslation()
   const [optimisticReaction, setOptimisticReaction] = useState(userReaction || null)
   const [likeCount, setLikeCount] = useState(post.likes.length)
   const [showComments, setShowComments] = useState(false)
@@ -58,7 +60,7 @@ export function PostCard({ post, currentUserId, currentUserRole, hasLiked, userR
   const handleToggleFeature = async () => {
     setIsSubmitting(true)
     const result = await togglePostFeatured(post.id, !post.isFeatured)
-    if (result?.error) alert(result.error)
+    if ((result as any)?.error) alert((result as any).error)
     setIsSubmitting(false)
   }
 
@@ -73,7 +75,7 @@ export function PostCard({ post, currentUserId, currentUserRole, hasLiked, userR
   }
 
   const handleDeletePost = async () => {
-    if (!confirm("¿Seguro que deseas eliminar esta publicación permanentemente?")) return
+    if (!confirm(t("feed.deleteConfirm"))) return
     setIsSubmitting(true)
     const result = await deletePost(post.id)
     if (result?.error) {
@@ -154,12 +156,14 @@ export function PostCard({ post, currentUserId, currentUserRole, hasLiked, userR
               <UserStatusBadge status={post.author.currentStatus} showText={true} />
             )}
             {post.author.id === "admin" && (
-              <Pin size={12} style={{ color: "hsl(var(--primary))", transform: "rotate(45deg)" }} title="Pinned Post" />
+              <span title="Pinned Post" style={{ display: "inline-flex" }}>
+                <Pin size={12} style={{ color: "hsl(var(--primary))", transform: "rotate(45deg)" }} />
+              </span>
             )}
-            <span style={{ fontSize: "0.8rem", color: "hsl(var(--muted-foreground))" }}>
-              · {new Date(post.createdAt).toLocaleDateString("es-ES", {
+            <span style={{ fontSize: "0.8rem", color: "hsl(var(--muted-foreground))" }} suppressHydrationWarning>
+              · {new Date(post.createdAt).toLocaleDateString(locale === "en" ? "en-US" : "es-ES", {
                 day: "numeric", month: "short"
-              })} a las {new Date(post.createdAt).toLocaleTimeString("es-ES", {
+              })} {t("feed.at")} {new Date(post.createdAt).toLocaleTimeString(locale === "en" ? "en-US" : "es-ES", {
                 hour: "2-digit", minute:"2-digit"
               })}
             </span>
@@ -171,7 +175,7 @@ export function PostCard({ post, currentUserId, currentUserRole, hasLiked, userR
                 onClick={handleDeletePost}
                 disabled={isSubmitting}
                 className="btn btn-ghost hover-scale"
-                title="Eliminar publicación"
+                title={t("feed.deletePost")}
                 style={{ 
                   padding: "0.4rem", 
                   borderRadius: "50%",
@@ -196,7 +200,7 @@ export function PostCard({ post, currentUserId, currentUserRole, hasLiked, userR
                 onClick={handleToggleFeature}
                 disabled={isSubmitting}
                 className="btn btn-ghost hover-scale" 
-                title={post.isFeatured ? "Quitar destacado" : "Destacar publicación"}
+                title={post.isFeatured ? t("feed.unpinPost") : t("feed.pinPost")}
                 style={{ 
                   padding: "0.4rem", borderRadius: "50%", 
                   color: post.isFeatured ? "hsl(340 80% 60%)" : "hsl(var(--muted-foreground))" 
@@ -252,7 +256,7 @@ export function PostCard({ post, currentUserId, currentUserRole, hasLiked, userR
                   key={key}
                   onClick={() => handleReaction(key)}
                   className="hover-scale"
-                  title={data.label}
+                  title={t(data.labelKey as any) || data.defaultLabel}
                   style={{
                     background: "transparent", border: "none", fontSize: "1.5rem", cursor: "pointer",
                     padding: "0.25rem", transition: "transform 0.2s"
@@ -382,7 +386,7 @@ export function PostCard({ post, currentUserId, currentUserRole, hasLiked, userR
                           {comment.author.currentStatus && comment.author.currentStatus.status !== "AVAILABLE" && (
                             <UserStatusBadge status={comment.author.currentStatus} showText={false} style={{ padding: "0.1rem 0.2rem" }} />
                           )}
-                          <span style={{ fontSize: "0.7rem", color: "hsl(var(--muted-foreground))" }}>
+                          <span style={{ fontSize: "0.7rem", color: "hsl(var(--muted-foreground))" }} suppressHydrationWarning>
                             {new Date(comment.createdAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
                           </span>
                         </div>
@@ -409,7 +413,7 @@ export function PostCard({ post, currentUserId, currentUserRole, hasLiked, userR
                 <input 
                   type="text" 
                   className="input" 
-                  placeholder="Escribe tu respuesta..." 
+                  placeholder={t("feed.writeComment")} 
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
                   style={{ 

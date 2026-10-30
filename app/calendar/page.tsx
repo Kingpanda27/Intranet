@@ -34,7 +34,8 @@ import {
   ShieldCheck,
   Globe
 } from 'lucide-react'
-import { deduplicateHolidays, getHolidayMetadata } from '@/lib/holidayData'
+import { deduplicateHolidays, getHolidayMetadata, getLocalizedHolidayTitle } from '@/lib/holidayData'
+import { useTranslation } from '@/lib/i18n/LanguageContext'
 
 // Iconos por tipo de evento
 const TYPE_ICONS: Record<string, any> = {
@@ -183,6 +184,7 @@ const PREMIUM_COLORS = [
 ]
 
 export default function CalendarPage() {
+  const { t, locale } = useTranslation()
   const { data: session } = useSession()
   const user = session?.user as any
   const role = user?.role || "USER"
@@ -442,8 +444,12 @@ export default function CalendarPage() {
     days.push({ day: i, isCurrentMonth: false })
   }
 
-  const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-  const dayNames = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+  const monthNames = locale === "en"
+    ? ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    : ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+  const dayNames = locale === "en"
+    ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    : ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 
   // Comprobar si una fecha específica cae en un rango de fechas
   const isDateInRange = (checkDate: Date, start: Date, end: Date) => {
@@ -550,7 +556,7 @@ export default function CalendarPage() {
 
   const handleDeleteEvent = async () => {
     if (!selectedEvent) return
-    if (!confirm('¿Estás seguro de que deseas eliminar este evento permanentemente?')) return
+    if (!confirm(t("calendar.deleteConfirm"))) return
 
     try {
       await deleteCalendarEvent(selectedEvent.id)
@@ -569,9 +575,9 @@ export default function CalendarPage() {
         <div>
           <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '2rem', fontWeight: 800 }}>
             <CalendarIcon size={32} className="text-primary" />
-            Calendario Corporativo
+            {t("calendar.title")}
           </h1>
-          <p style={{ color: 'hsl(var(--muted-foreground))' }}>Visualiza eventos, feriados y ausencias del equipo de forma inteligente.</p>
+          <p style={{ color: 'hsl(var(--muted-foreground))' }}>{t("calendar.subtitle")}</p>
         </div>
 
         {isSupervisorOrAdmin && (
@@ -592,7 +598,7 @@ export default function CalendarPage() {
             style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderRadius: '9999px', padding: '0.6rem 1.25rem', boxShadow: '0 4px 14px hsl(var(--primary)/0.3)' }}
           >
             <Plus size={18} />
-            <span>Nuevo Evento</span>
+            <span>{t("calendar.newEvent")}</span>
           </button>
         )}
       </div>
@@ -604,56 +610,56 @@ export default function CalendarPage() {
           className={`btn ${activeFilters.includes("ALL") ? "btn-primary" : "btn-surface"}`}
           style={{ borderRadius: '9999px', fontSize: '0.8rem', padding: '0.4rem 1rem' }}
         >
-          Todos
+          {t("common.all")}
         </button>
         <button 
           onClick={() => toggleFilter("HOLIDAY")} 
           className={`btn ${activeFilters.includes("HOLIDAY") ? "btn-primary" : "btn-surface"}`}
           style={{ borderRadius: '9999px', fontSize: '0.8rem', padding: '0.4rem 1rem', borderLeft: '3px solid #ef4444' }}
         >
-          🎉 Feriados
+          🎉 {t("calendar.filterHolidays")}
         </button>
         <button 
           onClick={() => toggleFilter("VACATION")} 
           className={`btn ${activeFilters.includes("VACATION") ? "btn-primary" : "btn-surface"}`}
           style={{ borderRadius: '9999px', fontSize: '0.8rem', padding: '0.4rem 1rem', borderLeft: '3px solid #3b82f6' }}
         >
-          Vacaciones
+          {t("calendar.filterVacations")}
         </button>
         <button 
           onClick={() => toggleFilter("PERMISSION")} 
           className={`btn ${activeFilters.includes("PERMISSION") ? "btn-primary" : "btn-surface"}`}
           style={{ borderRadius: '9999px', fontSize: '0.8rem', padding: '0.4rem 1rem', borderLeft: '3px solid #8b5cf6' }}
         >
-          Permisos
+          {t("calendar.filterPermissions")}
         </button>
         <button 
           onClick={() => toggleFilter("SICK")} 
           className={`btn ${activeFilters.includes("SICK") ? "btn-primary" : "btn-surface"}`}
           style={{ borderRadius: '9999px', fontSize: '0.8rem', padding: '0.4rem 1rem', borderLeft: '3px solid #ef4444' }}
         >
-          Enfermedad
+          {t("calendar.filterSick")}
         </button>
         <button 
           onClick={() => toggleFilter("EVENT")} 
           className={`btn ${activeFilters.includes("EVENT") ? "btn-primary" : "btn-surface"}`}
           style={{ borderRadius: '9999px', fontSize: '0.8rem', padding: '0.4rem 1rem', borderLeft: '3px solid #10b981' }}
         >
-          Eventos
+          {t("calendar.filterEvents")}
         </button>
         <button 
           onClick={() => toggleFilter("TEAM")} 
           className={`btn ${activeFilters.includes("TEAM") ? "btn-primary" : "btn-surface"}`}
           style={{ borderRadius: '9999px', fontSize: '0.8rem', padding: '0.4rem 1rem' }}
         >
-          👥 Mi Equipo
+          👥 {t("calendar.filterTeam")}
         </button>
         <button 
           onClick={() => toggleFilter("MINE")} 
           className={`btn ${activeFilters.includes("MINE") ? "btn-primary" : "btn-surface"}`}
           style={{ borderRadius: '9999px', fontSize: '0.8rem', padding: '0.4rem 1rem' }}
         >
-          👤 Solo Míos
+          👤 {t("calendar.filterMine")}
         </button>
       </div>
 
@@ -666,7 +672,7 @@ export default function CalendarPage() {
           </h2>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <button onClick={prevMonth} className="btn btn-surface" style={{ padding: '0.5rem', borderRadius: '0.5rem' }}><ChevronLeft size={20} /></button>
-            <button onClick={() => setCurrentDate(new Date())} className="btn btn-surface" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', fontWeight: 600, borderRadius: '0.5rem' }}>Hoy</button>
+            <button onClick={() => setCurrentDate(new Date())} className="btn btn-surface" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', fontWeight: 600, borderRadius: '0.5rem' }}>{t("calendar.today")}</button>
             <button onClick={nextMonth} className="btn btn-surface" style={{ padding: '0.5rem', borderRadius: '0.5rem' }}><ChevronRight size={20} /></button>
           </div>
         </div>
@@ -684,7 +690,7 @@ export default function CalendarPage() {
         {loading ? (
           <div style={{ padding: '8rem', textAlign: 'center', color: 'hsl(var(--muted-foreground))', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
             <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid hsl(var(--primary)/0.2)', borderTopColor: 'hsl(var(--primary))', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-            <span>Cargando calendario inteligente...</span>
+            <span>{t("calendar.loadingCalendar")}</span>
           </div>
         ) : (
           <div style={{ 
@@ -730,7 +736,7 @@ export default function CalendarPage() {
                         <div 
                           key={ev.id} 
                           onClick={() => handleOpenDetail(ev)}
-                          title={ev.isHoliday || ev.type === 'HOLIDAY' ? `${ev.title} (Haz clic para ver detalles)` : ev.title} 
+                          title={ev.isHoliday || ev.type === 'HOLIDAY' ? `${getLocalizedHolidayTitle(ev.title, locale)} (Haz clic para ver detalles)` : ev.title} 
                           style={{
                             fontSize: '0.65rem', 
                             padding: '0.3rem 0.5rem', 
@@ -755,7 +761,9 @@ export default function CalendarPage() {
                           className={isClickable ? "event-hover" : ""}
                         >
                           <Icon size={11} color={ev.color} style={{ flexShrink: 0 }} />
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.title}</span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {ev.isHoliday || ev.type === 'HOLIDAY' ? getLocalizedHolidayTitle(ev.title, locale) : ev.title}
+                          </span>
                         </div>
                       )
                     })}
@@ -774,37 +782,37 @@ export default function CalendarPage() {
           
           <div className="card" style={{ width: '100%', maxWidth: '600px', zIndex: 10, borderRadius: '1.25rem', boxShadow: '0 20px 50px rgba(0,0,0,0.15)', overflowY: 'auto', maxHeight: '90vh' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid hsl(var(--border))', padding: '1rem 1.5rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>➕ Programar Nuevo Evento</h3>
+              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>➕ {t("calendar.modalScheduleTitle")}</h3>
               <button onClick={() => setIsCreateModalOpen(false)} style={{ background: 'none', border: 'none', color: 'hsl(var(--muted-foreground))', cursor: 'pointer' }}><X size={20} /></button>
             </div>
 
             <form onSubmit={handleCreateEvent} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               <div>
-                <label className="form-label">Título del Evento</label>
+                <label className="form-label">{t("calendar.eventTitleLabel")}</label>
                 <input 
                   type="text" 
                   value={newEventTitle} 
                   onChange={e => setNewEventTitle(e.target.value)} 
                   className="form-input" 
-                  placeholder="Ej: Reunión Mensual de KPIs"
+                  placeholder={t("calendar.eventTitlePlaceholder")}
                   required
                 />
               </div>
 
               <div>
-                <label className="form-label">Descripción</label>
+                <label className="form-label">{t("calendar.descriptionLabel")}</label>
                 <textarea 
                   value={newEventDesc} 
                   onChange={e => setNewEventDesc(e.target.value)} 
                   className="form-input" 
-                  placeholder="Detalles sobre el evento..."
+                  placeholder={t("calendar.descriptionPlaceholder")}
                   rows={2}
                 />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
-                  <label className="form-label">Inicio</label>
+                  <label className="form-label">{t("calendar.startLabel")}</label>
                   <input 
                     type="datetime-local" 
                     value={newEventStartDate} 
@@ -814,7 +822,7 @@ export default function CalendarPage() {
                   />
                 </div>
                 <div>
-                  <label className="form-label">Fin</label>
+                  <label className="form-label">{t("calendar.endLabel")}</label>
                   <input 
                     type="datetime-local" 
                     value={newEventEndDate} 
@@ -827,44 +835,44 @@ export default function CalendarPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
-                  <label className="form-label">Tipo de Evento</label>
+                  <label className="form-label">{t("calendar.eventTypeLabel")}</label>
                   <select value={newEventType} onChange={e => setNewEventType(e.target.value)} className="form-input">
-                    <option value="MEETING">Reunión</option>
-                    <option value="TRAINING">Capacitación</option>
-                    <option value="TEAM_BUILDING">Team Building</option>
-                    <option value="BIRTHDAY">Cumpleaños</option>
-                    <option value="ACTIVITY">Actividad</option>
-                    <option value="MAINTENANCE">Mantenimiento</option>
-                    <option value="NOTICE">Aviso General</option>
-                    <option value="OTHER">Otro</option>
+                    <option value="MEETING">{locale === "en" ? "Meeting" : "Reunión"}</option>
+                    <option value="TRAINING">{locale === "en" ? "Training" : "Capacitación"}</option>
+                    <option value="TEAM_BUILDING">{locale === "en" ? "Team Building" : "Team Building"}</option>
+                    <option value="BIRTHDAY">{locale === "en" ? "Birthday" : "Cumpleaños"}</option>
+                    <option value="ACTIVITY">{locale === "en" ? "Activity" : "Actividad"}</option>
+                    <option value="MAINTENANCE">{locale === "en" ? "Maintenance" : "Mantenimiento"}</option>
+                    <option value="NOTICE">{locale === "en" ? "Announcement" : "Aviso General"}</option>
+                    <option value="OTHER">{locale === "en" ? "Other" : "Otro"}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="form-label">Responsable</label>
+                  <label className="form-label">{t("calendar.responsibleLabel")}</label>
                   <input 
                     type="text" 
                     value={newEventResponsible} 
                     onChange={e => setNewEventResponsible(e.target.value)} 
                     className="form-input"
-                    placeholder="Nombre del responsable"
+                    placeholder={t("calendar.responsiblePlaceholder")}
                   />
                 </div>
               </div>
 
               <div>
-                <label className="form-label">Ubicación</label>
+                <label className="form-label">{t("calendar.locationLabel")}</label>
                 <input 
                   type="text" 
                   value={newEventLocation} 
                   onChange={e => setNewEventLocation(e.target.value)} 
                   className="form-input"
-                  placeholder="Ej: Sala A, Virtual, Teams"
+                  placeholder={t("calendar.locationPlaceholder")}
                 />
               </div>
 
               {/* Selector de Color Premium */}
               <div>
-                <label className="form-label">Color Distintivo</label>
+                <label className="form-label">{t("calendar.colorLabel")}</label>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
                   {PREMIUM_COLORS.map(c => (
                     <button
@@ -889,23 +897,23 @@ export default function CalendarPage() {
               {/* Alcance y Participantes */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
-                  <label className="form-label">Alcance de Visibilidad</label>
+                  <label className="form-label">{t("calendar.visibilityScopeLabel")}</label>
                   <select value={newEventScope} onChange={e => {
                     setNewEventScope(e.target.value)
                     if (e.target.value === "GROUP" && myGroups.length > 0 && !newEventProjectId) {
                       setNewEventProjectId(myGroups[0].id)
                     }
                   }} className="form-input">
-                    <option value="PUBLIC">Público (Toda la empresa)</option>
-                    <option value="GROUP">Solo Mi Grupo</option>
-                    <option value="SUPERVISORS">Solo Supervisores</option>
-                    <option value="HR">RRHH</option>
+                    <option value="PUBLIC">{t("calendar.scopePublic")}</option>
+                    <option value="GROUP">{t("calendar.scopeGroup")}</option>
+                    <option value="SUPERVISORS">{t("calendar.scopeSupervisors")}</option>
+                    <option value="HR">{t("calendar.scopeHr")}</option>
                   </select>
                 </div>
 
                 {newEventScope === "GROUP" && (
                   <div>
-                    <label className="form-label">Seleccionar Grupo</label>
+                    <label className="form-label">{t("calendar.selectGroupLabel")}</label>
                     <select value={newEventProjectId} onChange={e => setNewEventProjectId(e.target.value)} className="form-input" required>
                       {myGroups.map(g => (
                         <option key={g.id} value={g.id}>{g.name}</option>
@@ -917,11 +925,11 @@ export default function CalendarPage() {
 
               {/* Participantes */}
               <div>
-                <label className="form-label">Destinatarios / Participación</label>
+                <label className="form-label">{t("calendar.recipientsLabel")}</label>
                 <select value={newEventParticipantsScope} onChange={e => setNewEventParticipantsScope(e.target.value)} className="form-input">
-                  <option value="ALL">Toda la empresa / Todos los del alcance</option>
-                  <option value="GROUP">Todo el grupo</option>
-                  <option value="SPECIFIC">Personas específicas</option>
+                  <option value="ALL">{t("calendar.recipientsAll")}</option>
+                  <option value="GROUP">{t("calendar.recipientsGroup")}</option>
+                  <option value="SPECIFIC">{t("calendar.recipientsSpecific")}</option>
                 </select>
 
                 {newEventParticipantsScope === "SPECIFIC" && (
@@ -950,21 +958,21 @@ export default function CalendarPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', borderTop: '1px solid hsl(var(--border))', paddingTop: '1rem' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
                   <input type="checkbox" checked={newEventSendNotification} onChange={e => setNewEventSendNotification(e.target.checked)} />
-                  <span>Enviar notificación interna inmediata a los participantes</span>
+                  <span>{t("calendar.notifyLabel")}</span>
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
                   <input type="checkbox" checked={newEventAllowComments} onChange={e => setNewEventAllowComments(e.target.checked)} />
-                  <span>Habilitar foro de comentarios y debate en el evento</span>
+                  <span>{t("calendar.commentsLabel")}</span>
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem' }}>
                   <input type="checkbox" checked={newEventAllowRSVP} onChange={e => setNewEventAllowRSVP(e.target.checked)} />
-                  <span>Permitir a los invitados confirmar asistencia (RSVP)</span>
+                  <span>{t("calendar.rsvpLabel")}</span>
                 </label>
               </div>
 
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', borderTop: '1px solid hsl(var(--border))', paddingTop: '1.25rem' }}>
-                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="btn btn-surface">Cancelar</button>
-                <button type="submit" className="btn btn-primary">Crear Evento</button>
+                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="btn btn-surface">{t("common.cancel")}</button>
+                <button type="submit" className="btn btn-primary">{t("calendar.createEventBtn")}</button>
               </div>
             </form>
           </div>
@@ -1026,7 +1034,7 @@ export default function CalendarPage() {
                   </span>
                 </div>
                 <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: '0.25rem 0', letterSpacing: '-0.02em', color: 'hsl(var(--foreground))' }}>
-                  {selectedHoliday.title}
+                  {getLocalizedHolidayTitle(selectedHoliday.title, locale)}
                 </h2>
               </div>
               <button 
@@ -1130,7 +1138,9 @@ export default function CalendarPage() {
                 <span style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem', borderRadius: '9999px', backgroundColor: selectedEvent.color, color: 'white', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   {selectedEvent.type}
                 </span>
-                <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0.5rem 0 0.25rem 0', letterSpacing: '-0.02em' }}>{selectedEvent.title}</h2>
+                <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0.5rem 0 0.25rem 0', letterSpacing: '-0.02em' }}>
+                  {selectedEvent.type === 'HOLIDAY' || selectedEvent.isHoliday ? getLocalizedHolidayTitle(selectedEvent.title, locale) : selectedEvent.title}
+                </h2>
                 <p style={{ margin: 0, color: 'hsl(var(--muted-foreground))', fontSize: '0.9rem' }}>{selectedEvent.description || "Sin descripción proporcionada."}</p>
               </div>
               <button onClick={() => setIsDetailModalOpen(false)} style={{ background: 'none', border: 'none', color: 'hsl(var(--muted-foreground))', cursor: 'pointer' }}><X size={20} /></button>

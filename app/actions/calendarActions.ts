@@ -1,7 +1,7 @@
 "use server"
 
 import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { authOptions, isSuperAdminEmail } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { createAuditLog } from "./auditActions"
@@ -51,8 +51,8 @@ export async function getCalendarData(month: number, year: number) {
     ]
   }
 
-  const isMasterAdmin = (session.user as any)?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (session.user as any)?.isSuperAdmin
-  if (role === "IT_MANAGER" || role === "TECHNOLOGY_ADMIN" || role === "TECHNOLOGY" || role === "HR" || role === "MANAGER" || isMasterAdmin) {
+  const isMasterAdmin = isSuperAdminEmail((session.user as any)?.email) || (session.user as any)?.isSuperAdmin
+  if (role === "IT_MANAGER" || role === "TECHNOLOGY_ADMIN" || role === "TECHNOLOGY" || role === "HR" || role === "MANAGER" || role === "ADMIN" || isMasterAdmin) {
     // RRHH y TI: Visualización completa de toda la empresa
   } else if (isSupervisor || role === "SUPERVISOR") {
     // Supervisor: Ve a todo su equipo supervisado y a sí mismo
@@ -60,7 +60,14 @@ export async function getCalendarData(month: number, year: number) {
       ...cond,
       OR: [
         { userId: userId },
-        { user: { projectId: { in: supervisedProjectIds } } }
+        {
+          user: {
+            OR: [
+              { projects: { some: { id: { in: supervisedProjectIds } } } },
+              { projectId: { in: supervisedProjectIds } }
+            ]
+          }
+        }
       ]
     }))
   } else if (isLeader) {
@@ -69,7 +76,14 @@ export async function getCalendarData(month: number, year: number) {
       ...cond,
       OR: [
         { userId: userId },
-        { user: { projectId: { in: ledProjectIds } } }
+        {
+          user: {
+            OR: [
+              { projects: { some: { id: { in: ledProjectIds } } } },
+              { projectId: { in: ledProjectIds } }
+            ]
+          }
+        }
       ]
     }))
   } else {
@@ -213,6 +227,7 @@ export async function getUpcomingEvents() {
   
   const nextWeek = new Date(today)
   nextWeek.setDate(nextWeek.getDate() + 14) // Próximos 14 días
+  nextWeek.setHours(23, 59, 59, 999)
 
   // Filtrado de eventos próximos para el usuario
   const userProjects = await prisma.project.findMany({
@@ -266,9 +281,34 @@ export async function getUpcomingEvents() {
   }))).slice(0, 2)
 
   const combined = [
-    ...manualEvents.map(e => ({ id: e.id, title: e.title, date: e.startDate, type: e.type, isHoliday: false, color: e.color })),
-    ...uniqueHolidays.map(h => ({ id: h.id, title: h.title, date: h.date, type: 'HOLIDAY', isHoliday: true, color: (h as any).color || '#f43f5e' }))
-  ].sort((a, b) => a.date.getTime() - b.date.getTime()).slice(0, 4)
+    ...manualEvents.map(e => {
+      const d = new Date(e.startDate)
+      const isUtcMidnight = d.getUTCHours() === 0 && d.getUTCMinutes() === 0
+      return {
+        id: e.id,
+        title: e.title,
+        date: e.startDate,
+        type: e.type,
+        isHoliday: false,
+        color: e.color,
+        month: d.toLocaleDateString("es-ES", { month: "short", timeZone: isUtcMidnight ? "UTC" : undefined }).replace(".", ""),
+        day: isUtcMidnight ? d.getUTCDate() : d.getDate()
+      }
+    }),
+    ...uniqueHolidays.map(h => {
+      const d = new Date(h.date)
+      return {
+        id: h.id,
+        title: h.title,
+        date: h.date,
+        type: 'HOLIDAY',
+        isHoliday: true,
+        color: (h as any).color || '#f43f5e',
+        month: d.toLocaleDateString("es-ES", { month: "short", timeZone: "UTC" }).replace(".", ""),
+        day: d.getUTCDate()
+      }
+    })
+  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 4)
 
   return combined
 }

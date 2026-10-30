@@ -297,9 +297,28 @@ export async function getAuditLogs({
     count: g._count.action
   }))
 
+  const userIdsInLogs = Array.from(new Set(
+    logs.flatMap(l => [l.actorUserId, l.targetUserId, l.userId]).filter(Boolean) as string[]
+  ))
+
+  const inactiveUsers = userIdsInLogs.length > 0 ? await prisma.user.findMany({
+    where: {
+      id: { in: userIdsInLogs },
+      OR: [
+        { isActive: false },
+        { status: "INACTIVE" }
+      ]
+    },
+    select: { id: true }
+  }) : []
+
+  const inactiveUserIds = new Set(inactiveUsers.map(u => u.id))
+
   return {
     logs: logs.map(l => ({
       ...l,
+      isActorInactive: Boolean(l.actorUserId && inactiveUserIds.has(l.actorUserId)),
+      isTargetInactive: Boolean(l.targetUserId && inactiveUserIds.has(l.targetUserId)),
       createdAt: l.createdAt.toISOString()
     })),
     totalCount: totalFiltered,

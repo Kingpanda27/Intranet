@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useRef } from "react"
-import { User, Mail, Shield, Image as ImageIcon, Save, CheckCircle2, AlertCircle, UploadCloud, MapPin, Briefcase, FileText, Phone, Linkedin, Users, Globe, Star, X, Edit3 } from "lucide-react"
+import { useState } from "react"
+import { User, Save, CheckCircle2, AlertCircle, UploadCloud, MapPin, Briefcase, Phone, Linkedin, Users, Globe, X, Edit3 } from "lucide-react"
 import { updateProfile } from "@/app/actions/userActions"
+import { useTranslation } from "@/lib/i18n/LanguageContext"
 
 type ProfileFormProps = {
   user: {
@@ -24,6 +25,7 @@ type ProfileFormProps = {
 }
 
 export function ProfileForm({ user }: ProfileFormProps) {
+  const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error", text: string } | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
@@ -43,7 +45,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
     if (result.error) {
       setMessage({ type: "error", text: result.error })
     } else {
-      setMessage({ type: "success", text: "Perfil actualizado correctamente. Los cambios pueden tardar unos minutos en reflejarse." })
+      setMessage({ type: "success", text: t("profile.form.success") })
       setFileName(null)
       setTimeout(() => {
         setIsEditing(false)
@@ -64,7 +66,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
             fontWeight: 700, fontSize: "0.9rem", boxShadow: "0 4px 12px hsl(var(--primary)/0.3)"
           }}
         >
-          <Edit3 size={16} /> Editar Mi Perfil
+          <Edit3 size={16} /> {t("profile.form.editBtn")}
         </button>
       </div>
     )
@@ -84,7 +86,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
       </button>
 
       <h2 style={{ fontSize: "1.35rem", fontWeight: 800, marginBottom: "2rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-        <Edit3 size={24} color="hsl(var(--primary))" /> Editar Información Personal
+        <Edit3 size={24} color="hsl(var(--primary))" /> {t("profile.form.editTitle")}
       </h2>
       
       <form action={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
@@ -92,7 +94,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
         {/* Identidad */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1.5rem" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>NOMBRE COMPLETO</label>
+            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>{t("profile.form.fullName")}</label>
             <div style={{ position: "relative" }}>
               <User size={18} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "hsl(var(--muted-foreground))" }} />
               <input name="name" type="text" defaultValue={user.name || ""} className="input" style={{ paddingLeft: "2.8rem" }} required />
@@ -100,10 +102,10 @@ export function ProfileForm({ user }: ProfileFormProps) {
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>CARGO O POSICIÓN</label>
+            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>{t("profile.form.position")}</label>
             <div style={{ position: "relative" }}>
               <Briefcase size={18} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "hsl(var(--muted-foreground))" }} />
-              <input name="position" type="text" defaultValue={user.position || ""} className="input" style={{ paddingLeft: "2.8rem" }} placeholder="Ej: Especialista de TI" />
+              <input name="position" type="text" defaultValue={user.position || ""} className="input" style={{ paddingLeft: "2.8rem" }} placeholder={t("profile.form.positionPlaceholder")} />
             </div>
           </div>
         </div>
@@ -111,25 +113,25 @@ export function ProfileForm({ user }: ProfileFormProps) {
         {/* Contacto y Ubicación */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1.5rem" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>UBICACIÓN</label>
+            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>{t("profile.form.location")}</label>
             <div style={{ position: "relative" }}>
               <MapPin size={18} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "hsl(var(--muted-foreground))" }} />
-              <input name="location" type="text" defaultValue={user.location || ""} className="input" style={{ paddingLeft: "2.8rem" }} placeholder="Ej: Santiago / Remoto" />
+              <input name="location" type="text" defaultValue={user.location || ""} className="input" style={{ paddingLeft: "2.8rem" }} placeholder={t("profile.form.locationPlaceholder")} />
             </div>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>EXTENSIÓN TELEFÓNICA</label>
+            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>{t("profile.form.extension")}</label>
             <div style={{ position: "relative" }}>
               <Phone size={18} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "hsl(var(--muted-foreground))" }} />
-              <input name="extension" type="text" defaultValue={user.extension || ""} className="input" style={{ paddingLeft: "2.8rem" }} placeholder="Ej: 1045" />
+              <input name="extension" type="text" defaultValue={user.extension || ""} className="input" style={{ paddingLeft: "2.8rem" }} placeholder={t("profile.form.extensionPlaceholder")} />
             </div>
           </div>
         </div>
 
         {/* Acerca de Mí */}
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>ACERCA DE MÍ (Max 500 caract.)</label>
+          <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>{t("profile.form.aboutMe")}</label>
           <textarea 
             name="aboutMe" 
             defaultValue={user.aboutMe || ""} 
@@ -137,46 +139,46 @@ export function ProfileForm({ user }: ProfileFormProps) {
             rows={4}
             maxLength={500}
             style={{ padding: "1rem", resize: "none" }} 
-            placeholder="Escribe una breve descripción personal o profesional..."
+            placeholder={t("profile.form.aboutMePlaceholder")}
           />
         </div>
 
         {/* Habilidades */}
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>HABILIDADES (Separadas por comas)</label>
+          <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>{t("profile.form.skills")}</label>
           <input 
             type="text" 
             value={skillsStr}
             onChange={(e) => setSkillsStr(e.target.value)}
             className="input" 
             style={{ padding: "0.875rem 1rem" }} 
-            placeholder="Ej: Microsoft 365, Soporte Técnico, React, Excel"
+            placeholder={t("profile.form.skillsPlaceholder")}
           />
         </div>
 
         {/* Redes Sociales */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1.5rem" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>LINKEDIN (URL)</label>
+            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>{t("profile.form.linkedIn")}</label>
             <div style={{ position: "relative" }}>
               <Linkedin size={18} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "hsl(var(--muted-foreground))" }} />
-              <input name="socialLinkedIn" type="url" defaultValue={user.socialLinkedIn || ""} className="input" style={{ paddingLeft: "2.8rem" }} placeholder="https://linkedin.com/in/usuario" />
+              <input name="socialLinkedIn" type="url" defaultValue={user.socialLinkedIn || ""} className="input" style={{ paddingLeft: "2.8rem" }} placeholder={t("profile.form.linkedInPlaceholder")} />
             </div>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>MS TEAMS (Correo/Usuario)</label>
+            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>{t("profile.form.teams")}</label>
             <div style={{ position: "relative" }}>
               <Users size={18} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "hsl(var(--muted-foreground))" }} />
-              <input name="socialTeams" type="text" defaultValue={user.socialTeams || ""} className="input" style={{ paddingLeft: "2.8rem" }} placeholder="usuario@dominio.com" />
+              <input name="socialTeams" type="text" defaultValue={user.socialTeams || ""} className="input" style={{ paddingLeft: "2.8rem" }} placeholder={t("profile.form.teamsPlaceholder")} />
             </div>
           </div>
           
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>SITIO WEB PROFESIONAL</label>
+            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>{t("profile.form.website")}</label>
             <div style={{ position: "relative" }}>
               <Globe size={18} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "hsl(var(--muted-foreground))" }} />
-              <input name="socialWebsite" type="url" defaultValue={user.socialWebsite || ""} className="input" style={{ paddingLeft: "2.8rem" }} placeholder="https://mipagina.com" />
+              <input name="socialWebsite" type="url" defaultValue={user.socialWebsite || ""} className="input" style={{ paddingLeft: "2.8rem" }} placeholder={t("profile.form.websitePlaceholder")} />
             </div>
           </div>
         </div>
@@ -185,7 +187,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1.5rem", padding: "1.5rem", backgroundColor: "hsl(var(--muted)/0.2)", borderRadius: "1rem" }}>
           
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>FECHA DE CUMPLEAÑOS</label>
+            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>{t("profile.form.birthday")}</label>
             <input 
               name="birthday" 
               type="date" 
@@ -195,12 +197,12 @@ export function ProfileForm({ user }: ProfileFormProps) {
             />
             <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem", fontSize: "0.85rem", cursor: "pointer" }}>
               <input type="checkbox" name="showBirthday" value="true" defaultChecked={user.showBirthday} />
-              Mostrar mi cumpleaños a otros empleados
+              {t("profile.form.showBirthday")}
             </label>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>FOTO DE PERFIL</label>
+            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>{t("profile.form.profilePhoto")}</label>
             <div style={{ position: "relative" }}>
               <div style={{
                 position: "absolute", left: 0, top: 0, bottom: 0, width: "3.5rem", 
@@ -220,7 +222,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
               />
             </div>
             <span style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
-              {fileName ? fileName : "Formatos válidos: JPG, PNG, WEBP. Max 5MB."}
+              {fileName ? fileName : t("profile.form.photoFormats")}
             </span>
           </div>
 
@@ -229,11 +231,11 @@ export function ProfileForm({ user }: ProfileFormProps) {
         {/* Solo Lectura */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1.5rem" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", opacity: 0.7 }}>
-            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>CORREO CORPORATIVO (Solo lectura)</label>
+            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>{t("profile.form.readOnlyEmail")}</label>
             <input type="email" value={user.email || ""} disabled className="input" style={{ backgroundColor: "transparent", borderStyle: "dashed" }} />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", opacity: 0.7 }}>
-            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>NIVEL DE ACCESO (Solo lectura)</label>
+            <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", letterSpacing: "0.05em" }}>{t("profile.form.readOnlyRole")}</label>
             <input type="text" value={user.role} disabled className="input" style={{ backgroundColor: "transparent", borderStyle: "dashed" }} />
           </div>
         </div>
@@ -253,7 +255,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "1rem", marginTop: "1rem" }}>
           <button type="button" onClick={() => setIsEditing(false)} className="btn btn-outline" style={{ borderRadius: "2rem", padding: "0.875rem 2rem" }}>
-            Cancelar
+            {t("profile.form.cancel")}
           </button>
           <button 
             type="submit" 
@@ -261,7 +263,7 @@ export function ProfileForm({ user }: ProfileFormProps) {
             disabled={loading} 
             style={{ borderRadius: "2rem", padding: "0.875rem 2.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}
           >
-            {loading ? "Guardando..." : <><Save size={18} /> Guardar Cambios</>}
+            {loading ? t("profile.form.saving") : <><Save size={18} /> {t("profile.form.save")}</>}
           </button>
         </div>
       </form>

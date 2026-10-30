@@ -5,8 +5,11 @@ import { createPost } from "@/app/actions/postActions"
 import { generateTextWithAI } from "@/app/actions/ollamaActions"
 import { Send, Image as ImageIcon, X, Smile, BarChart2, Paperclip, Loader2, Sparkles, Award, Bot } from "lucide-react"
 import { GiveRecognitionModal } from "../Social/GiveRecognitionModal"
+import { AiPostModal } from "./AiPostModal"
+import { useTranslation } from "@/lib/i18n/LanguageContext"
 
 export function CreatePost() {
+  const { t } = useTranslation()
   const [content, setContent] = useState("")
   const [image, setImage] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
@@ -14,6 +17,7 @@ export function CreatePost() {
   const [generatingAI, setGeneratingAI] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
   const [showRecognition, setShowRecognition] = useState(false)
+  const [showAiModal, setShowAiModal] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -57,15 +61,26 @@ export function CreatePost() {
   }
 
   const handleAIGenerate = async () => {
-    if (!content.trim()) return alert("Escribe una idea breve primero para que la IA la convierta en un comunicado profesional.")
-    setGeneratingAI(true)
-    const result = await generateTextWithAI("POST", content)
-    if (result.success) {
-      setContent(result.generatedText)
-    } else {
-      alert(result.error)
+    // Si el contenido está vacío, abrir el Asistente IA para elegir plantilla o tema
+    if (!content.trim()) {
+      setShowAiModal(true)
+      return
     }
-    setGeneratingAI(false)
+
+    setGeneratingAI(true)
+    try {
+      const result = await generateTextWithAI("POST", content)
+      if (result.success && result.generatedText) {
+        setContent(result.generatedText)
+      } else {
+        // Si hay error o se desea afinar, abrir el modal con el texto actual
+        setShowAiModal(true)
+      }
+    } catch {
+      setShowAiModal(true)
+    } finally {
+      setGeneratingAI(false)
+    }
   }
 
   return (
@@ -100,7 +115,7 @@ export function CreatePost() {
             <textarea
               ref={textareaRef}
               className="input custom-scrollbar"
-              placeholder="¿Qué está pasando en el equipo?..."
+              placeholder={t("feed.placeholder")}
               value={content}
               onChange={(e) => setContent(e.target.value)}
               onFocus={() => setIsFocused(true)}
@@ -166,19 +181,19 @@ export function CreatePost() {
           opacity: (isFocused || content.trim() || image) ? 1 : 0.6
         }}>
           <div style={{ display: "flex", gap: "0.5rem" }}>
-            <label className="btn btn-ghost hover-scale" style={{ padding: "0.5rem", borderRadius: "50%", cursor: "pointer", color: "hsl(var(--primary))", backgroundColor: "hsl(var(--primary) / 0.1)" }} title="Añadir imagen">
+            <label className="btn btn-ghost hover-scale" style={{ padding: "0.5rem", borderRadius: "50%", cursor: "pointer", color: "hsl(var(--primary))", backgroundColor: "hsl(var(--primary) / 0.1)" }} title={t("feed.attachImage")}>
               <ImageIcon size={20} />
               <input type="file" accept="image/*,.heic,.heif,.webp,.png,.jpg,.jpeg" onChange={handleImageChange} style={{ display: "none" }} />
             </label>
             
             {/* Visual placeholders for future features */}
-            <button type="button" onClick={() => setShowRecognition(true)} className="btn btn-ghost hover-scale" style={{ padding: "0.5rem", borderRadius: "50%", color: "hsl(var(--primary))", backgroundColor: "hsl(var(--primary) / 0.1)" }} title="Reconocer compañero">
+            <button type="button" onClick={() => setShowRecognition(true)} className="btn btn-ghost hover-scale" style={{ padding: "0.5rem", borderRadius: "50%", color: "hsl(var(--primary))", backgroundColor: "hsl(var(--primary) / 0.1)" }} title={t("feed.giveKudos")}>
               <Award size={20} />
             </button>
-            <button type="button" className="btn btn-ghost hover-scale" style={{ padding: "0.5rem", borderRadius: "50%", color: "hsl(var(--muted-foreground))" }} title="Añadir encuesta">
+            <button type="button" className="btn btn-ghost hover-scale" style={{ padding: "0.5rem", borderRadius: "50%", color: "hsl(var(--muted-foreground))" }} title={t("feed.createPoll")}>
               <BarChart2 size={20} />
             </button>
-            <button type="button" className="btn btn-ghost hover-scale" style={{ padding: "0.5rem", borderRadius: "50%", color: "hsl(var(--muted-foreground))" }} title="Añadir emoji">
+            <button type="button" className="btn btn-ghost hover-scale" style={{ padding: "0.5rem", borderRadius: "50%", color: "hsl(var(--muted-foreground))" }} title={t("feed.addEmoji")}>
               <Smile size={20} />
             </button>
             
@@ -186,12 +201,22 @@ export function CreatePost() {
               <button 
                 type="button" 
                 onClick={handleAIGenerate}
-                disabled={generatingAI || !content.trim()}
+                disabled={generatingAI}
                 className="btn btn-surface hover-scale" 
+                title={content.trim() ? "AI Assistant" : t("feed.writeWithAi")}
                 style={{ marginLeft: "0.5rem", padding: "0.5rem 1rem", borderRadius: "99px", color: "hsl(var(--primary))", border: "1px solid hsl(var(--primary)/0.2)", display: "flex", gap: "0.4rem", alignItems: "center", fontSize: "0.8rem", fontWeight: 700 }}
               >
-                {generatingAI ? <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> : <Bot size={16} />}
-                Redactar con IA
+                {generatingAI ? (
+                  <>
+                    <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
+                    <span>{t("feed.writing")}</span>
+                  </>
+                ) : (
+                  <>
+                    <Bot size={16} />
+                    <span>{t("feed.writeWithAi")}</span>
+                  </>
+                )}
               </button>
             )}
           </div>
@@ -218,12 +243,12 @@ export function CreatePost() {
             {loading ? (
               <>
                 <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} />
-                <span>Enviando</span>
+                <span>{t("feed.publishing")}</span>
               </>
             ) : (
               <>
                 <Sparkles size={18} />
-                <span style={{ fontWeight: 700 }}>Publicar</span>
+                <span style={{ fontWeight: 700 }}>{t("feed.publish")}</span>
               </>
             )}
           </button>
@@ -232,6 +257,18 @@ export function CreatePost() {
       
       {showRecognition && (
         <GiveRecognitionModal onClose={() => setShowRecognition(false)} />
+      )}
+
+      {showAiModal && (
+        <AiPostModal 
+          isOpen={showAiModal} 
+          onClose={() => setShowAiModal(false)} 
+          initialText={content} 
+          onApply={(text) => {
+            setContent(text)
+            setIsFocused(true)
+          }} 
+        />
       )}
     </div>
   )

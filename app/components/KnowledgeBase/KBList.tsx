@@ -4,6 +4,7 @@ import { createPortal } from "react-dom"
 import { Upload, Trash2, ExternalLink, CheckCircle, HardDrive, FolderOpen, Tag, Users, CloudUpload, FileType, Search, Filter, Briefcase, Plus, FileText, Calendar, Clock, BarChart3, Building2, UserCircle2, Bot, Sparkles, X, Copy, Check } from "lucide-react"
 import { deleteDocument } from "@/app/actions/kbActions"
 import { summarizeDocumentStructured, askDocumentAI } from "@/app/actions/documentAiActions"
+import { useTranslation } from "@/lib/i18n/LanguageContext"
 
 type Document = {
   id: string; title: string; url: string; category: string | null; department: string
@@ -23,7 +24,31 @@ const DEPARTMENTS = [
   { id: "Administración", name: "Administración", icon: "📋", color: "#6366f1" }
 ]
 
+const DEPT_KEY_MAP: Record<string, string> = {
+  "General": "documents.departments.general",
+  "Recursos Humanos": "documents.departments.hr",
+  "IT": "documents.departments.it",
+  "Operaciones": "documents.departments.operations",
+  "Finanzas": "documents.departments.finance",
+  "Marketing": "documents.departments.marketing",
+  "Ventas": "documents.departments.sales",
+  "Legal": "documents.departments.legal",
+  "Administración": "documents.departments.administration"
+}
+
 const DEFAULT_CLASSES = ["Procedimientos", "Políticas", "Manuales", "Formularios", "Capacitaciones", "Contratos", "Guías", "Reportes", "General"]
+
+const CLASS_KEY_MAP: Record<string, string> = {
+  "Procedimientos": "documents.categories.procedures",
+  "Políticas": "documents.categories.policies",
+  "Manuales": "documents.categories.manuals",
+  "Formularios": "documents.categories.forms",
+  "Capacitaciones": "documents.categories.training",
+  "Contratos": "documents.categories.contracts",
+  "Guías": "documents.categories.guides",
+  "Reportes": "documents.categories.reports",
+  "General": "documents.categories.general"
+}
 
 // Renderizador Markdown personalizado ultraligero sin dependencias externas
 function renderMarkdown(text: string) {
@@ -62,10 +87,15 @@ function parseInlineMarkdown(text: string) {
 function DocCard({ doc, canDelete, onDelete, deleting, idx, onOpenAskDoc }: {
   doc: Document; canDelete: boolean; onDelete: (id: string, title: string) => void; deleting: string | null; idx: number; onOpenAskDoc: (id: string, title: string) => void
 }) {
+  const { t, locale } = useTranslation()
   const [hovered, setHovered] = useState(false)
   const [summary, setSummary] = useState<string | null>(null)
   const [loadingSummary, setLoadingSummary] = useState(false)
   const deptInfo = DEPARTMENTS.find(d => d.id === doc.department) || DEPARTMENTS[0]
+
+  const dateLocale = locale === "en" ? "en-US" : "es-DO"
+  const deptName = DEPT_KEY_MAP[deptInfo.id] ? t(DEPT_KEY_MAP[deptInfo.id] as any) : deptInfo.name
+  const categoryName = doc.category ? (CLASS_KEY_MAP[doc.category] ? t(CLASS_KEY_MAP[doc.category] as any) : doc.category) : t("documents.categories.general")
 
   const handleSummarize = async () => {
     setLoadingSummary(true)
@@ -109,10 +139,10 @@ function DocCard({ doc, canDelete, onDelete, deleting, idx, onOpenAskDoc }: {
               {doc.title}
             </h3>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.2rem", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "0.72rem", color: "hsl(var(--muted-foreground))", fontWeight: 600 }}>{deptInfo.name}</span>
+              <span style={{ fontSize: "0.72rem", color: "hsl(var(--muted-foreground))", fontWeight: 600 }}>{deptName}</span>
               <span style={{ width: "3px", height: "3px", borderRadius: "50%", backgroundColor: "hsl(var(--muted-foreground)/0.5)" }} />
               <span style={{ fontSize: "0.65rem", padding: "0.1rem 0.4rem", borderRadius: "4px", backgroundColor: "hsl(var(--muted))", color: "hsl(var(--foreground))", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                {doc.category || "General"}
+                {categoryName}
               </span>
             </div>
           </div>
@@ -121,10 +151,10 @@ function DocCard({ doc, canDelete, onDelete, deleting, idx, onOpenAskDoc }: {
         {/* Center column: Author & Date metadata */}
         <div style={{ display: "flex", flexDirection: "row", gap: "1rem", alignItems: "center", fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-            <Calendar size={12} /> {new Date(doc.createdAt).toLocaleDateString()}
+            <Calendar size={12} /> {new Date(doc.createdAt).toLocaleDateString(dateLocale)}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-            <UserCircle2 size={12} /> <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "120px" }}>{doc.author?.name || "Desconocido"}</span>
+            <UserCircle2 size={12} /> <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "120px" }}>{doc.author?.name || t("documents.card.unknownAuthor")}</span>
           </div>
         </div>
 
@@ -146,7 +176,7 @@ function DocCard({ doc, canDelete, onDelete, deleting, idx, onOpenAskDoc }: {
             }}
           >
             <Sparkles size={12} />
-            Preguntar
+            {t("documents.card.ask")}
           </button>
           
           <button
@@ -154,7 +184,7 @@ function DocCard({ doc, canDelete, onDelete, deleting, idx, onOpenAskDoc }: {
             disabled={loadingSummary}
             className="btn btn-surface"
             style={{ padding: "0.45rem", borderRadius: "0.5rem", color: "hsl(var(--primary))", display: "flex", alignItems: "center" }}
-            title="Generar Resumen con IA"
+            title={t("documents.card.aiSummaryTooltip")}
           >
             {loadingSummary ? <div className="spinner" style={{ width: 14, height: 14 }} /> : <FileText size={15} />}
           </button>
@@ -165,7 +195,7 @@ function DocCard({ doc, canDelete, onDelete, deleting, idx, onOpenAskDoc }: {
               disabled={deleting === doc.id}
               className="btn btn-ghost"
               style={{ padding: "0.45rem", color: "hsl(var(--destructive))", borderRadius: "0.5rem", display: "flex", alignItems: "center" }}
-              title="Eliminar documento"
+              title={t("documents.card.deleteTooltip")}
             >
               <Trash2 size={15} />
             </button>
@@ -177,7 +207,7 @@ function DocCard({ doc, canDelete, onDelete, deleting, idx, onOpenAskDoc }: {
             className="btn btn-primary"
             style={{ padding: "0.45rem 0.75rem", fontSize: "0.75rem", gap: "0.3rem", borderRadius: "0.5rem", display: "flex", alignItems: "center" }}
           >
-            <ExternalLink size={12} /> Abrir
+            <ExternalLink size={12} /> {t("documents.card.open")}
           </a>
         </div>
       </div>
@@ -186,7 +216,7 @@ function DocCard({ doc, canDelete, onDelete, deleting, idx, onOpenAskDoc }: {
         <div className="animate-in slide-in-top" style={{ padding: "1.25rem", backgroundColor: "hsl(var(--primary)/0.03)", borderRadius: "0.75rem", border: "1px solid hsl(var(--primary)/0.15)", fontSize: "0.85rem", lineHeight: 1.5 }}>
           <div style={{ fontWeight: 800, marginBottom: "0.75rem", color: "hsl(var(--primary))", display: "flex", alignItems: "center", gap: "0.4rem", borderBottom: "1px solid hsl(var(--primary)/0.1)", paddingBottom: "0.35rem" }}>
             <Bot size={15}/> 
-            Análisis Estructurado del Documento
+            {t("documents.card.structuredAnalysis")}
           </div>
           <div style={{ color: "hsl(var(--foreground))" }}>{renderMarkdown(summary)}</div>
         </div>
@@ -199,6 +229,9 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
   initialDocuments: Document[]; userRole: string; currentUserId?: string
   onUpload: (fd: FormData) => Promise<any>; projects?: Project[]
 }) {
+  const { t, locale } = useTranslation()
+  const dateLocale = locale === "en" ? "en-US" : "es-DO"
+
   const [docs, setDocs] = useState(initialDocuments)
   const [search, setSearch] = useState("")
   const [filterDept, setFilterDept] = useState("ALL")
@@ -270,7 +303,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
       setSourcesAI(res.sources || [])
       setChunksAI(res.chunks || [])
     } else {
-      setAnswerAI(`Error: ${res.error || "No se pudo obtener una respuesta de la IA documental."}`)
+      setAnswerAI(t("documents.drawer.aiError", { error: res.error || "No se pudo obtener una respuesta de la IA documental." }))
     }
     setLoadingAI(false)
   }
@@ -298,6 +331,17 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
 
   const isPrivileged = userRole !== "USER" && userRole !== "EMPLOYEE"
   const canDelete = ["MANAGER", "TECHNOLOGY", "IT_MANAGER", "ADMIN"].includes(userRole)
+
+  const getDeptName = (id: string) => {
+    const key = DEPT_KEY_MAP[id]
+    return key ? t(key as any) : id
+  }
+
+  const getCategoryName = (category: string | null | undefined) => {
+    if (!category) return t("documents.categories.general")
+    const key = CLASS_KEY_MAP[category]
+    return key ? t(key as any) : category
+  }
 
   // Derived classifications from docs + defaults
   const allClassifications = useMemo(() => {
@@ -348,11 +392,11 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
   }
 
   const handleDelete = async (id: string, title: string) => {
-    if (!confirm(`¿Eliminar "${title}"?`)) return
+    if (!confirm(t("documents.card.confirmDelete", { title }))) return
     setDeleting(id)
     const result = await deleteDocument(id)
     if (result.success) setDocs(prev => prev.filter(d => d.id !== id))
-    else alert(result.error || "Error al eliminar.")
+    else alert(result.error || t("documents.card.deleteError"))
     setDeleting(null)
   }
 
@@ -394,7 +438,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem", marginBottom: "0.5rem" }}>
           <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0, display: "flex", alignItems: "center", gap: "0.75rem" }}>
             <FolderOpen size={32} color="hsl(var(--primary))" />
-            Biblioteca Corporativa
+            {t("documents.title")}
           </h1>
           <button 
             onClick={() => {
@@ -418,20 +462,20 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
             }}
           >
             <Bot size={18} />
-            🤖 Preguntar a la IA
+            {t("documents.askAi")}
           </button>
         </div>
         <p style={{ color: "hsl(var(--muted-foreground))", margin: "0 0 2rem", fontSize: "1rem" }}>
-          Encuentra, organiza y comparte documentos con toda la empresa.
+          {t("documents.subtitle")}
         </p>
 
         {/* Dashboard Metrics */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
           {[
-            { label: "Documentos", value: metrics.total, icon: <FileText size={20} />, color: "#3b82f6" },
-            { label: "Departamentos", value: metrics.depts, icon: <Building2 size={20} />, color: "#10b981" },
-            { label: "Clasificaciones", value: metrics.classes, icon: <Tag size={20} />, color: "#a855f7" },
-            { label: "Nuevos este mes", value: metrics.thisMonth, icon: <BarChart3 size={20} />, color: "#f59e0b" },
+            { label: t("documents.metrics.documents"), value: metrics.total, icon: <FileText size={20} />, color: "#3b82f6" },
+            { label: t("documents.metrics.departments"), value: metrics.depts, icon: <Building2 size={20} />, color: "#10b981" },
+            { label: t("documents.metrics.categories"), value: metrics.classes, icon: <Tag size={20} />, color: "#a855f7" },
+            { label: t("documents.metrics.newThisMonth"), value: metrics.thisMonth, icon: <BarChart3 size={20} />, color: "#f59e0b" },
           ].map((m, i) => (
             <div key={i} className="card glass" style={{ padding: "1.25rem", display: "flex", alignItems: "center", gap: "1rem" }}>
               <div style={{ width: 48, height: 48, borderRadius: "12px", backgroundColor: `${m.color}15`, color: m.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -449,7 +493,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
       {/* ── 2. DEPARTMENT CARDS ──────────────────────── */}
       {activeDepts.length > 0 && (
         <div style={{ marginBottom: "2.5rem" }}>
-          <h3 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "1rem" }}>Departamentos Activos</h3>
+          <h3 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "1rem" }}>{t("documents.departments.title")}</h3>
           <div style={{ display: "flex", gap: "1rem", overflowX: "auto", paddingBottom: "0.5rem" }} className="hide-scroll">
             <button
                onClick={() => setFilterDept("ALL")}
@@ -460,8 +504,8 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
                }}
             >
               <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>🏢</div>
-              <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>Todos</div>
-              <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>{metrics.total} documentos</div>
+              <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>{t("documents.departments.all")}</div>
+              <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>{t("documents.departments.docsCount", { count: metrics.total })}</div>
             </button>
             {activeDepts.map(dept => (
               <button
@@ -474,8 +518,8 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
                 }}
               >
                 <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>{dept.icon}</div>
-                <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>{dept.name}</div>
-                <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>{dept.count} documentos</div>
+                <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>{getDeptName(dept.id)}</div>
+                <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>{t("documents.departments.docsCount", { count: dept.count })}</div>
               </button>
             ))}
           </div>
@@ -491,18 +535,18 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
           <div className="card glass" style={{ padding: "1rem", marginBottom: "1.5rem", display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
             <div style={{ position: "relative", flex: 1, minWidth: "200px" }}>
               <Search size={16} style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "hsl(var(--muted-foreground))" }} />
-              <input type="text" placeholder="Buscar por nombre o autor..." className="input" value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: "2.5rem" }} />
+              <input type="text" placeholder={t("documents.filters.searchPlaceholder")} className="input" value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: "2.5rem" }} />
             </div>
             
             <select className="input" style={{ width: "auto", minWidth: "150px" }} value={filterClass} onChange={e => setFilterClass(e.target.value)}>
-              <option value="ALL">Todas las clasificaciones</option>
-              {allClassifications.map(c => <option key={c} value={c}>{c}</option>)}
+              <option value="ALL">{t("documents.categories.all")}</option>
+              {allClassifications.map(c => <option key={c} value={c}>{getCategoryName(c)}</option>)}
             </select>
 
             <div style={{ display: "flex", gap: "0.5rem", backgroundColor: "hsl(var(--muted))", padding: "0.25rem", borderRadius: "0.5rem" }}>
-              <button onClick={() => setFilterType("ALL")} className="btn" style={{ padding: "0.4rem 0.75rem", fontSize: "0.75rem", backgroundColor: filterType === "ALL" ? "hsl(var(--surface))" : "transparent", color: filterType === "ALL" ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))", border: "none", boxShadow: filterType === "ALL" ? "0 2px 4px rgba(0,0,0,0.05)" : "none" }}>Todos</button>
-              <button onClick={() => setFilterType("MINE")} className="btn" style={{ padding: "0.4rem 0.75rem", fontSize: "0.75rem", backgroundColor: filterType === "MINE" ? "hsl(var(--surface))" : "transparent", color: filterType === "MINE" ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))", border: "none", boxShadow: filterType === "MINE" ? "0 2px 4px rgba(0,0,0,0.05)" : "none" }}>Mis Docs</button>
-              <button onClick={() => setFilterType("RECENT")} className="btn" style={{ padding: "0.4rem 0.75rem", fontSize: "0.75rem", backgroundColor: filterType === "RECENT" ? "hsl(var(--surface))" : "transparent", color: filterType === "RECENT" ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))", border: "none", boxShadow: filterType === "RECENT" ? "0 2px 4px rgba(0,0,0,0.05)" : "none" }}>Recientes</button>
+              <button onClick={() => setFilterType("ALL")} className="btn" style={{ padding: "0.4rem 0.75rem", fontSize: "0.75rem", backgroundColor: filterType === "ALL" ? "hsl(var(--surface))" : "transparent", color: filterType === "ALL" ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))", border: "none", boxShadow: filterType === "ALL" ? "0 2px 4px rgba(0,0,0,0.05)" : "none" }}>{t("documents.filters.all")}</button>
+              <button onClick={() => setFilterType("MINE")} className="btn" style={{ padding: "0.4rem 0.75rem", fontSize: "0.75rem", backgroundColor: filterType === "MINE" ? "hsl(var(--surface))" : "transparent", color: filterType === "MINE" ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))", border: "none", boxShadow: filterType === "MINE" ? "0 2px 4px rgba(0,0,0,0.05)" : "none" }}>{t("documents.filters.myDocs")}</button>
+              <button onClick={() => setFilterType("RECENT")} className="btn" style={{ padding: "0.4rem 0.75rem", fontSize: "0.75rem", backgroundColor: filterType === "RECENT" ? "hsl(var(--surface))" : "transparent", color: filterType === "RECENT" ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))", border: "none", boxShadow: filterType === "RECENT" ? "0 2px 4px rgba(0,0,0,0.05)" : "none" }}>{t("documents.filters.recent")}</button>
             </div>
           </div>
 
@@ -510,7 +554,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
           {filtered.length === 0 ? (
             <div className="card glass" style={{ textAlign: "center", padding: "4rem", color: "hsl(var(--muted-foreground))" }}>
               <FolderOpen size={48} style={{ margin: "0 auto 1rem", opacity: 0.2 }} />
-              <p style={{ margin: 0, fontWeight: 600 }}>No se encontraron documentos.</p>
+              <p style={{ margin: 0, fontWeight: 600 }}>{t("documents.filters.noDocsFound")}</p>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -527,46 +571,46 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
             <div style={{ padding: "1.25rem", borderBottom: "1px solid hsl(var(--border))", backgroundColor: "hsl(var(--primary)/0.05)", display: "flex", alignItems: "center", gap: "0.75rem" }}>
               <CloudUpload size={24} color="hsl(var(--primary))" />
               <div>
-                <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 800 }}>Subir Documento</h3>
-                <p style={{ margin: 0, fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>Añade recursos a la biblioteca</p>
+                <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 800 }}>{t("documents.upload.title")}</h3>
+                <p style={{ margin: 0, fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>{t("documents.upload.subtitle")}</p>
               </div>
             </div>
 
             <form onSubmit={handleUpload} style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
               {/* Dept */}
               <div>
-                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, marginBottom: "0.5rem" }}>Departamento</label>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, marginBottom: "0.5rem" }}>{t("documents.upload.department")}</label>
                 <select className="input" value={selectedDept} onChange={e => setSelectedDept(e.target.value)} required>
-                  {DEPARTMENTS.map(d => <option key={d.id} value={d.id}>{d.icon} {d.name}</option>)}
+                  {DEPARTMENTS.map(d => <option key={d.id} value={d.id}>{d.icon} {getDeptName(d.id)}</option>)}
                 </select>
               </div>
 
               {/* Class */}
               <div>
                 <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem", fontWeight: 700, marginBottom: "0.5rem" }}>
-                  Clasificación
+                  {t("documents.upload.category")}
                   <button type="button" onClick={() => setIsNewClass(!isNewClass)} className="btn btn-ghost" style={{ padding: "0.2rem 0.5rem", fontSize: "0.7rem", color: "hsl(var(--primary))" }}>
-                    {isNewClass ? "Seleccionar existente" : "+ Nueva"}
+                    {isNewClass ? t("documents.upload.selectExisting") : t("documents.upload.newCategory")}
                   </button>
                 </label>
                 {isNewClass ? (
-                  <input type="text" className="input" placeholder="Nombre de la nueva clasificación" value={newClassVal} onChange={e => setNewClassVal(e.target.value)} required />
+                  <input type="text" className="input" placeholder={t("documents.upload.newCategoryPlaceholder")} value={newClassVal} onChange={e => setNewClassVal(e.target.value)} required />
                 ) : (
                   <select className="input" value={selectedClass} onChange={e => setSelectedClass(e.target.value)} required>
-                    {allClassifications.map(c => <option key={c} value={c}>{c}</option>)}
+                    {allClassifications.map(c => <option key={c} value={c}>{getCategoryName(c)}</option>)}
                   </select>
                 )}
               </div>
 
               {/* Title */}
               <div>
-                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, marginBottom: "0.5rem" }}>Título del documento</label>
-                <input name="title" className="input" required placeholder="Ej: Manual de Empleado" />
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, marginBottom: "0.5rem" }}>{t("documents.upload.docTitle")}</label>
+                <input name="title" className="input" required placeholder={t("documents.upload.docTitlePlaceholder")} />
               </div>
 
               {/* File */}
               <div>
-                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, marginBottom: "0.5rem" }}>Archivo</label>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, marginBottom: "0.5rem" }}>{t("documents.upload.file")}</label>
                 <div
                   onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}
                   onClick={() => document.getElementById("kb-file-input")?.click()}
@@ -580,7 +624,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
                   {fileName ? (
                     <div style={{ color: "hsl(var(--primary))", fontWeight: 700, fontSize: "0.85rem" }}><CheckCircle size={20} style={{ margin: "0 auto 0.5rem", display: "block" }}/>{fileName}</div>
                   ) : (
-                    <div style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.85rem" }}><Upload size={20} style={{ margin: "0 auto 0.5rem", display: "block", opacity: 0.5 }}/>Arrastra o haz clic para subir</div>
+                    <div style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.85rem" }}><Upload size={20} style={{ margin: "0 auto 0.5rem", display: "block", opacity: 0.5 }}/>{t("documents.upload.dropzone")}</div>
                   )}
                   <input id="kb-file-input" name="file" type="file" required onChange={handleFileChange} style={{ display: "none" }} />
                 </div>
@@ -589,12 +633,12 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
               {isPrivileged && (
                 <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", padding: "0.75rem", backgroundColor: "hsl(var(--muted))", borderRadius: "0.5rem", cursor: "pointer" }}>
                   <input type="checkbox" name="isGlobal" value="true" defaultChecked />
-                  🌐 Documento Global (Visible para todos)
+                  {t("documents.upload.globalDoc")}
                 </label>
               )}
 
               <button type="submit" disabled={loading || uploadDone} className="btn btn-primary" style={{ width: "100%", padding: "1rem" }}>
-                {loading ? "Subiendo..." : uploadDone ? "¡Completado!" : "Publicar Documento"}
+                {loading ? t("documents.upload.uploading") : uploadDone ? t("documents.upload.completed") : t("documents.upload.submitBtn")}
               </button>
             </form>
           </div>
@@ -646,9 +690,9 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
                   <Bot size={22} />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 800, color: "hsl(var(--foreground))" }}>Asistente de Documentos IA</h3>
+                  <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 800, color: "hsl(var(--foreground))" }}>{t("documents.drawer.title")}</h3>
                   <p style={{ margin: "0.1rem 0 0", fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
-                    {selectedDocIdAI ? `Consultando sobre: ${selectedDocTitleAI}` : "Consultas inteligentes sobre toda la biblioteca"}
+                    {selectedDocIdAI ? t("documents.drawer.subtitleSpecific", { title: selectedDocTitleAI || "" }) : t("documents.drawer.subtitleGeneral")}
                   </p>
                 </div>
               </div>
@@ -656,7 +700,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
                 onClick={() => setIsOpenAI(false)} 
                 className="btn btn-ghost" 
                 style={{ padding: "0.5rem", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "hsl(var(--muted-foreground))" }}
-                title="Cerrar (Esc)"
+                title={t("documents.drawer.closeTooltip")}
               >
                 <X size={20} />
               </button>
@@ -670,7 +714,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                     <Sparkles size={14} color="hsl(var(--primary))" />
                     <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "hsl(var(--primary))" }}>
-                      Documento activo: <span style={{ fontWeight: 800 }}>{selectedDocTitleAI}</span>
+                      {t("documents.drawer.activeDoc")} <span style={{ fontWeight: 800 }}>{selectedDocTitleAI}</span>
                     </span>
                   </div>
                   <button 
@@ -680,7 +724,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
                     }}
                     style={{ fontSize: "0.72rem", color: "hsl(var(--destructive))", border: "none", backgroundColor: "transparent", fontWeight: 700, cursor: "pointer" }}
                   >
-                    Quitar filtro
+                    {t("documents.drawer.removeFilter")}
                   </button>
                 </div>
               )}
@@ -691,7 +735,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
                   type="text" 
                   className="input" 
                   autoFocus
-                  placeholder={selectedDocIdAI ? "Pregunta sobre este documento..." : "Pregunta sobre cualquier documento..."}
+                  placeholder={selectedDocIdAI ? t("documents.drawer.inputPlaceholderSpecific") : t("documents.drawer.inputPlaceholderGeneral")}
                   value={queryAI} 
                   onChange={e => setQueryAI(e.target.value)} 
                   onKeyDown={e => {
@@ -707,7 +751,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
                   className="btn btn-primary"
                   style={{ padding: "0.75rem 1.25rem", borderRadius: "0.75rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.4rem" }}
                 >
-                  {loadingAI ? "Buscando..." : "Preguntar"}
+                  {loadingAI ? t("documents.drawer.searchingBtn") : t("documents.drawer.askBtn")}
                 </button>
               </div>
 
@@ -715,24 +759,24 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
               {!answerAI && !loadingAI && (
                 <div>
                   <h4 style={{ margin: "0 0 0.75rem", fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                    {selectedDocIdAI ? "Preguntas Frecuentes sobre este documento" : "Sugerencias de búsqueda"}
+                    {selectedDocIdAI ? t("documents.drawer.faqTitle") : t("documents.drawer.suggestionsTitle")}
                   </h4>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                     {(selectedDocIdAI 
                       ? [
-                          "Hazme un resumen.",
-                          "¿Cuáles son los puntos más importantes?",
-                          "¿Qué responsabilidades menciona?",
-                          "¿Qué fechas importantes contiene?",
-                          "Explícame este procedimiento de forma sencilla."
+                          t("documents.drawer.suggestions.docSummary"),
+                          t("documents.drawer.suggestions.docPoints"),
+                          t("documents.drawer.suggestions.docResponsibilities"),
+                          t("documents.drawer.suggestions.docDates"),
+                          t("documents.drawer.suggestions.docSimple")
                         ]
                       : [
-                          "¿Cómo solicito vacaciones?",
-                          "¿Qué dice la política de asistencia?",
-                          "¿Dónde encuentro el procedimiento de VPN?",
-                          "¿Qué documento habla sobre licencias médicas?",
-                          "Buscar políticas corporativas",
-                          "Buscar procesos de TI"
+                          t("documents.drawer.suggestions.genVacations"),
+                          t("documents.drawer.suggestions.genAttendance"),
+                          t("documents.drawer.suggestions.genVpn"),
+                          t("documents.drawer.suggestions.genMedical"),
+                          t("documents.drawer.suggestions.genPolicies"),
+                          t("documents.drawer.suggestions.genIt")
                         ]
                     ).map((sug, i) => (
                       <button
@@ -754,7 +798,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
               {/* Consultas recientes (Historial) */}
               {recentSearches.length > 0 && !answerAI && !loadingAI && (
                 <div>
-                  <h4 style={{ margin: "0 0 0.75rem", fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", letterSpacing: "0.05em" }}>Consultas Recientes</h4>
+                  <h4 style={{ margin: "0 0 0.75rem", fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", letterSpacing: "0.05em" }}>{t("documents.drawer.recentQueriesTitle")}</h4>
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                     {recentSearches.map((term, i) => (
                       <button
@@ -792,8 +836,8 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "3rem 1rem", gap: "1rem" }}>
                   <div className="spinner" style={{ width: 36, height: 36, border: "3px solid hsl(var(--primary)/0.2)", borderTopColor: "hsl(var(--primary))" }} />
                   <div style={{ textAlign: "center" }}>
-                    <p style={{ margin: 0, fontWeight: 800, fontSize: "0.95rem" }}>Analizando documentos corporativos...</p>
-                    <p style={{ margin: "0.25rem 0 0", fontSize: "0.8rem", color: "hsl(var(--muted-foreground))" }}>Buscando información e invocando la IA local</p>
+                    <p style={{ margin: 0, fontWeight: 800, fontSize: "0.95rem" }}>{t("documents.drawer.loadingTitle")}</p>
+                    <p style={{ margin: "0.25rem 0 0", fontSize: "0.8rem", color: "hsl(var(--muted-foreground))" }}>{t("documents.drawer.loadingSubtitle")}</p>
                   </div>
                 </div>
               )}
@@ -805,7 +849,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
                   <div style={{ padding: "1.25rem", backgroundColor: "hsl(var(--primary)/0.04)", borderRadius: "1rem", border: "1px solid hsl(var(--primary)/0.2)" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem", borderBottom: "1px solid hsl(var(--primary)/0.15)", paddingBottom: "0.5rem" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontWeight: 800, color: "hsl(var(--primary))", fontSize: "0.9rem" }}>
-                        <Bot size={18} /> Respuesta de la IA
+                        <Bot size={18} /> {t("documents.drawer.responseTitle")}
                       </div>
                       <button
                         onClick={() => {
@@ -819,7 +863,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
                         style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "0.3rem", color: "hsl(var(--primary))" }}
                       >
                         {copiedAI ? <Check size={13} /> : <Copy size={13} />}
-                        {copiedAI ? "¡Copiado!" : "Copiar"}
+                        {copiedAI ? t("documents.drawer.copied") : t("documents.drawer.copy")}
                       </button>
                     </div>
                     <div style={{ lineHeight: 1.6, fontSize: "0.88rem", color: "hsl(var(--foreground))" }}>
@@ -830,7 +874,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
                   {/* Fuentes Utilizadas */}
                   {sourcesAI.length > 0 && (
                     <div>
-                      <h4 style={{ margin: "0 0 0.75rem", fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", letterSpacing: "0.05em" }}>Documentos Consultados</h4>
+                      <h4 style={{ margin: "0 0 0.75rem", fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", letterSpacing: "0.05em" }}>{t("documents.drawer.consultedDocs")}</h4>
                       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                         {sourcesAI.map((src) => (
                           <div 
@@ -858,7 +902,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
                               className="btn btn-surface" 
                               style={{ padding: "0.35rem 0.75rem", fontSize: "0.75rem", borderRadius: "0.5rem", display: "inline-flex", alignItems: "center", gap: "0.25rem", textDecoration: "none" }}
                             >
-                              <ExternalLink size={12} /> Abrir Documento
+                              <ExternalLink size={12} /> {t("documents.drawer.openDoc")}
                             </a>
                           </div>
                         ))}
@@ -869,7 +913,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
                   {/* Fragmentos Utilizados */}
                   {chunksAI.length > 0 && (
                     <div>
-                      <h4 style={{ margin: "0 0 0.75rem", fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", letterSpacing: "0.05em" }}>Fragmentos Citados</h4>
+                      <h4 style={{ margin: "0 0 0.75rem", fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", letterSpacing: "0.05em" }}>{t("documents.drawer.citedChunks")}</h4>
                       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                         {chunksAI.map((chunk, i) => (
                           <div 
@@ -885,7 +929,7 @@ export function KBList({ initialDocuments, userRole, currentUserId, onUpload, pr
                             }}
                           >
                             <div style={{ fontWeight: 700, fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", marginBottom: "0.35rem", display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                              <Tag size={10} /> De: {chunk.documentTitle}
+                              <Tag size={10} /> {t("documents.drawer.fromDoc", { title: chunk.documentTitle })}
                             </div>
                             <p style={{ margin: 0, fontStyle: "italic" }}>
                               "{chunk.content}"

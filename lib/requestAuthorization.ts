@@ -32,6 +32,26 @@ export async function getManagedProjectIds(userId: string): Promise<string[]> {
 }
 
 /**
+ * Obtiene los IDs de los usuarios/colaboradores que pertenecen a proyectos
+ * gestionados por el usuario supervisor o sublíder (Squad members).
+ */
+export async function getManagedUserIds(supervisorId: string): Promise<string[]> {
+  if (!supervisorId) return []
+  const managedProjectIds = await getManagedProjectIds(supervisorId)
+  if (managedProjectIds.length === 0) return []
+  const users = await prisma.user.findMany({
+    where: {
+      OR: [
+        { projects: { some: { id: { in: managedProjectIds } } } },
+        { projectId: { in: managedProjectIds } }
+      ]
+    },
+    select: { id: true }
+  })
+  return users.map(u => u.id)
+}
+
+/**
  * 5. Filtro Dinámico de Data Scoping (Row-Level Security) para TimeOffRequest
  * 
  * Genera el predicado Prisma WHERE estricto según la jerarquía corporativa:
@@ -49,12 +69,11 @@ export async function getTimeOffScopeFilter(
 ): Promise<Prisma.TimeOffRequestWhereInput | null> {
   if (!user || !user.id) return null
 
-  // A. CEO -> Alcance Global
-  if (isCEO(user)) {
+  // A. CEO y ADMIN -> Alcance Global (Visualización completa sin restricciones de grupo)
+  const role = (user.role || "").toUpperCase().trim()
+  if (isCEO(user) || role === "ADMIN") {
     return {}
   }
-
-  const role = (user.role || "").toUpperCase().trim()
 
   // B. RRHH -> Alcance Corporativo Global
   if (role === "HR") {
@@ -89,7 +108,10 @@ export async function getTimeOffScopeFilter(
           user: {
             OR: [
               { role: { in: ["TECHNOLOGY", "TECHNOLOGY_ADMIN", "IT_MANAGER"] } },
-              ...(techProjectIds.length > 0 ? [{ projectId: { in: techProjectIds } }] : [])
+              ...(techProjectIds.length > 0 ? [
+                { projects: { some: { id: { in: techProjectIds } } } },
+                { projectId: { in: techProjectIds } }
+              ] : [])
             ]
           }
         }
@@ -108,7 +130,10 @@ export async function getTimeOffScopeFilter(
 
     return {
       user: {
-        projectId: { in: managedProjectIds }
+        OR: [
+          { projects: { some: { id: { in: managedProjectIds } } } },
+          { projectId: { in: managedProjectIds } }
+        ]
       }
     }
   }
@@ -156,7 +181,8 @@ export async function authorizeRequestAction(
           email: true,
           role: true,
           projectId: true,
-          project: { select: { id: true, name: true } }
+          project: { select: { id: true, name: true } },
+          projects: { select: { id: true, name: true } }
         }
       }
     }
@@ -166,12 +192,13 @@ export async function authorizeRequestAction(
     return { authorized: false, error: "Solicitud no encontrada", status: 404 }
   }
 
-  // A. CEO y RRHH -> Bypass de autorización corporativo
-  if (isCEO(user) || (user.role || "").toUpperCase().trim() === "HR") {
+  const role = (user.role || "").toUpperCase().trim()
+
+  // A. CEO, RRHH y ADMIN -> Bypass de autorización corporativo (gestión de cualquier colaborador y grupo)
+  if (isCEO(user) || role === "HR" || role === "ADMIN") {
     return { authorized: true, request }
   }
 
-  const role = (user.role || "").toUpperCase().trim()
   const isTechnical = (TECHNICAL_REQUEST_TYPES as readonly string[]).includes(request.type)
 
   // B. IT Manager / Tecnología
@@ -185,7 +212,11 @@ export async function authorizeRequestAction(
     const managedProjectIds = await getManagedProjectIds(user.id)
     const empRole = (request.user?.role || "").toUpperCase().trim()
     const isTechEmployee = empRole === "TECHNOLOGY" || empRole === "TECHNOLOGY_ADMIN" || empRole === "IT_MANAGER"
-    const isInManagedProject = Boolean(request.user?.projectId && managedProjectIds.includes(request.user.projectId))
+    const userProjectIds = [
+      request.user?.projectId,
+      ...(request.user?.projects?.map((p: any) => p.id) || [])
+    ].filter(Boolean) as string[]
+    const isInManagedProject = userProjectIds.some(pId => managedProjectIds.includes(pId))
 
     if (isTechEmployee || isInManagedProject) {
       return { authorized: true, request }
@@ -201,8 +232,13 @@ export async function authorizeRequestAction(
   // C. Team Lead / Supervisor / Manager de Operaciones
   if (role === "SUPERVISOR" || role === "TEAM_LEAD" || role === "MANAGER") {
     const managedProjectIds = await getManagedProjectIds(user.id)
+    const userProjectIds = [
+      request.user?.projectId,
+      ...(request.user?.projects?.map((p: any) => p.id) || [])
+    ].filter(Boolean) as string[]
+    const isInManagedProject = userProjectIds.some(pId => managedProjectIds.includes(pId))
 
-    if (!request.user?.projectId || !managedProjectIds.includes(request.user.projectId)) {
+    if (!isInManagedProject) {
       return {
         authorized: false,
         error: "Acceso denegado (403 Forbidden): Esta solicitud pertenece a un colaborador fuera de tu equipo asignado.",

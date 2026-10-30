@@ -8,7 +8,8 @@ import {
 } from "lucide-react"
 import { cancelTimeOffRequest, editTimeOffRequest } from "@/app/actions/timeOffActions"
 import { useTheme } from "@/app/Providers"
-import { formatCreatedInfo, formatDateTimeShort } from "@/lib/dateUtils"
+import { formatCreatedInfo, formatDateTimeShort, formatTimeStr12h, formatTime12h } from "@/lib/dateUtils"
+import { useTranslation } from "@/lib/i18n/LanguageContext"
 
 type TimeOffRequest = {
   id: string
@@ -44,7 +45,16 @@ type TimeOffRequest = {
   hoursUsed?: number | null
 }
 
+function formatDisplayDate(dateVal: any, locale: string = "es") {
+  if (!dateVal) return "N/A"
+  const d = new Date(dateVal)
+  if (isNaN(d.getTime())) return "N/A"
+  const isUtcMidnight = d.getUTCHours() === 0 && d.getUTCMinutes() === 0
+  return d.toLocaleDateString(locale === "en" ? "en-US" : "es-ES", { timeZone: isUtcMidnight ? "UTC" : undefined })
+}
+
 export function VacationList({ requests }: { requests: TimeOffRequest[] }) {
+  const { t, locale } = useTranslation()
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [editingReq, setEditingReq] = useState<TimeOffRequest | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -56,8 +66,8 @@ export function VacationList({ requests }: { requests: TimeOffRequest[] }) {
 
   const handleCancel = async (id: string, isApproved: boolean) => {
     const confirmMessage = isApproved 
-      ? "Esta solicitud ya fue APROBADA. Al cancelarla, se devolverán los días al balance del empleado. ¿Deseas continuar?"
-      : "¿Estás seguro de que deseas cancelar esta solicitud?"
+      ? (locale === "en" ? "This request was already APPROVED. Cancelling it will return the days to the employee's balance. Do you wish to continue?" : "Esta solicitud ya fue APROBADA. Al cancelarla, se devolverán los días al balance del empleado. ¿Deseas continuar?")
+      : (locale === "en" ? "Are you sure you want to cancel this request?" : "¿Estás seguro de que deseas cancelar esta solicitud?")
     
     if (!confirm(confirmMessage)) return
 
@@ -115,53 +125,62 @@ export function VacationList({ requests }: { requests: TimeOffRequest[] }) {
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case "APPROVED": return "Aprobada"
-      case "REJECTED": return "Rechazada"
-      case "CANCELLED": return "Cancelada"
-      case "COMPLETED": return "Completada"
-      default: return "Pendiente"
+      case "APPROVED": return t("common.approved")
+      case "REJECTED": return t("common.rejected")
+      case "CANCELLED": return t("common.cancelled")
+      case "COMPLETED": return t("common.approved")
+      default: return t("common.pending")
     }
   }
 
   const getTypeBadgeStyle = (type: string) => {
     const isDark = theme === "dark"
+    const getBadgeLabel = (typeKey: string, fallback: string) => {
+      return t(`vacations.types.${typeKey}.label` as any) || fallback
+    }
     switch (type) {
       case "VACATION":
         return { 
           bg: isDark ? "rgba(59, 130, 246, 0.18)" : "rgba(37, 99, 235, 0.1)", 
           color: isDark ? "#60a5fa" : "#2563eb", 
-          text: "Vacaciones" 
+          text: getBadgeLabel("VACATION", "Vacaciones")
         }
       case "PERMISSION":
       case "SPECIAL":
         return { 
           bg: isDark ? "rgba(99, 102, 241, 0.18)" : "rgba(79, 70, 229, 0.1)", 
           color: isDark ? "#818cf8" : "#6366f1", 
-          text: "Permiso Especial" 
+          text: getBadgeLabel("SPECIAL", "Permiso Especial")
         }
       case "EARLY_LEAVE":
         return { 
           bg: isDark ? "rgba(245, 158, 11, 0.18)" : "rgba(217, 119, 6, 0.1)", 
           color: isDark ? "#fbbf24" : "#d97706", 
-          text: "Salida Temprana" 
+          text: getBadgeLabel("EARLY_LEAVE", "Salida Temprana")
+        }
+      case "LATE_ARRIVAL":
+        return { 
+          bg: isDark ? "rgba(249, 115, 22, 0.18)" : "rgba(234, 88, 12, 0.1)", 
+          color: isDark ? "#fb923c" : "#ea580c", 
+          text: getBadgeLabel("LATE_ARRIVAL", "Llegada Tarde")
         }
       case "HOURS_MAKEUP":
         return { 
           bg: isDark ? "rgba(20, 184, 166, 0.18)" : "rgba(13, 148, 136, 0.1)", 
           color: isDark ? "#2dd4bf" : "#14b8a6", 
-          text: "Repo. de Horas" 
+          text: getBadgeLabel("HOURS_MAKEUP", "Repo. de Horas")
         }
       case "SICK_LEAVE":
         return { 
           bg: isDark ? "rgba(16, 185, 129, 0.18)" : "rgba(5, 150, 105, 0.1)", 
           color: isDark ? "#34d399" : "#10b981", 
-          text: "Enfermedad (corta)" 
+          text: getBadgeLabel("MEDICAL_LEAVE", "Enfermedad")
         }
       case "MEDICAL_LEAVE":
         return { 
           bg: isDark ? "rgba(244, 63, 94, 0.18)" : "rgba(225, 29, 72, 0.1)", 
           color: isDark ? "#fb7185" : "#f43f5e", 
-          text: "Licencia Médica" 
+          text: getBadgeLabel("MEDICAL_LEAVE", "Licencia Médica")
         }
       case "MATERNITY_LEAVE":
       case "PATERNITY_LEAVE":
@@ -169,37 +188,43 @@ export function VacationList({ requests }: { requests: TimeOffRequest[] }) {
         return { 
           bg: isDark ? "rgba(236, 72, 153, 0.18)" : "rgba(219, 39, 119, 0.1)", 
           color: isDark ? "#f472b6" : "#ec4899", 
-          text: "Maternidad / Paternidad" 
+          text: getBadgeLabel("MATERNITY_LEAVE", "Maternidad / Paternidad")
         }
       case "BEREAVEMENT_LEAVE":
         return { 
           bg: isDark ? "rgba(139, 92, 246, 0.18)" : "rgba(124, 58, 237, 0.1)", 
           color: isDark ? "#a78bfa" : "#8b5cf6", 
-          text: "Fallecimiento / Duelo" 
+          text: getBadgeLabel("BEREAVEMENT_LEAVE", "Fallecimiento / Duelo")
+        }
+      case "MARRIAGE_LEAVE":
+        return { 
+          bg: isDark ? "rgba(225, 29, 72, 0.18)" : "rgba(225, 29, 72, 0.1)", 
+          color: isDark ? "#fb7185" : "#e11d48", 
+          text: getBadgeLabel("MARRIAGE_LEAVE", "Licencia por Matrimonio")
         }
       case "REMOTE_INTERNET":
         return {
           bg: isDark ? "rgba(249, 115, 22, 0.18)" : "rgba(234, 88, 12, 0.1)",
           color: isDark ? "#fb923c" : "#f97316",
-          text: "Falla de Internet"
+          text: getBadgeLabel("REMOTE_INTERNET", "Falla de Internet")
         }
       case "REMOTE_POWER":
         return {
           bg: isDark ? "rgba(234, 179, 8, 0.18)" : "rgba(202, 138, 4, 0.1)",
           color: isDark ? "#fde047" : "#eab308",
-          text: "Corte de Luz"
+          text: getBadgeLabel("REMOTE_POWER", "Corte de Luz")
         }
       case "REMOTE_HARDWARE":
         return {
           bg: isDark ? "rgba(239, 68, 68, 0.18)" : "rgba(220, 38, 38, 0.1)",
           color: isDark ? "#f87171" : "#ef4444",
-          text: "Avería Hardware / PC"
+          text: getBadgeLabel("REMOTE_HARDWARE", "Avería Hardware / PC")
         }
       case "REMOTE_VPN":
         return {
           bg: isDark ? "rgba(168, 85, 247, 0.18)" : "rgba(147, 51, 234, 0.1)",
           color: isDark ? "#c084fc" : "#a855f7",
-          text: "Fallo VPN / Accesos"
+          text: getBadgeLabel("REMOTE_VPN", "Fallo VPN / Accesos")
         }
       default:
         return { bg: "hsl(var(--muted) / 0.5)", color: "hsl(var(--muted-foreground))", text: type }
@@ -207,34 +232,34 @@ export function VacationList({ requests }: { requests: TimeOffRequest[] }) {
   }
 
   return (
-    <div>
+    <div style={{ width: "100%", minWidth: 0, boxSizing: "border-box" }}>
       <h2 style={{ fontSize: "1.25rem", fontWeight: 800, marginBottom: "1.5rem", letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: "0.5rem" }}>
         <History size={20} color="hsl(var(--primary))" />
-        Historial de Solicitudes
+        {t("vacations.historyTitle")}
       </h2>
 
-      <div className="card glass animate-in" style={{ borderRadius: "1.25rem", border: "1px solid hsl(var(--border) / 0.8)", overflow: "hidden" }}>
+      <div className="card glass animate-in" style={{ borderRadius: "1.25rem", border: "1px solid hsl(var(--border) / 0.8)", overflow: "hidden", width: "100%", minWidth: 0, boxSizing: "border-box" }}>
         {requests.length === 0 ? (
           <div style={{ textAlign: "center", padding: "4rem 1rem" }}>
             <AlertCircle size={36} style={{ color: "hsl(var(--muted-foreground))", opacity: 0.3, marginBottom: "1rem" }} />
-            <p style={{ margin: 0, color: "hsl(var(--muted-foreground))", fontSize: "0.95rem" }}>No has realizado ninguna solicitud de vacaciones o permisos aún.</p>
+            <p style={{ margin: 0, color: "hsl(var(--muted-foreground))", fontSize: "0.95rem" }}>{t("vacations.list.emptyList")}</p>
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div style={{ overflowX: "auto", width: "100%", minWidth: 0, WebkitOverflowScrolling: "touch" }}>
             <style>
               {`
                 .hover-row:hover { background-color: hsl(var(--muted) / 0.15); }
               `}
             </style>
-            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.85rem" }}>
+            <table style={{ width: "100%", minWidth: "680px", borderCollapse: "collapse", textAlign: "left", fontSize: "0.85rem" }}>
               <thead>
                 <tr style={{ backgroundColor: "hsl(var(--muted) / 0.3)", color: "hsl(var(--muted-foreground))", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  <th style={{ padding: "1rem 1.25rem", fontWeight: 700, borderBottom: "1px solid hsl(var(--border) / 0.5)", width: "14%" }}>Tipo</th>
-                  <th style={{ padding: "1rem 1.25rem", fontWeight: 700, borderBottom: "1px solid hsl(var(--border) / 0.5)", width: "23%" }}>Fechas / Programación</th>
-                  <th style={{ padding: "1rem 1.25rem", fontWeight: 700, borderBottom: "1px solid hsl(var(--border) / 0.5)", width: "20%" }}>Duración / Horas</th>
-                  <th style={{ padding: "1rem 1.25rem", fontWeight: 700, borderBottom: "1px solid hsl(var(--border) / 0.5)", width: "23%" }}>Motivo / Adjunto</th>
-                  <th style={{ padding: "1rem 1rem", fontWeight: 700, borderBottom: "1px solid hsl(var(--border) / 0.5)", width: "10%" }}>Estado</th>
-                  <th style={{ padding: "1rem 1rem", fontWeight: 700, borderBottom: "1px solid hsl(var(--border) / 0.5)", width: "10%", textAlign: "right" }}>Acciones</th>
+                  <th style={{ padding: "1rem 1.25rem", fontWeight: 700, borderBottom: "1px solid hsl(var(--border) / 0.5)", width: "14%" }}>{t("vacations.list.colType")}</th>
+                  <th style={{ padding: "1rem 1.25rem", fontWeight: 700, borderBottom: "1px solid hsl(var(--border) / 0.5)", width: "23%" }}>{t("vacations.list.colPeriod")}</th>
+                  <th style={{ padding: "1rem 1.25rem", fontWeight: 700, borderBottom: "1px solid hsl(var(--border) / 0.5)", width: "20%" }}>{t("vacations.list.colDuration")}</th>
+                  <th style={{ padding: "1rem 1.25rem", fontWeight: 700, borderBottom: "1px solid hsl(var(--border) / 0.5)", width: "23%" }}>{t("vacations.reasonLabel")}</th>
+                  <th style={{ padding: "1rem 1rem", fontWeight: 700, borderBottom: "1px solid hsl(var(--border) / 0.5)", width: "10%" }}>{t("vacations.list.colStatus")}</th>
+                  <th style={{ padding: "1rem 1rem", fontWeight: 700, borderBottom: "1px solid hsl(var(--border) / 0.5)", width: "10%", textAlign: "right" }}>{t("vacations.list.colActions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -246,34 +271,49 @@ export function VacationList({ requests }: { requests: TimeOffRequest[] }) {
                   let datesRender = null
                   if (req.type === "HOURS_MAKEUP") {
                     datesRender = (
-                      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                        <div><strong>Ausencia:</strong> {req.absenceDate ? new Date(req.absenceDate).toLocaleDateString("es-ES") : "N/A"}</div>
-                        <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
-                          <strong style={{ color: "hsl(var(--primary))" }}>Repone:</strong> {req.makeupDate ? new Date(req.makeupDate).toLocaleDateString("es-ES") : "N/A"}<br/>
-                          de {req.makeupStartTime || "N/A"} a {req.makeupEndTime || "N/A"}
+                      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }} suppressHydrationWarning>
+                        <div suppressHydrationWarning><strong>{t("dashboard.absence")}</strong> {formatDisplayDate(req.absenceDate, locale)}</div>
+                        <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }} suppressHydrationWarning>
+                          <strong style={{ color: "hsl(var(--primary))" }}>{t("dashboard.proposedMakeup")}</strong> {formatDisplayDate(req.makeupDate, locale)}<br/>
+                          {req.makeupStartTime || "N/A"} - {req.makeupEndTime || "N/A"}
                         </div>
                       </div>
                     )
-                  } else if (req.type === "SPECIAL" && req.specialType === "HOURS") {
+                  } else if ((req.type === "SPECIAL" || req.type === "PERMISSION") && (req.specialType === "HOURS" || req.exitTime || req.returnTime)) {
                     datesRender = (
-                      <div style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
-                        <div>{new Date(req.startDate).toLocaleDateString("es-ES")}</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }} suppressHydrationWarning>
+                        <div suppressHydrationWarning>{formatDisplayDate(req.startDate, locale)}</div>
                         <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>
-                          Rango: de {req.exitTime || "N/A"} a {req.returnTime || "N/A"}
+                          {t("common.schedule")}: {formatTimeStr12h(req.exitTime) || req.exitTime || "N/A"} - {formatTimeStr12h(req.returnTime) || req.returnTime || "N/A"}
                         </div>
                       </div>
                     )
                   } else {
                     datesRender = (
-                      <div>
+                      <div suppressHydrationWarning>
                         {req.type === "EARLY_LEAVE" ? (
-                          <div style={{ display: "flex", flexDirection: "column" }}>
-                            <span>{new Date(req.startDate).toLocaleDateString("es-ES")}</span>
-                            <span style={{color: "hsl(var(--muted-foreground))", fontWeight: 500, fontSize: "0.75rem"}}>a las {new Date(req.startDate).toLocaleTimeString("es-ES", { hour: '2-digit', minute: '2-digit' })}</span>
+                          <div style={{ display: "flex", flexDirection: "column" }} suppressHydrationWarning>
+                            <span suppressHydrationWarning>{formatDisplayDate(req.startDate, locale)}</span>
+                            <span style={{color: "hsl(var(--muted-foreground))", fontWeight: 500, fontSize: "0.75rem"}} suppressHydrationWarning>{t("feed.at")} {formatTimeStr12h(req.exitTime) || (req.startDate ? formatTime12h(req.startDate) : "N/A")}</span>
+                          </div>
+                        ) : req.type === "LATE_ARRIVAL" ? (
+                          <div style={{ display: "flex", flexDirection: "column" }} suppressHydrationWarning>
+                            <span suppressHydrationWarning>{formatDisplayDate(req.startDate, locale)}</span>
+                            <span style={{color: "#f97316", fontWeight: 600, fontSize: "0.75rem"}} suppressHydrationWarning>{t("dashboard.arrivalAt")} {formatTimeStr12h(req.returnTime) || (req.startDate ? formatTime12h(req.startDate) : "N/A")}</span>
+                            <span style={{
+                              marginTop: "0.15rem",
+                              fontSize: "0.68rem",
+                              fontWeight: 700,
+                              color: req.specialType === "PRE_APPROVED" ? "#10b981" : "#ef4444"
+                            }}>
+                              {req.specialType === "PRE_APPROVED" ? `✓ ${t("vacations.preApprovedBadge")}` : `✕ ${t("vacations.notPreApprovedBadge")}`}
+                            </span>
                           </div>
                         ) : (
-                          <span>
-                            {new Date(req.startDate).toLocaleDateString("es-ES")} <span style={{color: "hsl(var(--muted-foreground))", fontWeight: 500}}>al</span> {new Date(req.endDate).toLocaleDateString("es-ES")}
+                          <span suppressHydrationWarning>
+                            <span suppressHydrationWarning>{formatDisplayDate(req.startDate, locale)}</span>
+                            <span style={{color: "hsl(var(--muted-foreground))", fontWeight: 500}}> {t("dashboard.to")} </span>
+                            <span suppressHydrationWarning>{formatDisplayDate(req.endDate, locale)}</span>
                           </span>
                         )}
                       </div>
@@ -285,7 +325,7 @@ export function VacationList({ requests }: { requests: TimeOffRequest[] }) {
                   if (req.type === "HOURS_MAKEUP") {
                     durationRender = (
                       <div>
-                        <strong>{req.hoursToMakeUp || 0} horas</strong> a reponer
+                        <strong>{req.hoursToMakeUp || 0} {t("common.hours")}</strong> ({t("vacations.makeupHoursLabel")})
                       </div>
                     )
                   } else if (req.type === "SPECIAL" || req.type === "PERMISSION") {
@@ -293,12 +333,12 @@ export function VacationList({ requests }: { requests: TimeOffRequest[] }) {
                     const isHalf = req.specialType === "HALF"
                     durationRender = (
                       <div style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
-                        <div>Modalidad: <strong>{isHours ? "Por Horas" : isHalf ? "Medio Día" : "Día Completo"}</strong></div>
+                        <div><strong>{isHours ? t("common.hours") : isHalf ? (t("common.schedule") || "Medio Día") : (locale === "en" ? "Full Day" : "Día Completo")}</strong></div>
                         {isHours && (
                           <div style={{ fontSize: "0.72rem", color: "hsl(var(--muted-foreground))" }}>
-                            Solicitadas: {req.hoursRequested || 0} hrs<br/>
-                            Aprobadas: {req.hoursApproved !== null ? `${req.hoursApproved} hrs` : "Pendiente"}<br/>
-                            Utilizadas: {req.hoursUsed !== null ? `${req.hoursUsed} hrs` : "Pendiente"}
+                            {t("vacations.requestedHours")}: {req.hoursRequested || 0} hrs<br/>
+                            {t("vacations.approvedHours")}: {req.hoursApproved !== null ? `${req.hoursApproved} hrs` : t("common.pending")}<br/>
+                            {t("vacations.realHours")}: {req.hoursUsed !== null ? `${req.hoursUsed} hrs` : t("common.pending")}
                           </div>
                         )}
                       </div>
@@ -306,7 +346,7 @@ export function VacationList({ requests }: { requests: TimeOffRequest[] }) {
                   } else {
                     durationRender = (
                       <div>
-                        <strong>{req.type === "EARLY_LEAVE" ? "1" : (req as any).requestedDays || 0}</strong> {(req as any).requestedDays === 1 || req.type === "EARLY_LEAVE" ? "día" : "días"}
+                        <strong>{req.type === "EARLY_LEAVE" ? t("vacations.types.EARLY_LEAVE.label") : req.type === "LATE_ARRIVAL" ? t("vacations.types.LATE_ARRIVAL.label") : (req as any).requestedDays || 0}</strong> {req.type === "EARLY_LEAVE" || req.type === "LATE_ARRIVAL" ? "" : ((req as any).requestedDays === 1 ? (locale === "en" ? "day" : "día") : (locale === "en" ? "days" : "días"))}
                       </div>
                     )
                   }
@@ -333,9 +373,9 @@ export function VacationList({ requests }: { requests: TimeOffRequest[] }) {
                         {/* Fechas / Programación */}
                         <td style={{ padding: "1rem 1.25rem", verticalAlign: "middle", fontWeight: 600 }}>
                           {datesRender}
-                          <div style={{ fontSize: "0.72rem", color: "hsl(var(--muted-foreground))", marginTop: "0.35rem", fontWeight: 400, display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                          <div style={{ fontSize: "0.72rem", color: "hsl(var(--muted-foreground))", marginTop: "0.35rem", fontWeight: 400, display: "flex", alignItems: "center", gap: "0.25rem" }} suppressHydrationWarning>
                             <Clock size={11} style={{ opacity: 0.7 }} />
-                            <span>{formatCreatedInfo(req.createdAt, req.createdBy?.name)}</span>
+                            <span suppressHydrationWarning>{formatCreatedInfo(req.createdAt, req.createdBy?.name)}</span>
                           </div>
                         </td>
 
@@ -352,7 +392,7 @@ export function VacationList({ requests }: { requests: TimeOffRequest[] }) {
                           {req.documentUrl && (
                             <div style={{ marginTop: "0.5rem" }}>
                               <a
-                                href={req.documentUrl}
+                                href={`/api/attachments/${req.id}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 style={{
@@ -398,13 +438,13 @@ export function VacationList({ requests }: { requests: TimeOffRequest[] }) {
                             {getStatusText(req.status)}
                           </div>
                           {req.status === "APPROVED" && (
-                            <div style={{ fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", marginTop: "0.25rem" }}>
-                              Aprobada: {formatDateTimeShort(req.approvedAt)} {req.approvedBy?.name ? `por ${req.approvedBy.name}` : ""}
+                            <div style={{ fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", marginTop: "0.25rem" }} suppressHydrationWarning>
+                              {t("dashboard.approvedBy")}: {formatDateTimeShort(req.approvedAt)} {req.approvedBy?.name ? `por ${req.approvedBy.name}` : ""}
                             </div>
                           )}
                           {req.status === "REJECTED" && (
-                            <div style={{ fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", marginTop: "0.25rem" }}>
-                              Rechazada: {formatDateTimeShort(req.rejectedAt)} {req.rejectedBy?.name ? `por ${req.rejectedBy.name}` : ""}
+                            <div style={{ fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", marginTop: "0.25rem" }} suppressHydrationWarning>
+                              {t("dashboard.rejectedBy")}: {formatDateTimeShort(req.rejectedAt)} {req.rejectedBy?.name ? `por ${req.rejectedBy.name}` : ""}
                             </div>
                           )}
                         </td>
@@ -517,6 +557,7 @@ function EditRequestModal({
   onClose: () => void
   onSuccess: () => void 
 }) {
+  const { t, locale } = useTranslation()
   const formatDateForInput = (d: Date | string) => {
     try {
       const dt = new Date(d)
@@ -587,7 +628,7 @@ function EditRequestModal({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
           <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800, color: "hsl(var(--foreground))", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <Pencil size={18} color="hsl(var(--primary))" />
-            Editar Solicitud
+            {locale === "en" ? "Edit Request" : "Editar Solicitud"}
           </h3>
           <button 
             onClick={onClose}
@@ -613,7 +654,11 @@ function EditRequestModal({
         }}>
           <AlertTriangle size={20} style={{ flexShrink: 0, marginTop: "0.1rem" }} />
           <div>
-            <strong>Re-aprobación requerida:</strong> Al guardar cambios en esta solicitud, su estado volverá a <strong>"Pendiente"</strong> y requerirá nuevamente la revisión y aprobación de tu supervisor.
+            {locale === "en" ? (
+              <><strong>Re-approval required:</strong> Saving changes to this request will return its status to <strong>&quot;Pending&quot;</strong> and will require review and approval from your supervisor again.</>
+            ) : (
+              <><strong>Re-aprobación requerida:</strong> Al guardar cambios en esta solicitud, su estado volverá a <strong>&quot;Pendiente&quot;</strong> y requerirá nuevamente la revisión y aprobación de tu supervisor.</>
+            )}
           </div>
         </div>
 
@@ -635,7 +680,7 @@ function EditRequestModal({
           {/* Tipo de Solicitud */}
           <div>
             <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", marginBottom: "0.35rem" }}>
-              Tipo de Permiso / Vacaciones
+              {locale === "en" ? "Request Type / Time Off" : "Tipo de Permiso / Vacaciones"}
             </label>
             <select
               value={type}
@@ -643,14 +688,16 @@ function EditRequestModal({
               className="input-field"
               style={{ width: "100%", padding: "0.75rem", borderRadius: "0.75rem", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
             >
-              <option value="VACATION">Vacaciones</option>
-              <option value="SPECIAL">Permiso Especial / Personal</option>
-              <option value="EARLY_LEAVE">Salida Temprana</option>
-              <option value="HOURS_MAKEUP">Reposición de Horas</option>
-              <option value="SICK_LEAVE">Licencia Médica</option>
-              <option value="MATERNITY_LEAVE">Licencia de Maternidad</option>
-              <option value="PATERNITY_LEAVE">Licencia de Paternidad</option>
-              <option value="BEREAVEMENT_LEAVE">Luto Familiar</option>
+              <option value="VACATION">{t("vacations.types.VACATION.label")}</option>
+              <option value="SPECIAL">{t("vacations.types.SPECIAL.label")}</option>
+              <option value="EARLY_LEAVE">{t("vacations.types.EARLY_LEAVE.label")}</option>
+              <option value="LATE_ARRIVAL">{t("vacations.types.LATE_ARRIVAL.label")}</option>
+              <option value="HOURS_MAKEUP">{t("vacations.types.HOURS_MAKEUP.label")}</option>
+              <option value="SICK_LEAVE">{t("vacations.types.SICK_LEAVE.label")}</option>
+              <option value="MATERNITY_LEAVE">{t("vacations.types.MATERNITY_LEAVE.label")}</option>
+              <option value="PATERNITY_LEAVE">{t("vacations.types.PATERNITY_LEAVE.label")}</option>
+              <option value="BEREAVEMENT_LEAVE">{t("vacations.types.BEREAVEMENT_LEAVE.label")}</option>
+              <option value="MARRIAGE_LEAVE">{t("vacations.types.MARRIAGE_LEAVE.label")}</option>
             </select>
           </div>
 
@@ -658,7 +705,7 @@ function EditRequestModal({
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
             <div>
               <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", marginBottom: "0.35rem" }}>
-                Fecha Inicial
+                {t("vacations.form.startDate")}
               </label>
               <input
                 type="date"
@@ -671,7 +718,7 @@ function EditRequestModal({
             </div>
             <div>
               <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", marginBottom: "0.35rem" }}>
-                Fecha Final
+                {t("vacations.form.endDate")}
               </label>
               <input
                 type="date"
@@ -687,7 +734,7 @@ function EditRequestModal({
           {/* Motivo */}
           <div>
             <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", marginBottom: "0.35rem" }}>
-              Motivo o Justificación
+              {locale === "en" ? "Reason or Justification" : "Motivo o Justificación"}
             </label>
             <textarea
               value={reason}
@@ -695,7 +742,7 @@ function EditRequestModal({
               rows={3}
               className="input-field"
               style={{ width: "100%", padding: "0.75rem", borderRadius: "0.75rem", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
-              placeholder="Explica detalladamente el motivo de la solicitud..."
+              placeholder={locale === "en" ? "Explain in detail the reason for the request..." : "Explica detalladamente el motivo de la solicitud..."}
             />
           </div>
 
@@ -708,7 +755,7 @@ function EditRequestModal({
               style={{ flex: 1, padding: "0.75rem", borderRadius: "0.75rem", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}
             >
               {loading ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
-              Guardar Cambios
+              {locale === "en" ? "Save Changes" : "Guardar Cambios"}
             </button>
             <button
               type="button"
@@ -716,7 +763,7 @@ function EditRequestModal({
               className="btn btn-surface"
               style={{ padding: "0.75rem 1.25rem", borderRadius: "0.75rem", fontSize: "0.85rem" }}
             >
-              Cancelar
+              {t("common.cancel")}
             </button>
           </div>
         </form>

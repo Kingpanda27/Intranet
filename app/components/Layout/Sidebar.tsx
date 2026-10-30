@@ -10,9 +10,12 @@ import React, { useState, useEffect } from 'react'
 import { getMyGroups } from '@/app/actions/teamActions'
 import { useSupportChat } from '@/app/components/SupportAILlama/SupportContext'
 import { canViewAuditLogs } from '@/lib/auditPermissions'
-import { canAccessITConfig, canAccessApprovalsPanel } from '@/lib/authorizationRoles'
+import { canAccessITConfig, canAccessApprovalsPanel, isSuperAdminEmail } from '@/lib/authorizationRoles'
+import { APP_VERSION } from '@/lib/version'
+import { useTranslation } from '@/lib/i18n/LanguageContext'
 
 export function Sidebar() {
+  const { t } = useTranslation()
   const { data: session } = useSession()
   const { theme, toggleTheme } = useTheme()
   const pathname = usePathname()
@@ -20,13 +23,15 @@ export function Sidebar() {
   const [myGroups, setMyGroups] = useState<any[]>([])
   const { isSupportOpen, openSupportChat, closeSupportChat, activeView, canAccessAdmin } = useSupportChat()
 
-  const isMasterAdmin = user?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || user?.isSuperAdmin
+  const isMasterAdmin = isSuperAdminEmail(user?.email) || user?.isSuperAdmin
   const hasDashboardAccess = canAccessApprovalsPanel(user)
   const isITConfigAccess = canAccessITConfig(user)
   const isTechnology = isMasterAdmin || user?.role === "TECHNOLOGY" || user?.role === "IT_MANAGER" || user?.role === "TECHNOLOGY_ADMIN" || user?.role === "HR"
-  const canManageUsers = isTechnology || user?.role === "MANAGER"
+  const canManageUsers = isTechnology || user?.role === "MANAGER" || user?.role === "ADMIN"
+  const canManageGroups = isTechnology || user?.role === "ADMIN"
   const canViewAudit = canViewAuditLogs(user)
   const isEmployeeOnly = !isMasterAdmin && (user?.role === "USER" || user?.role === "AGENT")
+  const canAccessRoleRequests = (hasDashboardAccess || isTechnology) && !isEmployeeOnly && user?.role !== "ADMIN"
 
   useEffect(() => {
     if (session?.user) {
@@ -70,24 +75,24 @@ export function Sidebar() {
       <nav className={styles.nav}>
         <Link href="/" onClick={() => closeSupportChat()} className={getLinkClass("/")}>
           <Home size={18} />
-          <span>Inicio</span>
+          <span>{t("nav.home")}</span>
         </Link>
         <Link href="/social" onClick={() => closeSupportChat()} className={getLinkClass("/social")}>
           <Users size={18} />
-          <span>Centro Social</span>
+          <span>{t("nav.social")}</span>
         </Link>
 
         <Link href="/knowledge-base" onClick={() => closeSupportChat()} className={getLinkClass("/knowledge-base")}>
           <Book size={18} />
-          <span>Documentos</span>
+          <span>{t("nav.documents")}</span>
         </Link>
         <Link href="/calendar" onClick={() => closeSupportChat()} className={getLinkClass("/calendar")}>
           <Calendar size={18} />
-          <span>Calendario</span>
+          <span>{t("nav.calendar")}</span>
         </Link>
         <Link href="/vacations" onClick={() => closeSupportChat()} className={getLinkClass("/vacations")}>
           <Umbrella size={18} />
-          <span>Vacaciones / Permisos</span>
+          <span>{t("nav.vacations")}</span>
         </Link>
 
         {/* Grupos del Usuario */}
@@ -103,39 +108,39 @@ export function Sidebar() {
         {hasDashboardAccess && !isEmployeeOnly && (
           <Link href="/dashboard" onClick={() => closeSupportChat()} className={getLinkClass("/dashboard")}>
             <LayoutDashboard size={18} />
-            <span>Panel Control</span>
+            <span>{t("nav.dashboard")}</span>
           </Link>
         )}
 
-        {(hasDashboardAccess || isTechnology) && !isEmployeeOnly && (
+        {canAccessRoleRequests && (
           <Link href="/admin/role-requests" onClick={() => closeSupportChat()} className={getLinkClass("/admin/role-requests")}>
             <ShieldCheck size={18} />
-            <span>Solicitudes de Rol</span>
+            <span>{t("nav.roleRequests")}</span>
           </Link>
         )}
 
         {canManageUsers && (
           <Link href="/admin/users" onClick={() => closeSupportChat()} className={getLinkClass("/admin/users")}>
             <Settings size={18} />
-            <span>Gestión de Usuarios</span>
+            <span>{t("nav.userManager")}</span>
           </Link>
         )}
-        {isTechnology && (
+        {canManageGroups && (
           <Link href="/admin/groups" onClick={() => closeSupportChat()} className={getLinkClass("/admin/groups")}>
             <FolderOpen size={18} />
-            <span>Gestión de Grupos</span>
+            <span>{t("nav.groupManager")}</span>
           </Link>
         )}
         {isITConfigAccess && (
           <Link href="/admin/config" onClick={() => closeSupportChat()} className={getLinkClass("/admin/config")}>
             <Settings size={18} />
-            <span>Configuración TI</span>
+            <span>{t("nav.itConfig")}</span>
           </Link>
         )}
         {canViewAudit && (
           <Link href="/admin/audit-logs" onClick={() => closeSupportChat()} className={getLinkClass("/admin/audit-logs")}>
             <Activity size={18} />
-            <span>Logs de Auditoría</span>
+            <span>{t("nav.auditLogs")}</span>
           </Link>
         )}
 
@@ -147,7 +152,7 @@ export function Sidebar() {
           title="Abrir chat de soporte técnico asistido por IA"
         >
           <Headset size={19} style={{ color: "#ff6a00", flexShrink: 0 }} />
-          <span style={{ fontWeight: 650, letterSpacing: '-0.01em' }}>IT Support Chat</span>
+          <span style={{ fontWeight: 650, letterSpacing: '-0.01em' }}>{t("nav.itSupportChat")}</span>
           <span
             style={{
               marginLeft: 'auto',
@@ -179,24 +184,27 @@ export function Sidebar() {
 
         <Link href="/profile" onClick={() => closeSupportChat()} className={getLinkClass("/profile")}>
           <UserCircle size={18} />
-          <span>Mi Perfil</span>
+          <span>{t("nav.myProfile")}</span>
         </Link>
       </nav>
 
       <div className={styles.footer}>
         <button onClick={toggleTheme} className={styles.themeToggleBtn} title={`Cambiar a modo ${theme === 'light' ? 'oscuro' : 'claro'}`}>
           {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
-          <span>{theme === "light" ? "Modo Oscuro" : "Modo Claro"}</span>
+          <span>{theme === "light" ? t("nav.darkMode") : t("nav.lightMode")}</span>
         </button>
 
         <button onClick={() => signOut()} className={`${styles.navItem} ${styles.logoutBtn}`}>
           <LogOut size={18} />
-          <span>Cerrar Sesión</span>
+          <span>{t("nav.logout")}</span>
         </button>
 
         <div style={{ marginTop: "1.25rem", fontSize: "0.65rem", color: "hsl(var(--muted-foreground))", textAlign: "center", lineHeight: "1.4" }}>
-          Desarrollado por IT Telecom Support Team<br/>
-          Soporte: <a href="mailto:support@tnoutsourcing.com" style={{ color: "hsl(var(--primary))", textDecoration: "none", fontWeight: 600 }}>support@tnoutsourcing.com</a>
+          {t("common.developedBy")}<br/>
+          {t("common.support")}: <a href="mailto:support@tnoutsourcing.com" style={{ color: "hsl(var(--primary))", textDecoration: "none", fontWeight: 600 }}>support@tnoutsourcing.com</a><br/>
+          <span style={{ display: "inline-block", marginTop: "0.35rem", fontWeight: 600, color: "hsl(var(--muted-foreground))" }}>
+            {t("common.version")} {APP_VERSION}
+          </span>
         </div>
       </div>
     </aside>

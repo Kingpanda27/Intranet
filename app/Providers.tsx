@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react"
 import { SessionProvider } from "next-auth/react"
+import { LanguageProvider } from "@/lib/i18n/LanguageContext"
 
 type Theme = "light" | "dark"
 
@@ -45,11 +46,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <SessionProvider>
-      <ThemeContext.Provider value={{ theme, toggleTheme }}>
-        <div style={{ visibility: mounted ? "visible" : "hidden" }}>
-          {children}
-        </div>
-      </ThemeContext.Provider>
+      <LanguageProvider>
+        <ThemeContext.Provider value={{ theme, toggleTheme }}>
+          <div style={{ visibility: mounted ? "visible" : "hidden" }}>
+            {children}
+          </div>
+        </ThemeContext.Provider>
+      </LanguageProvider>
     </SessionProvider>
   )
 }

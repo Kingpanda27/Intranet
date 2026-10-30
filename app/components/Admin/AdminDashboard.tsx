@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useTransition, useMemo } from "react"
 import { createPortal } from "react-dom"
-import { CheckCircle2, XCircle, User, Briefcase, Calendar, MessageSquare, Download, Clock, History, Trash2, Paperclip, ExternalLink, AlertCircle, Pencil, X, Save, RefreshCw, Users, ChevronDown, ChevronUp, Search, Layers, LayoutGrid, ListFilter, Shield, Sparkles, Filter, FileSpreadsheet } from "lucide-react"
-import { getAllSupervisedRequests, updateRequestStatus, RequestStatus, deleteTimeOffRequest, editTimeOffRequest } from "@/app/actions/timeOffActions"
+import { CheckCircle2, XCircle, User, Briefcase, Calendar, MessageSquare, Download, Clock, History, Trash2, Paperclip, ExternalLink, AlertCircle, Pencil, X, Save, RefreshCw, Users, ChevronDown, ChevronUp, Search, Layers, LayoutGrid, ListFilter, Shield, Sparkles, Filter, FileSpreadsheet, CheckSquare, Square, Zap, CheckCheck } from "lucide-react"
+import { getAllSupervisedRequests, updateRequestStatus, bulkUpdateRequestStatus, RequestStatus, deleteTimeOffRequest, editTimeOffRequest } from "@/app/actions/timeOffActions"
 import Papa from "papaparse"
-import { formatDateLong, formatDateShort, formatTime12h, formatDateTimeShort } from "@/lib/dateUtils"
+import { formatDateLong, formatDateShort, formatTime12h, formatDateTimeShort, formatTimeStr12h } from "@/lib/dateUtils"
+import { useTranslation } from "@/lib/i18n/LanguageContext"
 
 export default function AdminDashboard() {
+  const { t } = useTranslation()
   const [requests, setRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
@@ -46,6 +48,81 @@ export default function AdminDashboard() {
   const [viewMode, setViewMode] = useState<"GROUPS" | "LIST">("GROUPS")
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
 
+  // Estados para selección masiva de solicitudes (Aprobación en lote)
+  const [selectedRequestIds, setSelectedRequestIds] = useState<Set<string>>(new Set())
+  const [bulkModalData, setBulkModalData] = useState<{
+    requests: any[]
+    targetLabel: string
+    status: "APPROVED" | "REJECTED"
+  } | null>(null)
+  const [bulkNote, setBulkNote] = useState("")
+  const [bulkAffectsBonus, setBulkAffectsBonus] = useState(false)
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false)
+
+  const toggleSelectRequest = (id: string) => {
+    setSelectedRequestIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const openBulkModal = (reqsToProcess: any[], targetLabel: string, status: "APPROVED" | "REJECTED" = "APPROVED") => {
+    if (reqsToProcess.length === 0) return
+    setBulkModalData({
+      requests: reqsToProcess,
+      targetLabel,
+      status
+    })
+    setBulkNote("")
+    setBulkAffectsBonus(false)
+  }
+
+  const handleConfirmBulkAction = () => {
+    if (!bulkModalData || bulkModalData.requests.length === 0) return
+
+    setIsBulkProcessing(true)
+    const targetIds = bulkModalData.requests.map(r => r.id)
+    const targetStatus = bulkModalData.status
+
+    startTransition(async () => {
+      try {
+        const result = await bulkUpdateRequestStatus(
+          targetIds,
+          targetStatus,
+          bulkNote,
+          targetStatus === "APPROVED" ? bulkAffectsBonus : false
+        )
+
+        if (result && result.success) {
+          setRequests(prev => prev.map(r => targetIds.includes(r.id) ? {
+            ...r,
+            status: targetStatus,
+            supervisorNote: bulkNote || r.supervisorNote,
+            affectsBonus: targetStatus === "APPROVED" ? bulkAffectsBonus : r.affectsBonus
+          } : r))
+
+          setSelectedRequestIds(prev => {
+            const next = new Set(prev)
+            targetIds.forEach(id => next.delete(id))
+            return next
+          })
+
+          setBulkModalData(null)
+          setBulkNote("")
+          setBulkAffectsBonus(false)
+        } else {
+          alert("Error al procesar lote de solicitudes: " + (result?.error || "Desconocido"))
+        }
+      } catch (e: any) {
+        alert("Error de red o servidor: " + e.message)
+      } finally {
+        setIsBulkProcessing(false)
+      }
+    })
+  }
+
   useEffect(() => {
     fetchRequests()
   }, [])
@@ -81,8 +158,8 @@ export default function AdminDashboard() {
     setModalMakeupEndTime(request.makeupEndTime || "")
     setModalHoursApproved(request.hoursApproved !== null ? String(request.hoursApproved) : String(request.hoursToMakeUp || request.hoursRequested || ""))
     setModalHoursUsed(request.hoursUsed !== null ? String(request.hoursUsed) : "")
-    setModalExitTime(request.exitTime || "")
-    setModalReturnTime(request.returnTime || "")
+    setModalExitTime(request.exitTime || (request.type === "EARLY_LEAVE" && request.startDate ? (formatTimeStr12h(request.exitTime) || "") : ""))
+    setModalReturnTime(request.returnTime || (request.type === "LATE_ARRIVAL" && request.startDate ? (formatTimeStr12h(request.returnTime) || "") : ""))
   }
 
   const handleConfirmStatusUpdate = () => {
@@ -104,11 +181,15 @@ export default function AdminDashboard() {
           extraParams.makeupStartTime = modalMakeupStartTime || undefined
           extraParams.makeupEndTime = modalMakeupEndTime || undefined
           extraParams.hoursApproved = modalHoursApproved ? parseFloat(modalHoursApproved) : undefined
-        } else if (request.type === "SPECIAL" && request.specialType === "HOURS") {
+        } else if (request.type === "SPECIAL" || request.type === "PERMISSION") {
           extraParams.exitTime = modalExitTime || undefined
           extraParams.returnTime = modalReturnTime || undefined
           extraParams.hoursApproved = modalHoursApproved ? parseFloat(modalHoursApproved) : undefined
           extraParams.hoursUsed = modalHoursUsed ? parseFloat(modalHoursUsed) : undefined
+        } else if (request.type === "EARLY_LEAVE") {
+          extraParams.exitTime = modalExitTime || undefined
+        } else if (request.type === "LATE_ARRIVAL") {
+          extraParams.returnTime = modalReturnTime || undefined
         }
 
         const result = await updateRequestStatus(requestId, status, modalNote, affectsBonus, extraParams)
@@ -280,6 +361,39 @@ export default function AdminDashboard() {
     ? allGroupsInTab 
     : allGroupsInTab.filter(g => g.groupId === selectedGroupFilter)
 
+  // Solicitudes filtradas para la vista lista respetando el chip de grupo seleccionado
+  const displayedListRequests = filteredRequests.filter(r => {
+    if (selectedGroupFilter === "ALL") return true
+    const reqGroupId = r.user?.project?.id || "unassigned"
+    return reqGroupId === selectedGroupFilter
+  })
+
+  const currentViewPendingRequests = viewMode === "GROUPS" && selectedGroupFilter !== "ALL"
+    ? visibleGroups.flatMap(g => g.requests.filter(r => r.status === "PENDING"))
+    : displayedListRequests.filter(r => r.status === "PENDING")
+
+  const targetPendingForSelection = (selectedGroupFilter === "ALL" && !searchQuery.trim() && viewMode !== "LIST")
+    ? pendingRequests
+    : currentViewPendingRequests
+
+  const areAllPendingSelected = targetPendingForSelection.length > 0 && targetPendingForSelection.every(r => selectedRequestIds.has(r.id))
+
+  const toggleSelectAllPending = () => {
+    if (areAllPendingSelected) {
+      setSelectedRequestIds(prev => {
+        const next = new Set(prev)
+        targetPendingForSelection.forEach(r => next.delete(r.id))
+        return next
+      })
+    } else {
+      setSelectedRequestIds(prev => {
+        const next = new Set(prev)
+        targetPendingForSelection.forEach(r => next.add(r.id))
+        return next
+      })
+    }
+  }
+
   const toggleGroupCollapse = (groupId: string) => {
     setCollapsedGroups(prev => ({
       ...prev,
@@ -315,22 +429,22 @@ export default function AdminDashboard() {
   const affectsBonusCount = approvedThisMonth.filter(r => r.affectsBonus === true).length
   const noImpactCount = approvedThisMonth.filter(r => r.affectsBonus !== true).length
 
-  if (loading) return <div style={{ padding: "2rem" }}>Cargando solicitudes...</div>
+  if (loading) return <div style={{ padding: "2rem" }}>{t("common.loading")}</div>
 
   return (
     <div className="container" style={{ paddingTop: "2rem", paddingBottom: "3rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
-        <h1 style={{ margin: 0 }}>Panel de Aprobaciones</h1>
+        <h1 style={{ margin: 0 }}>{t("dashboard.title")}</h1>
         
         <button 
           type="button" 
           onClick={() => setShowExportModal(true)} 
           className="btn btn-surface hover-scale" 
           style={{ display: "flex", alignItems: "center", gap: "0.55rem", fontSize: "0.9rem", fontWeight: 700 }}
-          title="Personalizar período por mes y filtrar por grupo para exportar CSV"
+          title={t("dashboard.exportCsvBtn")}
         >
           <FileSpreadsheet size={17} style={{ color: "hsl(var(--primary))" }} />
-          Exportar Reporte (CSV)
+          {t("dashboard.exportCsvBtn")}
           <ChevronDown size={14} style={{ opacity: 0.7 }} />
         </button>
       </div>
@@ -344,7 +458,7 @@ export default function AdminDashboard() {
           <div>
             <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "hsl(var(--foreground))", lineHeight: 1.1 }}>{affectsBonusCount}</div>
             <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: "0.25rem" }}>
-              Permisos que afectan bono <span style={{ fontSize: "0.7rem", fontWeight: 500, textTransform: "none", color: "hsl(var(--primary))" }}>este mes</span>
+              {t("dashboard.bonusAffecting")} <span style={{ fontSize: "0.7rem", fontWeight: 500, textTransform: "none", color: "hsl(var(--primary))" }}>{t("dashboard.thisMonth")}</span>
             </div>
           </div>
         </div>
@@ -356,7 +470,7 @@ export default function AdminDashboard() {
           <div>
             <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "hsl(var(--foreground))", lineHeight: 1.1 }}>{noImpactCount}</div>
             <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: "0.25rem" }}>
-              Permisos sin impacto <span style={{ fontSize: "0.7rem", fontWeight: 500, textTransform: "none", color: "hsl(var(--primary))" }}>este mes</span>
+              {t("dashboard.noBonusImpact")} <span style={{ fontSize: "0.7rem", fontWeight: 500, textTransform: "none", color: "hsl(var(--primary))" }}>{t("dashboard.thisMonth")}</span>
             </div>
           </div>
         </div>
@@ -381,7 +495,7 @@ export default function AdminDashboard() {
           }}
         >
           <Clock size={16} />
-          Pendientes ({pendingRequests.length})
+          {t("dashboard.pendingTab")} ({pendingRequests.length})
         </button>
         <button 
           type="button"
@@ -401,7 +515,7 @@ export default function AdminDashboard() {
           }}
         >
           <History size={16} />
-          Historial ({historyRequests.length})
+          {t("dashboard.historyTab")} ({historyRequests.length})
         </button>
       </div>
       
@@ -413,7 +527,7 @@ export default function AdminDashboard() {
             <Search size={16} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "hsl(var(--muted-foreground))" }} />
             <input
               className="input"
-              placeholder="Buscar por empleado, motivo, tipo o grupo..."
+              placeholder={t("dashboard.searchPlaceholder")}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               style={{ fontSize: "0.85rem", paddingLeft: "2.5rem", paddingRight: searchQuery ? "2.2rem" : "1rem", borderRadius: "999px", width: "100%" }}
@@ -438,10 +552,10 @@ export default function AdminDashboard() {
                 onClick={toggleCollapseAll}
                 className="btn btn-surface hover-scale"
                 style={{ fontSize: "0.78rem", padding: "0.45rem 0.85rem", display: "inline-flex", alignItems: "center", gap: "0.4rem", borderRadius: "999px" }}
-                title={areAllCollapsed ? "Expandir todos los recuadros de grupos" : "Colapsar todos los recuadros de grupos"}
+                title={areAllCollapsed ? t("dashboard.expandAll") : t("dashboard.collapseAll")}
               >
                 <Layers size={14} />
-                {areAllCollapsed ? "Expandir Grupos" : "Colapsar Grupos"}
+                {areAllCollapsed ? t("dashboard.expandAll") : t("dashboard.collapseAll")}
               </button>
             )}
 
@@ -465,7 +579,7 @@ export default function AdminDashboard() {
                 }}
               >
                 <LayoutGrid size={13} />
-                Vista por Grupos
+                {t("dashboard.groupView")}
               </button>
               <button
                 type="button"
@@ -486,8 +600,33 @@ export default function AdminDashboard() {
                 }}
               >
                 <ListFilter size={13} />
-                Vista Lista
+                {t("dashboard.listView")}
               </button>
+
+              {activeTab === "PENDING" && pendingRequests.length > 0 && (
+                <button
+                  type="button"
+                  onClick={toggleSelectAllPending}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.4rem",
+                    padding: "0.35rem 0.8rem",
+                    borderRadius: "999px",
+                    fontSize: "0.78rem",
+                    fontWeight: 700,
+                    border: "1px solid hsl(var(--border))",
+                    cursor: "pointer",
+                    backgroundColor: areAllPendingSelected ? "hsl(var(--primary) / 0.2)" : "rgba(255, 255, 255, 0.04)",
+                    color: areAllPendingSelected ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))",
+                    transition: "all 0.2s"
+                  }}
+                  title="Seleccionar todas las solicitudes pendientes"
+                >
+                  {areAllPendingSelected ? <CheckSquare size={13} /> : <Square size={13} />}
+                  <span>{areAllPendingSelected ? (targetPendingForSelection.length === pendingRequests.length ? t("dashboard.deselectAll") : t("dashboard.deselectVisible")) : (targetPendingForSelection.length === pendingRequests.length ? `${t("dashboard.selectAll")} (${pendingRequests.length})` : `${t("dashboard.selectVisible")} (${targetPendingForSelection.length})`)}</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -515,7 +654,7 @@ export default function AdminDashboard() {
               }}
             >
               <Users size={13} />
-              Todos los Grupos ({filteredRequests.length})
+              {t("dashboard.allGroups")} ({filteredRequests.length})
             </button>
 
             {allGroupsInTab.map(g => {
@@ -567,16 +706,18 @@ export default function AdminDashboard() {
       </div>
       
       {/* Visualización de Solicitudes (Por Grupos o Lista) */}
-      {filteredRequests.length === 0 ? (
+      {(viewMode === "GROUPS" ? visibleGroups.length === 0 : displayedListRequests.length === 0) ? (
         <div className="card glass animate-in" style={{ textAlign: "center", padding: "4rem 2rem", background: "hsl(var(--surface) / 0.5)", borderRadius: "1.25rem", border: "1px dashed hsl(var(--border))" }}>
           <div style={{ width: 48, height: 48, borderRadius: "50%", backgroundColor: "hsl(var(--primary) / 0.1)", color: "hsl(var(--primary))", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem" }}>
             <Briefcase size={22} />
           </div>
-          <h3 style={{ margin: "0 0 0.5rem", fontSize: "1.1rem" }}>No hay solicitudes disponibles</h3>
+          <h3 style={{ margin: "0 0 0.5rem", fontSize: "1.1rem" }}>{t("dashboard.noRequests")}</h3>
           <p style={{ color: "hsl(var(--muted-foreground))", margin: 0, fontSize: "0.875rem" }}>
-            {searchQuery 
-              ? `No se encontraron resultados que coincidan con "${searchQuery}".` 
-              : activeTab === "PENDING" ? "No tienes solicitudes pendientes por revisar en tus grupos a cargo." : "No hay registros históricos de solicitudes en esta sección."}
+            {selectedGroupFilter !== "ALL"
+              ? t("dashboard.noRequestsGroup")
+              : searchQuery 
+                ? `No se encontraron resultados que coincidan con "${searchQuery}".` 
+                : activeTab === "PENDING" ? "No tienes solicitudes pendientes por revisar en tus grupos a cargo." : "No hay registros históricos de solicitudes en esta sección."}
           </p>
         </div>
       ) : viewMode === "GROUPS" ? (
@@ -669,23 +810,57 @@ export default function AdminDashboard() {
                   </div>
 
                   {/* Resumen de Estado del Grupo y Botón de Colapso */}
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
                     {activeTab === "PENDING" ? (
-                      <span style={{
-                        padding: "0.35rem 0.8rem",
-                        borderRadius: "999px",
-                        fontSize: "0.78rem",
-                        fontWeight: 750,
-                        backgroundColor: "rgba(245, 158, 11, 0.16)",
-                        color: "#f59e0b",
-                        border: "1px solid rgba(245, 158, 11, 0.35)",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "0.35rem"
-                      }}>
-                        <Clock size={13} />
-                        {group.pendingCount} pendiente{group.pendingCount !== 1 ? "s" : ""}
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                        <span style={{
+                          padding: "0.35rem 0.8rem",
+                          borderRadius: "999px",
+                          fontSize: "0.78rem",
+                          fontWeight: 750,
+                          backgroundColor: "rgba(245, 158, 11, 0.16)",
+                          color: "#f59e0b",
+                          border: "1px solid rgba(245, 158, 11, 0.35)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "0.35rem"
+                        }}>
+                          <Clock size={13} />
+                          {group.pendingCount} pendiente{group.pendingCount !== 1 ? "s" : ""}
+                        </span>
+
+                        {group.pendingCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const pendingInGroup = group.requests.filter(r => r.status === "PENDING")
+                              openBulkModal(pendingInGroup, `Grupo: ${group.groupName}`, "APPROVED")
+                            }}
+                            disabled={isPending || isBulkProcessing}
+                            className="btn hover-scale"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "0.4rem",
+                              padding: "0.35rem 0.85rem",
+                              borderRadius: "999px",
+                              backgroundColor: "rgba(16, 185, 129, 0.2)",
+                              border: "1px solid rgba(16, 185, 129, 0.4)",
+                              color: "#10b981",
+                              fontSize: "0.78rem",
+                              fontWeight: 800,
+                              cursor: "pointer",
+                              transition: "all 0.15s",
+                              boxShadow: "0 2px 8px rgba(16, 185, 129, 0.15)"
+                            }}
+                            title={`Aprobar todas las ${group.pendingCount} solicitudes pendientes de ${group.groupName}`}
+                          >
+                            <CheckCircle2 size={13} />
+                            <span>Aprobar todas ({group.pendingCount})</span>
+                          </button>
+                        )}
+                      </div>
                     ) : (
                       <div style={{ display: "flex", gap: "0.4rem" }}>
                         {group.approvedCount > 0 && (
@@ -748,6 +923,8 @@ export default function AdminDashboard() {
                           request={request}
                           activeTab={activeTab}
                           processingId={processingId}
+                          isSelected={selectedRequestIds.has(request.id)}
+                          onToggleSelect={toggleSelectRequest}
                           onApprove={(id) => handleStatusUpdate(id, "APPROVED")}
                           onReject={(id) => handleStatusUpdate(id, "REJECTED")}
                           onEdit={(req) => setEditingReq(req)}
@@ -764,7 +941,7 @@ export default function AdminDashboard() {
       ) : (
         /* VISTA LISTA PLANA (Alternativa unificada) */
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {filteredRequests.map((request) => (
+          {displayedListRequests.map((request) => (
             <div 
               key={request.id} 
               className="card glass animate-in" 
@@ -774,6 +951,8 @@ export default function AdminDashboard() {
                 request={request}
                 activeTab={activeTab}
                 processingId={processingId}
+                isSelected={selectedRequestIds.has(request.id)}
+                onToggleSelect={toggleSelectRequest}
                 onApprove={(id) => handleStatusUpdate(id, "APPROVED")}
                 onReject={(id) => handleStatusUpdate(id, "REJECTED")}
                 onEdit={(req) => setEditingReq(req)}
@@ -879,17 +1058,17 @@ export default function AdminDashboard() {
                   )
                 }
 
-                if (request.type === "SPECIAL" && request.specialType === "HOURS") {
+                if (request.type === "SPECIAL" || request.type === "PERMISSION") {
                   return (
                     <div className="animate-in" style={{ display: "flex", flexDirection: "column", gap: "0.75rem", border: "1px solid hsl(var(--border)/0.5)", padding: "1rem", borderRadius: "14px", backgroundColor: "hsl(var(--surface))" }}>
-                      <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--primary))", textTransform: "uppercase" }}>Ajuste de Horas del Permiso</span>
+                      <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "hsl(var(--primary))", textTransform: "uppercase" }}>Horario y Horas del Permiso</span>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
                         <div>
-                          <label style={{ display: "block", fontSize: "0.65rem", fontWeight: 700, color: "hsl(var(--muted-foreground))" }}>Hora Inicio</label>
+                          <label style={{ display: "block", fontSize: "0.65rem", fontWeight: 700, color: "hsl(var(--muted-foreground))" }}>Hora Inicio (Salida/Entrada)</label>
                           <input type="time" className="input" value={modalExitTime} onChange={(e) => setModalExitTime(e.target.value)} style={{ padding: "0.4rem", fontSize: "0.8rem", borderRadius: "6px" }} />
                         </div>
                         <div>
-                          <label style={{ display: "block", fontSize: "0.65rem", fontWeight: 700, color: "hsl(var(--muted-foreground))" }}>Hora Final</label>
+                          <label style={{ display: "block", fontSize: "0.65rem", fontWeight: 700, color: "hsl(var(--muted-foreground))" }}>Hora Final (Regreso/Salida)</label>
                           <input type="time" className="input" value={modalReturnTime} onChange={(e) => setModalReturnTime(e.target.value)} style={{ padding: "0.4rem", fontSize: "0.8rem", borderRadius: "6px" }} />
                         </div>
                       </div>
@@ -902,6 +1081,44 @@ export default function AdminDashboard() {
                           <label style={{ display: "block", fontSize: "0.65rem", fontWeight: 700, color: "hsl(var(--muted-foreground))" }}>Horas Utilizadas</label>
                           <input type="number" step="0.5" className="input" value={modalHoursUsed} onChange={(e) => setModalHoursUsed(e.target.value)} style={{ padding: "0.4rem", fontSize: "0.8rem", borderRadius: "6px" }} />
                         </div>
+                      </div>
+                    </div>
+                  )
+                }
+
+                if (request.type === "EARLY_LEAVE") {
+                  return (
+                    <div className="animate-in" style={{ display: "flex", flexDirection: "column", gap: "0.75rem", border: "1px solid hsl(var(--border)/0.5)", padding: "1rem", borderRadius: "14px", backgroundColor: "hsl(var(--surface))" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#eab308", textTransform: "uppercase" }}>Hora de Salida Temprana</span>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.65rem", fontWeight: 700, color: "hsl(var(--muted-foreground))" }}>Hora de Salida</label>
+                        <input type="time" className="input" value={modalExitTime} onChange={(e) => setModalExitTime(e.target.value)} style={{ padding: "0.4rem", fontSize: "0.8rem", borderRadius: "6px" }} />
+                      </div>
+                    </div>
+                  )
+                }
+
+                if (request.type === "LATE_ARRIVAL") {
+                  return (
+                    <div className="animate-in" style={{ display: "flex", flexDirection: "column", gap: "0.75rem", border: "1px solid hsl(var(--border)/0.5)", padding: "1rem", borderRadius: "14px", backgroundColor: "hsl(var(--surface))" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#f97316", textTransform: "uppercase" }}>{t("dashboard.lateArrivalDetails")}</span>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.65rem", fontWeight: 700, color: "hsl(var(--muted-foreground))" }}>{t("dashboard.arrivalTimeLabel")}</label>
+                        <input type="time" className="input" value={modalReturnTime} onChange={(e) => setModalReturnTime(e.target.value)} style={{ padding: "0.4rem", fontSize: "0.8rem", borderRadius: "6px" }} />
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.25rem" }}>
+                        <span style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))" }}>{t("dashboard.preApprovalStatus")}:</span>
+                        <span style={{
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          padding: "0.15rem 0.5rem",
+                          borderRadius: "999px",
+                          backgroundColor: request.specialType === "PRE_APPROVED" ? "rgba(16, 185, 129, 0.12)" : "rgba(239, 68, 68, 0.12)",
+                          color: request.specialType === "PRE_APPROVED" ? "#10b981" : "#ef4444",
+                          border: request.specialType === "PRE_APPROVED" ? "1px solid rgba(16, 185, 129, 0.25)" : "1px solid rgba(239, 68, 68, 0.25)"
+                        }}>
+                          {request.specialType === "PRE_APPROVED" ? `✓ ${t("vacations.preApprovedBadge")}` : `✕ ${t("vacations.notPreApprovedBadge")}`}
+                        </span>
                       </div>
                     </div>
                   )
@@ -984,6 +1201,311 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Barra flotante de acciones masivas / selección múltiple */}
+      {activeTab === "PENDING" && selectedRequestIds.size > 0 && (
+        <div 
+          className="animate-in slide-in-from-bottom-5 duration-200"
+          style={{
+            position: "fixed",
+            bottom: "1.75rem",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 9000,
+            display: "flex",
+            alignItems: "center",
+            gap: "1.1rem",
+            backgroundColor: "hsl(var(--surface))",
+            border: "1px solid hsl(var(--primary) / 0.5)",
+            padding: "0.75rem 1.4rem",
+            borderRadius: "999px",
+            boxShadow: "0 20px 45px -10px rgba(0, 0, 0, 0.65), 0 0 25px hsl(var(--primary) / 0.25)",
+            backdropFilter: "blur(14px)",
+            maxWidth: "92vw",
+            flexWrap: "wrap",
+            justifyContent: "center"
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <span style={{
+              minWidth: "24px",
+              height: "24px",
+              padding: "0 0.4rem",
+              borderRadius: "999px",
+              backgroundColor: "hsl(var(--primary))",
+              color: "hsl(var(--primary-foreground))",
+              fontSize: "0.8rem",
+              fontWeight: 800,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}>
+              {selectedRequestIds.size}
+            </span>
+            <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "hsl(var(--foreground))" }}>
+              {selectedRequestIds.size === 1 ? t("dashboard.selectedCount").replace("{count}", "1") : t("dashboard.selectedCountPlural").replace("{count}", String(selectedRequestIds.size))}
+            </span>
+          </div>
+
+          <div style={{ width: "1px", height: "20px", backgroundColor: "hsl(var(--border))" }} />
+
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => {
+                const selectedList = requests.filter(r => selectedRequestIds.has(r.id) && r.status === "PENDING")
+                openBulkModal(selectedList, `${selectedList.length} ${t("dashboard.collaborators")}`, "APPROVED")
+              }}
+              disabled={isBulkProcessing}
+              className="btn hover-scale"
+              style={{
+                backgroundColor: "#10b981",
+                color: "#ffffff",
+                border: "1px solid #059669",
+                borderRadius: "999px",
+                padding: "0.45rem 1.1rem",
+                fontSize: "0.82rem",
+                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(16, 185, 129, 0.3)"
+              }}
+            >
+              <CheckCheck size={16} />
+              <span>{t("dashboard.approveSelected").replace("{count}", String(selectedRequestIds.size))}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const selectedList = requests.filter(r => selectedRequestIds.has(r.id) && r.status === "PENDING")
+                openBulkModal(selectedList, `${selectedList.length} ${t("dashboard.collaborators")}`, "REJECTED")
+              }}
+              disabled={isBulkProcessing}
+              className="btn btn-surface hover-scale"
+              style={{
+                color: "#ef4444",
+                border: "1px solid rgba(239, 68, 68, 0.4)",
+                borderRadius: "999px",
+                padding: "0.45rem 1rem",
+                fontSize: "0.82rem",
+                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                cursor: "pointer"
+              }}
+            >
+              <XCircle size={15} />
+              <span>{t("dashboard.rejectAction")}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedRequestIds(new Set())}
+              disabled={isBulkProcessing}
+              className="btn btn-ghost"
+              style={{
+                padding: "0.45rem 0.75rem",
+                fontSize: "0.8rem",
+                color: "hsl(var(--muted-foreground))",
+                borderRadius: "999px"
+              }}
+            >
+              {t("dashboard.clearSelection")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación para Aprobación / Denegación Masiva */}
+      {bulkModalData && mounted && createPortal(
+        <div 
+          className="animate-in fade-in" 
+          style={{ 
+            position: "fixed", top: 0, left: 0, right: 0, bottom: 0, 
+            backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",
+            zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" 
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget && !isBulkProcessing) setBulkModalData(null) }}
+        >
+          <div 
+            className="animate-in zoom-in-95 card glass" 
+            style={{ 
+              backgroundColor: "hsl(var(--background))", width: "100%", maxWidth: "540px", 
+              borderRadius: "24px", display: "flex", flexDirection: "column",
+              boxShadow: "0 24px 60px rgba(0,0,0,0.4)", overflow: "hidden", border: "1px solid hsl(var(--border))"
+            }}
+          >
+            {/* Header */}
+            <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid hsl(var(--border)/0.5)", display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "hsl(var(--surface))" }}>
+              <h2 style={{ fontSize: "1.2rem", fontWeight: 800, margin: 0, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                {bulkModalData.status === "APPROVED" ? (
+                  <>
+                    <CheckCheck size={22} color="#10b981" />
+                    {t("dashboard.jointApproval").replace("{count}", String(bulkModalData.requests.length))}
+                  </>
+                ) : (
+                  <>
+                    <XCircle size={22} color="#ef4444" />
+                    {t("dashboard.jointRejection").replace("{count}", String(bulkModalData.requests.length))}
+                  </>
+                )}
+              </h2>
+              <button 
+                onClick={() => !isBulkProcessing && setBulkModalData(null)} 
+                disabled={isBulkProcessing}
+                className="btn btn-ghost" 
+                style={{ padding: "0.25rem", borderRadius: "50%", color: "hsl(var(--muted-foreground))", minWidth: "auto" }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Contenido */}
+            <div style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1.1rem", maxHeight: "68vh", overflowY: "auto" }}>
+              <p style={{ margin: 0, fontSize: "0.92rem", color: "hsl(var(--foreground))", lineHeight: 1.5 }}>
+                {bulkModalData.status === "APPROVED" ? t("dashboard.batchConfirmTitle") : "¿Rechazar solicitudes seleccionadas?"}
+              </p>
+
+              {/* Lista previa de colaboradores a procesar */}
+              <div style={{
+                maxHeight: "150px",
+                overflowY: "auto",
+                padding: "0.75rem 1rem",
+                borderRadius: "14px",
+                backgroundColor: "hsl(var(--surface) / 0.7)",
+                border: "1px solid hsl(var(--border) / 0.5)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.5rem"
+              }}>
+                <span style={{ fontSize: "0.72rem", fontWeight: 750, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  {t("dashboard.collaborators")} ({bulkModalData.requests.length}):
+                </span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                  {bulkModalData.requests.map(r => (
+                    <span 
+                      key={r.id}
+                      style={{
+                        fontSize: "0.76rem",
+                        padding: "0.25rem 0.6rem",
+                        borderRadius: "8px",
+                        backgroundColor: "hsl(var(--background))",
+                        border: "1px solid hsl(var(--border))",
+                        fontWeight: 650,
+                        color: "hsl(var(--foreground))"
+                      }}
+                    >
+                      {r.user?.name || "Colaborador"}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "hsl(var(--muted-foreground))" }}>
+                  {t("dashboard.supervisorNoteLabel")}
+                </label>
+                <textarea 
+                  value={bulkNote} 
+                  onChange={(e) => setBulkNote(e.target.value)} 
+                  placeholder={t("dashboard.supervisorNotePlaceholder")} 
+                  className="input" 
+                  rows={2}
+                  style={{ width: "100%", borderRadius: "12px", resize: "none", padding: "0.75rem", fontSize: "0.88rem", border: "1px solid hsl(var(--border))" }}
+                />
+              </div>
+
+              {/* Selector Afecta Bono (Si es Aprobación) */}
+              {bulkModalData.status === "APPROVED" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "hsl(var(--muted-foreground))" }}>
+                    {t("dashboard.bonusImpactLabel")}
+                  </label>
+                  <div style={{ display: "flex", gap: "1.25rem", alignItems: "center", flexWrap: "wrap" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", cursor: "pointer", fontWeight: 600 }}>
+                      <input 
+                        type="radio" 
+                        name="bulkAffectsBonus" 
+                        checked={!bulkAffectsBonus} 
+                        onChange={() => setBulkAffectsBonus(false)} 
+                        style={{ cursor: "pointer", accentColor: "hsl(var(--primary))", width: "16px", height: "16px" }}
+                      />
+                      {t("dashboard.bonusAffectsNo")}
+                    </label>
+                    
+                    <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", cursor: "pointer", fontWeight: 600 }}>
+                      <input 
+                        type="radio" 
+                        name="bulkAffectsBonus" 
+                        checked={bulkAffectsBonus} 
+                        onChange={() => setBulkAffectsBonus(true)} 
+                        style={{ cursor: "pointer", accentColor: "hsl(var(--primary))", width: "16px", height: "16px" }}
+                      />
+                      {t("dashboard.bonusAffectsYes")}
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: "1rem 1.5rem", borderTop: "1px solid hsl(var(--border)/0.5)", display: "flex", justifyContent: "flex-end", gap: "0.75rem", backgroundColor: "hsl(var(--surface))" }}>
+              <button 
+                type="button" 
+                onClick={() => setBulkModalData(null)} 
+                disabled={isBulkProcessing} 
+                className="btn btn-surface" 
+                style={{ fontSize: "0.85rem", padding: "0.5rem 1rem", borderRadius: "10px" }}
+              >
+                {t("common.cancel")}
+              </button>
+              <button 
+                type="button" 
+                onClick={handleConfirmBulkAction} 
+                disabled={isBulkProcessing} 
+                className="btn hover-scale" 
+                style={{ 
+                  backgroundColor: bulkModalData.status === "APPROVED" ? "#10b981" : "#ef4444", 
+                  color: "#fff", 
+                  fontSize: "0.85rem", 
+                  padding: "0.55rem 1.25rem", 
+                  borderRadius: "10px", 
+                  fontWeight: 700,
+                  border: "none",
+                  cursor: isBulkProcessing ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem"
+                }}
+              >
+                {isBulkProcessing ? (
+                  <>
+                    <RefreshCw size={15} className="animate-spin" />
+                    <span>{t("dashboard.processing")}</span>
+                  </>
+                ) : (
+                  bulkModalData.status === "APPROVED" ? (
+                    <>
+                      <CheckCheck size={16} />
+                      <span>{t("dashboard.confirmApproval")} ({bulkModalData.requests.length})</span>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle size={16} />
+                      <span>{t("dashboard.confirmRejection")} ({bulkModalData.requests.length})</span>
+                    </>
+                  )
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Modal para Exportar Reporte Personalizado (CSV) */}
       {showExportModal && mounted && createPortal(
         <ExportReportModal
@@ -1014,19 +1536,19 @@ export default function AdminDashboard() {
 
 // Opciones de Meses para Exportación
 const MONTHS_OPTIONS = [
-  { value: "ALL", label: "Todos los meses (Año completo)" },
-  { value: "0", label: "Enero" },
-  { value: "1", label: "Febrero" },
-  { value: "2", label: "Marzo" },
-  { value: "3", label: "Abril" },
-  { value: "4", label: "Mayo" },
-  { value: "5", label: "Junio" },
-  { value: "6", label: "Julio" },
-  { value: "7", label: "Agosto" },
-  { value: "8", label: "Septiembre" },
-  { value: "9", label: "Octubre" },
-  { value: "10", label: "Noviembre" },
-  { value: "11", label: "Diciembre" }
+  { value: "ALL" },
+  { value: "0" },
+  { value: "1" },
+  { value: "2" },
+  { value: "3" },
+  { value: "4" },
+  { value: "5" },
+  { value: "6" },
+  { value: "7" },
+  { value: "8" },
+  { value: "9" },
+  { value: "10" },
+  { value: "11" }
 ]
 
 // Parser seguro de año y mes sin desfase por zona horaria
@@ -1049,6 +1571,88 @@ function parseYearMonth(dateInput: Date | string | number | null | undefined): {
   }
 }
 
+// Parser seguro de fecha (medianoche local) sin desfase por zona horaria
+function parseDateOnly(dateInput: Date | string | number | null | undefined): Date | null {
+  if (!dateInput) return null
+  if (typeof dateInput === "string") {
+    const match = dateInput.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (match) {
+      return new Date(parseInt(match[1], 10), parseInt(match[2], 10) - 1, parseInt(match[3], 10))
+    }
+  }
+  const d = new Date(dateInput)
+  if (isNaN(d.getTime())) return null
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
+// Obtener lunes de la semana (ISO 8601)
+function getMonday(d: Date): Date {
+  const date = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const day = date.getDay()
+  const diff = date.getDate() - day + (day === 0 ? -6 : 1)
+  return new Date(date.setDate(diff))
+}
+
+interface WeekOption {
+  year: number
+  weekNum: number
+  startStr: string
+  endStr: string
+  monday: Date
+  sunday: Date
+  label: string
+  isCurrent: boolean
+}
+
+// Generador de semanas para un año específico
+function getWeeksOfYear(year: number, locale: string): WeekOption[] {
+  const weeks: WeekOption[] = []
+  const jan1 = new Date(year, 0, 1)
+  let monday = getMonday(jan1)
+  
+  let weekNum = 1
+  while (true) {
+    const sunday = new Date(monday)
+    sunday.setDate(monday.getDate() + 6)
+    
+    if (monday.getFullYear() > year) break
+    if (sunday.getFullYear() < year) {
+      monday.setDate(monday.getDate() + 7)
+      continue
+    }
+
+    const fmtStart = monday.toLocaleDateString(locale === "en" ? "en-US" : "es-DO", { day: "numeric", month: "short" })
+    const fmtEnd = sunday.toLocaleDateString(locale === "en" ? "en-US" : "es-DO", { day: "numeric", month: "short" })
+    
+    const now = new Date()
+    const nowZero = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const isCurrent = nowZero >= monday && nowZero <= sunday
+    
+    const startStr = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`
+    const endStr = `${sunday.getFullYear()}-${String(sunday.getMonth() + 1).padStart(2, "0")}-${String(sunday.getDate()).padStart(2, "0")}`
+
+    const label = locale === "en"
+      ? `Week ${weekNum}: ${fmtStart} - ${fmtEnd}${isCurrent ? " (Current)" : ""}`
+      : `Semana ${weekNum}: ${fmtStart} - ${fmtEnd}${isCurrent ? " (Actual)" : ""}`
+
+    weeks.push({
+      year,
+      weekNum,
+      startStr,
+      endStr,
+      monday: new Date(monday),
+      sunday: new Date(sunday),
+      label,
+      isCurrent
+    })
+
+    weekNum++
+    monday.setDate(monday.getDate() + 7)
+    if (weekNum > 54) break
+  }
+  return weeks
+}
+
 // Formateo legible de tipos de solicitudes
 function formatTypeReadable(r: any): string {
   switch (r.type) {
@@ -1063,13 +1667,20 @@ function formatTypeReadable(r: any): string {
       return "Reposición de Horas"
     case "EARLY_LEAVE":
       return "Salida Temprana"
+    case "LATE_ARRIVAL": {
+      const preApproved = r.specialType === "PRE_APPROVED" ? "Con Aprobación Previa" : "Sin Aprobación Previa"
+      return `Llegada Tarde (${preApproved})`
+    }
+    case "MARRIAGE_LEAVE":
+      return "Licencia por Matrimonio (Ley RD)"
     case "SICK_LEAVE":
       return "Enfermedad Común"
     case "MEDICAL_LEAVE":
       return "Licencia Médica"
     case "MATERNITY_LEAVE":
     case "MATERNITY":
-      return "Maternidad"
+    case "MATERNITY_PATERNITY":
+      return "Maternidad / Paternidad"
     case "PATERNITY_LEAVE":
     case "PATERNITY":
       return "Paternidad"
@@ -1102,10 +1713,46 @@ function ExportReportModal({
   availableYears: number[]
   onClose: () => void
 }) {
+  const { t, locale } = useTranslation()
   const [exportGroup, setExportGroup] = useState<string>(initialGroup || "ALL")
+  const [periodMode, setPeriodMode] = useState<"MONTH" | "WEEK">("MONTH")
   const [exportMonth, setExportMonth] = useState<string>(() => String(new Date().getMonth()))
   const [exportYear, setExportYear] = useState<string>(() => String(new Date().getFullYear()))
+  const [exportType, setExportType] = useState<string>("ALL")
   const [exportStatus, setExportStatus] = useState<string>("ALL")
+
+  const weekYearNumber = exportYear === "ALL" ? new Date().getFullYear() : Number(exportYear)
+  const weeksOfYear = useMemo(() => {
+    return getWeeksOfYear(weekYearNumber, locale)
+  }, [weekYearNumber, locale])
+
+  const [selectedWeekKey, setSelectedWeekKey] = useState<string>(() => {
+    const now = new Date()
+    const thisYearWeeks = getWeeksOfYear(now.getFullYear(), "es")
+    const curr = thisYearWeeks.find(w => w.isCurrent) || thisYearWeeks[0]
+    return curr ? `${curr.year}_${curr.weekNum}` : ""
+  })
+
+  const activeWeek = useMemo(() => {
+    if (!weeksOfYear.length) return null
+    return weeksOfYear.find(w => `${w.year}_${w.weekNum}` === selectedWeekKey) || 
+           weeksOfYear.find(w => w.isCurrent) || 
+           weeksOfYear[0]
+  }, [weeksOfYear, selectedWeekKey])
+
+  const getMonthLabel = (monthVal: string) => {
+    if (monthVal === "ALL") return t("dashboard.allMonths")
+    const key = `common.months.${monthVal}` as any
+    const translated = t(key)
+    if (translated && translated !== key) return translated
+    const idx = parseInt(monthVal, 10)
+    if (!isNaN(idx) && idx >= 0 && idx <= 11) {
+      const d = new Date(2026, idx, 1)
+      const name = d.toLocaleDateString(locale === "en" ? "en-US" : "es-ES", { month: "long" })
+      return name.charAt(0).toUpperCase() + name.slice(1)
+    }
+    return monthVal
+  }
 
   // Filtrado reactivo de datos para el reporte
   const filteredData = useMemo(() => {
@@ -1124,27 +1771,59 @@ function ExportReportModal({
         if (r.status !== exportStatus) return false
       }
 
-      // 3. Filtrar por Fecha (Año y Mes)
-      if (exportYear !== "ALL" || exportMonth !== "ALL") {
-        const ymStart = parseYearMonth(r.startDate || r.absenceDate || r.createdAt)
-        const ymEnd = r.endDate ? parseYearMonth(r.endDate) : null
+      // 3. Filtrar por Incidencia / Tipo
+      if (exportType !== "ALL") {
+        if (exportType === "REMOTE_ALL") {
+          if (!["REMOTE_INTERNET", "REMOTE_POWER", "REMOTE_HARDWARE", "REMOTE_VPN"].includes(r.type)) return false
+        } else if (exportType === "PERMISSION") {
+          if (r.type !== "PERMISSION" && r.type !== "SPECIAL") return false
+        } else if (exportType === "MATERNITY_PATERNITY") {
+          if (!["MATERNITY_PATERNITY", "MATERNITY_LEAVE", "PATERNITY_LEAVE", "MATERNITY", "PATERNITY"].includes(r.type)) return false
+        } else if (exportType === "BEREAVEMENT_LEAVE") {
+          if (!["BEREAVEMENT_LEAVE", "BEREAVEMENT"].includes(r.type)) return false
+        } else {
+          if (r.type !== exportType) return false
+        }
+      }
 
-        const matchesStart = ymStart ? (
-          (exportYear === "ALL" || ymStart.year === Number(exportYear)) &&
-          (exportMonth === "ALL" || ymStart.month === Number(exportMonth))
-        ) : false
+      // 4. Filtrar por Período
+      if (periodMode === "MONTH") {
+        if (exportYear !== "ALL" || exportMonth !== "ALL") {
+          const ymStart = parseYearMonth(r.startDate || r.absenceDate || r.createdAt)
+          const ymEnd = r.endDate ? parseYearMonth(r.endDate) : null
 
-        const matchesEnd = ymEnd ? (
-          (exportYear === "ALL" || ymEnd.year === Number(exportYear)) &&
-          (exportMonth === "ALL" || ymEnd.month === Number(exportMonth))
-        ) : false
+          const matchesStart = ymStart ? (
+            (exportYear === "ALL" || ymStart.year === Number(exportYear)) &&
+            (exportMonth === "ALL" || ymStart.month === Number(exportMonth))
+          ) : false
 
-        if (!matchesStart && !matchesEnd) return false
+          const matchesEnd = ymEnd ? (
+            (exportYear === "ALL" || ymEnd.year === Number(exportYear)) &&
+            (exportMonth === "ALL" || ymEnd.month === Number(exportMonth))
+          ) : false
+
+          if (!matchesStart && !matchesEnd) return false
+        }
+      } else if (periodMode === "WEEK") {
+        if (activeWeek) {
+          const reqStart = parseDateOnly(r.startDate || r.absenceDate || r.createdAt)
+          const reqEnd = parseDateOnly(r.endDate || r.startDate || r.absenceDate || r.createdAt)
+
+          if (!reqStart) return false
+
+          const wStart = activeWeek.monday
+          const wEnd = new Date(activeWeek.sunday.getFullYear(), activeWeek.sunday.getMonth(), activeWeek.sunday.getDate(), 23, 59, 59)
+
+          const startOverlaps = reqStart <= wEnd
+          const endOverlaps = (reqEnd || reqStart) >= wStart
+
+          if (!startOverlaps || !endOverlaps) return false
+        }
       }
 
       return true
     })
-  }, [requests, exportGroup, exportStatus, exportMonth, exportYear])
+  }, [requests, exportGroup, exportStatus, exportType, periodMode, exportMonth, exportYear, activeWeek])
 
   // Generador de nombre de archivo descriptivo
   const generateFileName = () => {
@@ -1163,19 +1842,31 @@ function ExportReportModal({
       parts.push(cleanName)
     }
 
-    if (exportMonth !== "ALL") {
-      const monthObj = MONTHS_OPTIONS.find(m => m.value === exportMonth)
-      const cleanMonth = (monthObj?.label || "Mes")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-zA-Z0-9_-]/g, "_")
-      parts.push(cleanMonth)
+    if (periodMode === "WEEK") {
+      if (activeWeek) {
+        parts.push(`Semana_${activeWeek.weekNum}_${activeWeek.year}`)
+      } else {
+        parts.push("Por_Semana")
+      }
+    } else {
+      if (exportMonth !== "ALL") {
+        const cleanMonth = getMonthLabel(exportMonth)
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-zA-Z0-9_-]/g, "_")
+        parts.push(cleanMonth)
+      }
+
+      if (exportYear !== "ALL") {
+        parts.push(exportYear)
+      } else if (exportMonth === "ALL") {
+        parts.push("Historico")
+      }
     }
 
-    if (exportYear !== "ALL") {
-      parts.push(exportYear)
-    } else if (exportMonth === "ALL") {
-      parts.push("Historico")
+    if (exportType !== "ALL") {
+      const typeStr = exportType === "REMOTE_ALL" ? "Incidencias_Remoto" : exportType.toLowerCase()
+      parts.push(typeStr)
     }
 
     if (exportStatus !== "ALL") {
@@ -1192,25 +1883,33 @@ function ExportReportModal({
         return
       }
 
-      const rows = filteredData.map(r => ({
-        "Colaborador": r.user?.name || "Desconocido",
-        "Correo Electronico": r.user?.email || "Sin Email",
+      const rows = filteredData.map(r => {
+        const isUserInactive = r.user?.isActive === false || r.user?.status === "INACTIVE"
+        const collaboratorName = r.user?.name 
+          ? (isUserInactive ? `${r.user.name} (Inactivo / Baja)` : r.user.name) 
+          : "Desconocido"
+
+        return {
+          "Colaborador": collaboratorName,
+          "Correo Electronico": r.user?.email || "Sin Email",
         "Rol / Cargo": r.user?.role || "USER",
         "Grupo / Campana": r.user?.project?.name || "Sin Grupo Asignado",
         "Tipo de Solicitud": formatTypeReadable(r),
         "Fecha Inicio / Ausencia": r.type === "HOURS_MAKEUP" 
           ? (r.absenceDate ? formatDateShort(r.absenceDate) : "") 
-          : formatDateShort(r.startDate) + (r.type === "EARLY_LEAVE" ? " " + formatTime12h(r.startDate) : ""),
+          : formatDateShort(r.startDate) + (r.type === "EARLY_LEAVE" ? " " + (formatTimeStr12h(r.exitTime) || formatTime12h(r.startDate)) : r.type === "LATE_ARRIVAL" ? " " + (formatTimeStr12h(r.returnTime) || formatTime12h(r.startDate)) : ""),
         "Fecha Fin / Reposicion": r.type === "HOURS_MAKEUP" 
           ? (r.makeupDate ? formatDateShort(r.makeupDate) : "") 
           : formatDateShort(r.endDate),
         "Horario / Turno": r.type === "HOURS_MAKEUP"
-          ? `${r.makeupStartTime || "—"} a ${r.makeupEndTime || "—"}`
-          : (r.type === "SPECIAL" && r.specialType === "HOURS")
-            ? `${r.exitTime || "—"} a ${r.returnTime || "—"}`
+          ? `${formatTimeStr12h(r.makeupStartTime) || r.makeupStartTime || "—"} a ${formatTimeStr12h(r.makeupEndTime) || r.makeupEndTime || "—"}`
+          : ((r.type === "SPECIAL" || r.type === "PERMISSION") && (r.specialType === "HOURS" || r.exitTime || r.returnTime))
+            ? `${formatTimeStr12h(r.exitTime) || r.exitTime || "—"} a ${formatTimeStr12h(r.returnTime) || r.returnTime || "—"}`
             : (r.type === "EARLY_LEAVE")
-              ? `Salida: ${formatTime12h(r.startDate)}`
-              : "Jornada completa",
+              ? `Salida: ${formatTimeStr12h(r.exitTime) || formatTime12h(r.startDate)}`
+              : (r.type === "LATE_ARRIVAL")
+                ? `Llegada: ${formatTimeStr12h(r.returnTime) || formatTime12h(r.startDate)} (${r.specialType === "PRE_APPROVED" ? "Con Aprobación Previa" : "Sin Aprobación Previa"})`
+                : "Jornada completa",
         "Horas Solicitadas": r.type === "HOURS_MAKEUP" ? (r.hoursToMakeUp || 0) : (r.hoursRequested || 0),
         "Horas Aprobadas": r.hoursApproved !== null && r.hoursApproved !== undefined ? r.hoursApproved : "",
         "Horas Utilizadas": r.hoursUsed !== null && r.hoursUsed !== undefined ? r.hoursUsed : "",
@@ -1224,8 +1923,8 @@ function ExportReportModal({
         "Fecha de Resolucion": r.status === "APPROVED" ? formatDateTimeShort(r.approvedAt) : r.status === "REJECTED" ? formatDateTimeShort(r.rejectedAt) : "—",
         "Resolucion Por": r.status === "APPROVED" ? (r.approvedBy?.name || "—") : r.status === "REJECTED" ? (r.rejectedBy?.name || "—") : "—",
         "Tiene Adjunto": r.documentUrl ? "Si" : "No",
-        "Enlace Adjunto": r.documentUrl || ""
-      }))
+        "Enlace Adjunto": r.documentUrl ? `/api/attachments/${r.id}` : ""
+      }})
 
       const csv = "\uFEFF" + Papa.unparse(rows)
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
@@ -1290,10 +1989,10 @@ function ExportReportModal({
             </div>
             <div>
               <h2 style={{ fontSize: "1.15rem", fontWeight: 800, margin: 0, color: "hsl(var(--foreground))" }}>
-                Exportar Reporte (CSV)
+                {t("dashboard.exportCsvBtn")}
               </h2>
               <p style={{ margin: "0.15rem 0 0", fontSize: "0.8rem", color: "hsl(var(--muted-foreground))" }}>
-                Filtra por grupo y selecciona el mes deseado
+                {t("dashboard.exportHeaderSubtitle")}
               </p>
             </div>
           </div>
@@ -1315,7 +2014,7 @@ function ExportReportModal({
           <div>
             <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem", fontWeight: 750, marginBottom: "0.45rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "hsl(var(--foreground))" }}>
               <Users size={14} style={{ color: "hsl(var(--primary))" }} />
-              Grupo / Campaña a Exportar
+              {t("dashboard.exportGroupLabel")}
             </label>
             <select
               value={exportGroup}
@@ -1323,7 +2022,7 @@ function ExportReportModal({
               className="input"
               style={{ width: "100%", padding: "0.65rem 0.85rem", borderRadius: "10px", fontSize: "0.88rem", fontWeight: 600, backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
             >
-              <option value="ALL">🌐 Todos los grupos y campañas ({requests.length} solicitudes en total)</option>
+              <option value="ALL">🌐 {t("dashboard.allGroupsAndSquads").replace("{count}", String(requests.length))}</option>
               {availableGroups.map(g => (
                 <option key={g.id} value={g.id}>
                   {g.id === "unassigned" ? "👤" : "👥"} {g.name}
@@ -1332,118 +2031,307 @@ function ExportReportModal({
             </select>
             <span style={{ fontSize: "0.72rem", color: "hsl(var(--muted-foreground))", marginTop: "0.3rem", display: "block" }}>
               {exportGroup === "ALL" 
-                ? "Se incluirán solicitudes de todos los grupos y equipos."
-                : `Solo se incluirán solicitudes de colaboradores pertenecientes a este grupo.`
+                ? t("dashboard.exportGroupHelpAll") 
+                : t("dashboard.exportGroupHelpSingle")
               }
             </span>
           </div>
 
-          {/* 2. Selector de Período (Mes y Año) */}
+          {/* 2. Selector de Período (Mes o Semana) */}
           <div>
             <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem", fontWeight: 750, marginBottom: "0.45rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "hsl(var(--foreground))" }}>
               <Calendar size={14} style={{ color: "hsl(var(--primary))" }} />
-              Mes y Año del Reporte
+              {t("dashboard.exportPeriodLabel")}
             </label>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: "0.75rem" }}>
-              <div>
-                <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", marginBottom: "0.25rem" }}>
-                  Mes
-                </label>
-                <select
-                  value={exportMonth}
-                  onChange={(e) => setExportMonth(e.target.value)}
-                  className="input"
-                  style={{ width: "100%", padding: "0.6rem 0.75rem", borderRadius: "10px", fontSize: "0.85rem", fontWeight: 600, backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
-                >
-                  {MONTHS_OPTIONS.map(m => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
-              </div>
+            {/* Pestañas Segmentadas: Por Mes / Por Semana */}
+            <div style={{ display: "flex", gap: "0.4rem", marginBottom: "0.75rem", backgroundColor: "hsl(var(--surface))", padding: "0.25rem", borderRadius: "10px", border: "1px solid hsl(var(--border))" }}>
+              <button
+                type="button"
+                onClick={() => setPeriodMode("MONTH")}
+                style={{
+                  flex: 1,
+                  padding: "0.45rem 0.75rem",
+                  borderRadius: "8px",
+                  fontSize: "0.82rem",
+                  fontWeight: 700,
+                  border: "none",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                  backgroundColor: periodMode === "MONTH" ? "hsl(var(--primary))" : "transparent",
+                  color: periodMode === "MONTH" ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.4rem"
+                }}
+              >
+                <Calendar size={14} />
+                <span>{t("dashboard.periodModeMonthly")}</span>
+              </button>
 
-              <div>
-                <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", marginBottom: "0.25rem" }}>
-                  Año
-                </label>
-                <select
-                  value={exportYear}
-                  onChange={(e) => setExportYear(e.target.value)}
-                  className="input"
-                  style={{ width: "100%", padding: "0.6rem 0.75rem", borderRadius: "10px", fontSize: "0.85rem", fontWeight: 600, backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
-                >
-                  <option value="ALL">Todos los años</option>
-                  {availableYears.map(y => (
-                    <option key={y} value={String(y)}>{y}</option>
-                  ))}
-                </select>
-              </div>
+              <button
+                type="button"
+                onClick={() => setPeriodMode("WEEK")}
+                style={{
+                  flex: 1,
+                  padding: "0.45rem 0.75rem",
+                  borderRadius: "8px",
+                  fontSize: "0.82rem",
+                  fontWeight: 700,
+                  border: "none",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                  backgroundColor: periodMode === "WEEK" ? "hsl(var(--primary))" : "transparent",
+                  color: periodMode === "WEEK" ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.4rem"
+                }}
+              >
+                <Clock size={14} />
+                <span>{t("dashboard.periodModeWeekly")}</span>
+              </button>
             </div>
 
-            {/* Accesos Rápidos de Período */}
-            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.55rem" }}>
-              <button
-                type="button"
-                onClick={() => {
-                  const now = new Date()
-                  setExportMonth(String(now.getMonth()))
-                  setExportYear(String(now.getFullYear()))
-                }}
-                className="btn btn-ghost hover-scale"
-                style={{ padding: "0.2rem 0.55rem", fontSize: "0.72rem", borderRadius: "6px", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
-              >
-                ⚡ Mes Actual
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const d = new Date()
-                  d.setMonth(d.getMonth() - 1)
-                  setExportMonth(String(d.getMonth()))
-                  setExportYear(String(d.getFullYear()))
-                }}
-                className="btn btn-ghost hover-scale"
-                style={{ padding: "0.2rem 0.55rem", fontSize: "0.72rem", borderRadius: "6px", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
-              >
-                ⏪ Mes Anterior
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setExportMonth("ALL")
-                  setExportYear(String(new Date().getFullYear()))
-                }}
-                className="btn btn-ghost hover-scale"
-                style={{ padding: "0.2rem 0.55rem", fontSize: "0.72rem", borderRadius: "6px", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
-              >
-                📅 Todo el Año ({new Date().getFullYear()})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setExportMonth("ALL")
-                  setExportYear("ALL")
-                }}
-                className="btn btn-ghost hover-scale"
-                style={{ padding: "0.2rem 0.55rem", fontSize: "0.72rem", borderRadius: "6px", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
-              >
-                🌐 Todo el Histórico
-              </button>
-            </div>
+            {/* Sub-formulario del Período según el Modo */}
+            {periodMode === "MONTH" ? (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: "0.75rem" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", marginBottom: "0.25rem" }}>
+                      {t("dashboard.monthLabel")}
+                    </label>
+                    <select
+                      value={exportMonth}
+                      onChange={(e) => setExportMonth(e.target.value)}
+                      className="input"
+                      style={{ width: "100%", padding: "0.6rem 0.75rem", borderRadius: "10px", fontSize: "0.85rem", fontWeight: 600, backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+                    >
+                      {MONTHS_OPTIONS.map(m => (
+                        <option key={m.value} value={m.value}>{getMonthLabel(m.value)}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", marginBottom: "0.25rem" }}>
+                      {t("dashboard.yearLabel")}
+                    </label>
+                    <select
+                      value={exportYear}
+                      onChange={(e) => setExportYear(e.target.value)}
+                      className="input"
+                      style={{ width: "100%", padding: "0.6rem 0.75rem", borderRadius: "10px", fontSize: "0.85rem", fontWeight: 600, backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+                    >
+                      <option value="ALL">{t("dashboard.allYears")}</option>
+                      {availableYears.map(y => (
+                        <option key={y} value={String(y)}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Accesos Rápidos de Período Mensual */}
+                <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.55rem" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = new Date()
+                      setExportMonth(String(now.getMonth()))
+                      setExportYear(String(now.getFullYear()))
+                    }}
+                    className="btn btn-ghost hover-scale"
+                    style={{ padding: "0.2rem 0.55rem", fontSize: "0.72rem", borderRadius: "6px", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+                  >
+                    {t("dashboard.quickCurrentMonth")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date()
+                      d.setMonth(d.getMonth() - 1)
+                      setExportMonth(String(d.getMonth()))
+                      setExportYear(String(d.getFullYear()))
+                    }}
+                    className="btn btn-ghost hover-scale"
+                    style={{ padding: "0.2rem 0.55rem", fontSize: "0.72rem", borderRadius: "6px", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+                  >
+                    {t("dashboard.quickPrevMonth")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExportMonth("ALL")
+                      setExportYear(String(new Date().getFullYear()))
+                    }}
+                    className="btn btn-ghost hover-scale"
+                    style={{ padding: "0.2rem 0.55rem", fontSize: "0.72rem", borderRadius: "6px", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+                  >
+                    {t("dashboard.quickFullYear").replace("{year}", String(new Date().getFullYear()))}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExportMonth("ALL")
+                      setExportYear("ALL")
+                    }}
+                    className="btn btn-ghost hover-scale"
+                    style={{ padding: "0.2rem 0.55rem", fontSize: "0.72rem", borderRadius: "6px", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+                  >
+                    {t("dashboard.quickAllHistory")}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "0.75rem" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", marginBottom: "0.25rem" }}>
+                      {t("dashboard.yearLabel")}
+                    </label>
+                    <select
+                      value={exportYear === "ALL" ? String(new Date().getFullYear()) : exportYear}
+                      onChange={(e) => setExportYear(e.target.value)}
+                      className="input"
+                      style={{ width: "100%", padding: "0.6rem 0.75rem", borderRadius: "10px", fontSize: "0.85rem", fontWeight: 600, backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+                    >
+                      {availableYears.map(y => (
+                        <option key={y} value={String(y)}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.7rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", marginBottom: "0.25rem" }}>
+                      {t("dashboard.weekLabel")}
+                    </label>
+                    <select
+                      value={activeWeek ? `${activeWeek.year}_${activeWeek.weekNum}` : ""}
+                      onChange={(e) => setSelectedWeekKey(e.target.value)}
+                      className="input"
+                      style={{ width: "100%", padding: "0.6rem 0.75rem", borderRadius: "10px", fontSize: "0.85rem", fontWeight: 600, backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+                    >
+                      {weeksOfYear.map(w => (
+                        <option key={`${w.year}_${w.weekNum}`} value={`${w.year}_${w.weekNum}`}>
+                          {w.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Accesos Rápidos de Período Semanal */}
+                <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.55rem" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = new Date()
+                      const yr = now.getFullYear()
+                      setExportYear(String(yr))
+                      const currWeeks = getWeeksOfYear(yr, locale)
+                      const curr = currWeeks.find(w => w.isCurrent) || currWeeks[0]
+                      if (curr) setSelectedWeekKey(`${curr.year}_${curr.weekNum}`)
+                    }}
+                    className="btn btn-ghost hover-scale"
+                    style={{ padding: "0.2rem 0.55rem", fontSize: "0.72rem", borderRadius: "6px", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+                  >
+                    {t("dashboard.quickCurrentWeek")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = new Date()
+                      now.setDate(now.getDate() - 7)
+                      const m = getMonday(now)
+                      const yr = m.getFullYear()
+                      setExportYear(String(yr))
+                      const targetWeeks = getWeeksOfYear(yr, locale)
+                      const mStr = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}-${String(m.getDate()).padStart(2, "0")}`
+                      const target = targetWeeks.find(w => w.startStr === mStr) || targetWeeks[0]
+                      if (target) setSelectedWeekKey(`${target.year}_${target.weekNum}`)
+                    }}
+                    className="btn btn-ghost hover-scale"
+                    style={{ padding: "0.2rem 0.55rem", fontSize: "0.72rem", borderRadius: "6px", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+                  >
+                    {t("dashboard.quickPrevWeek")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = new Date()
+                      now.setDate(now.getDate() - 14)
+                      const m = getMonday(now)
+                      const yr = m.getFullYear()
+                      setExportYear(String(yr))
+                      const targetWeeks = getWeeksOfYear(yr, locale)
+                      const mStr = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}-${String(m.getDate()).padStart(2, "0")}`
+                      const target = targetWeeks.find(w => w.startStr === mStr) || targetWeeks[0]
+                      if (target) setSelectedWeekKey(`${target.year}_${target.weekNum}`)
+                    }}
+                    className="btn btn-ghost hover-scale"
+                    style={{ padding: "0.2rem 0.55rem", fontSize: "0.72rem", borderRadius: "6px", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+                  >
+                    {t("dashboard.quickTwoWeeksAgo")}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
-          {/* 3. Selector de Estado de Solicitud */}
+          {/* 3. Selector de Tipo de Incidencia / Solicitud */}
+          <div>
+            <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem", fontWeight: 750, marginBottom: "0.45rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "hsl(var(--foreground))" }}>
+              <Layers size={14} style={{ color: "hsl(var(--primary))" }} />
+              {t("dashboard.exportTypeLabel")}
+            </label>
+            <select
+              value={exportType}
+              onChange={(e) => setExportType(e.target.value)}
+              className="input"
+              style={{ width: "100%", padding: "0.65rem 0.85rem", borderRadius: "10px", fontSize: "0.88rem", fontWeight: 600, backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
+            >
+              <option value="ALL">{t("dashboard.allTypesOption")}</option>
+              
+              <optgroup label={t("dashboard.catTimeOff")}>
+                <option value="VACATION">{t("dashboard.optVacations")}</option>
+                <option value="LATE_ARRIVAL">{t("dashboard.optLateArrival")}</option>
+                <option value="EARLY_LEAVE">{t("dashboard.optEarlyLeave")}</option>
+                <option value="PERMISSION">{t("dashboard.optPermission")}</option>
+                <option value="HOURS_MAKEUP">{t("dashboard.optHoursMakeup")}</option>
+              </optgroup>
+
+              <optgroup label={t("dashboard.catHealthFamily")}>
+                <option value="MARRIAGE_LEAVE">{t("dashboard.optMarriageLeave")}</option>
+                <option value="SICK_LEAVE">{t("dashboard.optSickLeave")}</option>
+                <option value="MEDICAL_LEAVE">{t("dashboard.optMedicalLeave")}</option>
+                <option value="MATERNITY_PATERNITY">{t("dashboard.optMaternityPaternity")}</option>
+                <option value="BEREAVEMENT_LEAVE">{t("dashboard.optBereavement")}</option>
+              </optgroup>
+
+              <optgroup label={t("dashboard.catRemoteIT")}>
+                <option value="REMOTE_ALL">{t("dashboard.optRemoteAll")}</option>
+                <option value="REMOTE_INTERNET">{t("dashboard.optRemoteInternet")}</option>
+                <option value="REMOTE_POWER">{t("dashboard.optRemotePower")}</option>
+                <option value="REMOTE_HARDWARE">{t("dashboard.optRemoteHardware")}</option>
+                <option value="REMOTE_VPN">{t("dashboard.optRemoteVpn")}</option>
+              </optgroup>
+            </select>
+          </div>
+
+          {/* 4. Selector de Estado de Solicitud */}
           <div>
             <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem", fontWeight: 750, marginBottom: "0.45rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "hsl(var(--foreground))" }}>
               <Filter size={14} style={{ color: "hsl(var(--primary))" }} />
-              Estado de la Solicitud
+              {t("dashboard.requestStatusLabel")}
             </label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.4rem" }}>
               {[
-                { id: "ALL", label: "Todas" },
-                { id: "APPROVED", label: "Aprobadas" },
-                { id: "PENDING", label: "Pendientes" },
-                { id: "REJECTED", label: "Rechazadas" }
+                { id: "ALL", label: t("common.all") },
+                { id: "APPROVED", label: t("common.approved") },
+                { id: "PENDING", label: t("common.pending") },
+                { id: "REJECTED", label: t("common.rejected") }
               ].map(st => (
                 <button
                   key={st.id}
@@ -1468,7 +2356,7 @@ function ExportReportModal({
             </div>
           </div>
 
-          {/* 4. Resumen en Vivo */}
+          {/* 5. Resumen en Vivo */}
           <div style={{
             backgroundColor: "hsl(var(--surface))",
             borderRadius: "12px",
@@ -1480,7 +2368,7 @@ function ExportReportModal({
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: "0.82rem", fontWeight: 750, color: "hsl(var(--foreground))" }}>
-                Resumen de Exportación
+                {t("dashboard.exportSummaryTitle")}
               </span>
               <span style={{
                 fontSize: "0.78rem",
@@ -1490,27 +2378,27 @@ function ExportReportModal({
                 backgroundColor: filteredData.length > 0 ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)",
                 color: filteredData.length > 0 ? "#10b981" : "#ef4444"
               }}>
-                {filteredData.length} {filteredData.length === 1 ? "registro encontrado" : "registros encontrados"}
+                {filteredData.length} {filteredData.length === 1 ? t("common.record") : t("common.records")}
               </span>
             </div>
 
             {filteredData.length > 0 ? (
               <>
                 <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", fontSize: "0.72rem", color: "hsl(var(--muted-foreground))" }}>
-                  <span>✓ Aprobadas: <strong>{approvedCount}</strong></span>
+                  <span>✓ {t("common.approved")}: <strong>{approvedCount}</strong></span>
                   <span>•</span>
-                  <span>⏳ Pendientes: <strong>{pendingCount}</strong></span>
+                  <span>⏳ {t("common.pending")}: <strong>{pendingCount}</strong></span>
                   <span>•</span>
-                  <span>✕ Rechazadas: <strong>{rejectedCount}</strong></span>
+                  <span>✕ {t("common.rejected")}: <strong>{rejectedCount}</strong></span>
                 </div>
                 <div style={{ fontSize: "0.72rem", color: "hsl(var(--muted-foreground))", marginTop: "0.2rem" }}>
-                  Archivo de salida: <code style={{ color: "hsl(var(--primary))", fontWeight: 700 }}>{generateFileName()}</code>
+                  {t("dashboard.outputFileLabel")} <code style={{ color: "hsl(var(--primary))", fontWeight: 700 }}>{generateFileName()}</code>
                 </div>
               </>
             ) : (
               <div style={{ fontSize: "0.75rem", color: "#ef4444", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.35rem" }}>
                 <AlertCircle size={14} />
-                No hay solicitudes que coincidan con estos filtros. Prueba con otro mes o grupo.
+                {t("dashboard.noMatchingExport")}
               </div>
             )}
           </div>
@@ -1532,7 +2420,7 @@ function ExportReportModal({
             className="btn btn-ghost" 
             style={{ borderRadius: "10px", fontSize: "0.85rem" }}
           >
-            Cancelar
+            {t("common.cancel")}
           </button>
           
           <button 
@@ -1552,7 +2440,7 @@ function ExportReportModal({
             }}
           >
             <Download size={15} />
-            Descargar CSV ({filteredData.length})
+            {t("dashboard.downloadCsv")} ({filteredData.length})
           </button>
         </div>
 
@@ -1570,6 +2458,7 @@ function EditAdminRequestModal({
   onClose: () => void
   onSuccess: () => void 
 }) {
+  const { t } = useTranslation()
   const formatDateForInput = (d: any) => {
     try {
       const dt = new Date(d)
@@ -1640,7 +2529,7 @@ function EditAdminRequestModal({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
           <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800, color: "hsl(var(--foreground))", display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <Pencil size={18} color="hsl(var(--primary))" />
-            Editar Solicitud ({request.user?.name || "Empleado"})
+            {t("dashboard.editModalTitle")} ({request.user?.name || "Empleado"}{(request.user?.isActive === false || request.user?.status === "INACTIVE") ? ` - ${t("dashboard.inactiveUser")}` : ""})
           </h3>
           <button 
             onClick={onClose}
@@ -1669,7 +2558,7 @@ function EditAdminRequestModal({
           {/* Tipo de Solicitud */}
           <div>
             <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", marginBottom: "0.35rem" }}>
-              Tipo de Permiso / Vacaciones
+              {t("dashboard.leaveTypeLabel")}
             </label>
             <select
               value={type}
@@ -1677,14 +2566,15 @@ function EditAdminRequestModal({
               className="input-field"
               style={{ width: "100%", padding: "0.75rem", borderRadius: "0.75rem", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
             >
-              <option value="VACATION">Vacaciones</option>
-              <option value="SPECIAL">Permiso Especial / Personal</option>
-              <option value="EARLY_LEAVE">Salida Temprana</option>
-              <option value="HOURS_MAKEUP">Reposición de Horas</option>
-              <option value="SICK_LEAVE">Licencia Médica</option>
-              <option value="MATERNITY_LEAVE">Licencia de Maternidad</option>
-              <option value="PATERNITY_LEAVE">Licencia de Paternidad</option>
-              <option value="BEREAVEMENT_LEAVE">Luto Familiar</option>
+              <option value="VACATION">{t("vacations.types.VACATION.label")}</option>
+              <option value="SPECIAL">{t("vacations.types.SPECIAL.label")}</option>
+              <option value="EARLY_LEAVE">{t("vacations.types.EARLY_LEAVE.label")}</option>
+              <option value="LATE_ARRIVAL">{t("vacations.types.LATE_ARRIVAL.label")}</option>
+              <option value="HOURS_MAKEUP">{t("vacations.types.HOURS_MAKEUP.label")}</option>
+              <option value="SICK_LEAVE">{t("vacations.types.MEDICAL_LEAVE.label")}</option>
+              <option value="MATERNITY_LEAVE">{t("vacations.types.MATERNITY_LEAVE.label")}</option>
+              <option value="PATERNITY_LEAVE">{t("vacations.types.PATERNITY_LEAVE.label")}</option>
+              <option value="BEREAVEMENT_LEAVE">{t("vacations.types.BEREAVEMENT_LEAVE.label")}</option>
             </select>
           </div>
 
@@ -1692,7 +2582,7 @@ function EditAdminRequestModal({
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
             <div>
               <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", marginBottom: "0.35rem" }}>
-                Fecha Inicial
+                {t("dashboard.startDateLabel")}
               </label>
               <input
                 type="date"
@@ -1705,7 +2595,7 @@ function EditAdminRequestModal({
             </div>
             <div>
               <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", marginBottom: "0.35rem" }}>
-                Fecha Final
+                {t("dashboard.endDateLabel")}
               </label>
               <input
                 type="date"
@@ -1721,7 +2611,7 @@ function EditAdminRequestModal({
           {/* Motivo */}
           <div>
             <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, color: "hsl(var(--muted-foreground))", textTransform: "uppercase", marginBottom: "0.35rem" }}>
-              Motivo o Justificación
+              {t("dashboard.reasonFieldLabel")}
             </label>
             <textarea
               value={reason}
@@ -1729,7 +2619,7 @@ function EditAdminRequestModal({
               rows={3}
               className="input-field"
               style={{ width: "100%", padding: "0.75rem", borderRadius: "0.75rem", backgroundColor: "hsl(var(--surface))", border: "1px solid hsl(var(--border))" }}
-              placeholder="Explica detalladamente el motivo de la solicitud..."
+              placeholder={t("dashboard.reasonFieldPlaceholder")}
             />
           </div>
 
@@ -1742,7 +2632,7 @@ function EditAdminRequestModal({
               style={{ flex: 1, padding: "0.75rem", borderRadius: "0.75rem", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}
             >
               {loading ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
-              Guardar Cambios
+              {t("dashboard.saveChanges")}
             </button>
             <button
               type="button"
@@ -1750,7 +2640,7 @@ function EditAdminRequestModal({
               className="btn btn-surface"
               style={{ padding: "0.75rem 1.25rem", borderRadius: "0.75rem", fontSize: "0.85rem" }}
             >
-              Cancelar
+              {t("common.cancel")}
             </button>
           </div>
         </form>
@@ -1759,37 +2649,43 @@ function EditAdminRequestModal({
   )
 }
 
-function getRequestTypeInfo(type: string, specialType?: string | null) {
+function getRequestTypeInfo(type: string, specialType?: string | null, t?: any) {
+  const getLabel = (typeKey: string, fallback: string) => {
+    return t ? t(`vacations.types.${typeKey}.label`) : fallback
+  }
   switch (type) {
     case "VACATION":
-      return { label: "Vacaciones", color: "#38bdf8", bg: "rgba(56, 189, 248, 0.12)", border: "rgba(56, 189, 248, 0.25)" }
+      return { label: getLabel("VACATION", "Vacaciones"), color: "#38bdf8", bg: "rgba(56, 189, 248, 0.12)", border: "rgba(56, 189, 248, 0.25)" }
     case "PERMISSION":
     case "SPECIAL": {
-      const spec = specialType === "HOURS" ? "Horas" : specialType === "HALF" ? "Medio Día" : "Día Completo"
-      return { label: `Permiso Especial (${spec})`, color: "#a855f7", bg: "rgba(168, 85, 247, 0.12)", border: "rgba(168, 85, 247, 0.25)" }
+      const spec = specialType === "HOURS" ? (t ? t("common.hours") : "Horas") : specialType === "HALF" ? "Medio Día" : "Día Completo"
+      const baseLabel = getLabel("SPECIAL", "Permiso Especial")
+      return { label: `${baseLabel} (${spec})`, color: "#a855f7", bg: "rgba(168, 85, 247, 0.12)", border: "rgba(168, 85, 247, 0.25)" }
     }
     case "HOURS_MAKEUP":
-      return { label: "Reposición de Horas", color: "#f59e0b", bg: "rgba(245, 158, 11, 0.12)", border: "rgba(245, 158, 11, 0.25)" }
+      return { label: getLabel("HOURS_MAKEUP", "Reposición de Horas"), color: "#f59e0b", bg: "rgba(245, 158, 11, 0.12)", border: "rgba(245, 158, 11, 0.25)" }
     case "EARLY_LEAVE":
-      return { label: "Salida Temprana", color: "#eab308", bg: "rgba(234, 179, 8, 0.12)", border: "rgba(234, 179, 8, 0.25)" }
+      return { label: getLabel("EARLY_LEAVE", "Salida Temprana"), color: "#eab308", bg: "rgba(234, 179, 8, 0.12)", border: "rgba(234, 179, 8, 0.25)" }
+    case "LATE_ARRIVAL":
+      return { label: getLabel("LATE_ARRIVAL", "Llegada Tarde"), color: "#f97316", bg: "rgba(249, 115, 22, 0.12)", border: "rgba(249, 115, 22, 0.25)" }
     case "SICK_LEAVE":
-      return { label: "Enfermedad", color: "#ec4899", bg: "rgba(236, 72, 153, 0.12)", border: "rgba(236, 72, 153, 0.25)" }
+      return { label: getLabel("MEDICAL_LEAVE", "Enfermedad"), color: "#ec4899", bg: "rgba(236, 72, 153, 0.12)", border: "rgba(236, 72, 153, 0.25)" }
     case "MEDICAL_LEAVE":
-      return { label: "Licencia Médica", color: "#f43f5e", bg: "rgba(244, 63, 94, 0.12)", border: "rgba(244, 63, 94, 0.25)" }
+      return { label: getLabel("MEDICAL_LEAVE", "Licencia Médica"), color: "#f43f5e", bg: "rgba(244, 63, 94, 0.12)", border: "rgba(244, 63, 94, 0.25)" }
     case "MATERNITY_LEAVE":
-      return { label: "Maternidad", color: "#14b8a6", bg: "rgba(20, 184, 166, 0.12)", border: "rgba(20, 184, 166, 0.25)" }
+      return { label: getLabel("MATERNITY_LEAVE", "Maternidad"), color: "#14b8a6", bg: "rgba(20, 184, 166, 0.12)", border: "rgba(20, 184, 166, 0.25)" }
     case "PATERNITY_LEAVE":
-      return { label: "Paternidad", color: "#06b6d4", bg: "rgba(6, 182, 212, 0.12)", border: "rgba(6, 182, 212, 0.25)" }
+      return { label: getLabel("PATERNITY_LEAVE", "Paternidad"), color: "#06b6d4", bg: "rgba(6, 182, 212, 0.12)", border: "rgba(6, 182, 212, 0.25)" }
     case "BEREAVEMENT_LEAVE":
-      return { label: "Luto Familiar", color: "#94a3b8", bg: "rgba(148, 163, 184, 0.12)", border: "rgba(148, 163, 184, 0.25)" }
+      return { label: getLabel("BEREAVEMENT_LEAVE", "Luto Familiar"), color: "#94a3b8", bg: "rgba(148, 163, 184, 0.12)", border: "rgba(148, 163, 184, 0.25)" }
     case "REMOTE_INTERNET":
-      return { label: "Incidencia: Falla Internet", color: "#ef4444", bg: "rgba(239, 68, 68, 0.12)", border: "rgba(239, 68, 68, 0.25)" }
+      return { label: getLabel("REMOTE_INTERNET", "Incidencia: Falla Internet"), color: "#ef4444", bg: "rgba(239, 68, 68, 0.12)", border: "rgba(239, 68, 68, 0.25)" }
     case "REMOTE_POWER":
-      return { label: "Incidencia: Corte de Luz", color: "#eab308", bg: "rgba(234, 179, 8, 0.12)", border: "rgba(234, 179, 8, 0.25)" }
+      return { label: getLabel("REMOTE_POWER", "Incidencia: Corte de Luz"), color: "#eab308", bg: "rgba(234, 179, 8, 0.12)", border: "rgba(234, 179, 8, 0.25)" }
     case "REMOTE_HARDWARE":
-      return { label: "Incidencia: Hardware / PC", color: "#f97316", bg: "rgba(249, 115, 22, 0.12)", border: "rgba(249, 115, 22, 0.25)" }
+      return { label: getLabel("REMOTE_HARDWARE", "Incidencia: Hardware / PC"), color: "#f97316", bg: "rgba(249, 115, 22, 0.12)", border: "rgba(249, 115, 22, 0.25)" }
     case "REMOTE_VPN":
-      return { label: "Incidencia: VPN / Red", color: "#6366f1", bg: "rgba(99, 102, 241, 0.12)", border: "rgba(99, 102, 241, 0.25)" }
+      return { label: getLabel("REMOTE_VPN", "Incidencia: VPN / Red"), color: "#6366f1", bg: "rgba(99, 102, 241, 0.12)", border: "rgba(99, 102, 241, 0.25)" }
     default:
       return { label: type, color: "hsl(var(--primary))", bg: "hsl(var(--primary) / 0.12)", border: "hsl(var(--primary) / 0.25)" }
   }
@@ -1799,6 +2695,8 @@ function RequestCardItem({
   request,
   activeTab,
   processingId,
+  isSelected = false,
+  onToggleSelect,
   onApprove,
   onReject,
   onEdit,
@@ -1807,13 +2705,20 @@ function RequestCardItem({
   request: any
   activeTab: "PENDING" | "HISTORY"
   processingId: string | null
+  isSelected?: boolean
+  onToggleSelect?: (id: string) => void
   onApprove: (id: string) => void
   onReject: (id: string) => void
   onEdit: (req: any) => void
   onDelete: (id: string) => void
 }) {
-  const typeInfo = getRequestTypeInfo(request.type, request.specialType)
+  const { t, locale } = useTranslation()
+  const typeInfo = getRequestTypeInfo(request.type, request.specialType, t)
   const isBeingProcessed = processingId === request.id
+  const isMassRegistration = 
+    request.reason?.includes("[Registro Masivo") || 
+    request.reason?.toLowerCase().includes("registro masivo") ||
+    request.reason?.toLowerCase().includes("permiso masivo")
 
   return (
     <div 
@@ -1823,13 +2728,36 @@ function RequestCardItem({
         gridTemplateColumns: "1fr auto",
         gap: "1.5rem",
         alignItems: "start",
-        position: "relative"
+        position: "relative",
+        backgroundColor: isSelected ? "hsl(var(--primary) / 0.05)" : "transparent",
+        transition: "background-color 0.2s"
       }}
     >
       <div>
         {/* Encabezado del Colaborador */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", marginBottom: "0.85rem", flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            {activeTab === "PENDING" && onToggleSelect && (
+              <button
+                type="button"
+                onClick={() => onToggleSelect(request.id)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: "0.2rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: isSelected ? "hsl(var(--primary))" : "hsl(var(--muted-foreground) / 0.5)",
+                  transition: "color 0.15s",
+                  flexShrink: 0
+                }}
+                title={isSelected ? t("dashboard.deselectAll") : t("dashboard.selectAll")}
+              >
+                {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
+              </button>
+            )}
             <div style={{
               width: "40px",
               height: "40px",
@@ -1848,8 +2776,21 @@ function RequestCardItem({
             </div>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-                <h4 style={{ margin: 0, fontSize: "1rem", fontWeight: 750, color: "hsl(var(--foreground))" }}>
+                <h4 style={{ margin: 0, fontSize: "1rem", fontWeight: 750, color: "hsl(var(--foreground))", display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
                   {request.user?.name}
+                  {(request.user?.isActive === false || request.user?.status === "INACTIVE") && (
+                    <span style={{
+                      fontSize: "0.68rem",
+                      fontWeight: 700,
+                      padding: "0.15rem 0.45rem",
+                      borderRadius: "0.375rem",
+                      backgroundColor: "rgba(239, 68, 68, 0.12)",
+                      color: "#ef4444",
+                      border: "1px solid rgba(239, 68, 68, 0.25)"
+                    }}>
+                      {t("dashboard.inactiveUser")}
+                    </span>
+                  )}
                 </h4>
                 {request.user?.role && (
                   <span style={{
@@ -1883,22 +2824,42 @@ function RequestCardItem({
             </div>
           </div>
 
-          {/* Badge del Tipo de Solicitud */}
-          <span style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.35rem",
-            padding: "0.3rem 0.75rem",
-            borderRadius: "999px",
-            fontSize: "0.78rem",
-            fontWeight: 700,
-            backgroundColor: typeInfo.bg,
-            color: typeInfo.color,
-            border: `1px solid ${typeInfo.border}`
-          }}>
-            <Briefcase size={13} />
-            {typeInfo.label}
-          </span>
+          {/* Badge del Tipo de Solicitud y Badge Masivo */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
+            {isMassRegistration && (
+              <span style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.3rem",
+                padding: "0.25rem 0.65rem",
+                borderRadius: "999px",
+                fontSize: "0.72rem",
+                fontWeight: 800,
+                backgroundColor: "rgba(245, 158, 11, 0.15)",
+                color: "#f59e0b",
+                border: "1px solid rgba(245, 158, 11, 0.35)",
+                letterSpacing: "0.02em"
+              }}>
+                <Zap size={12} />
+                {t("dashboard.bulkBadge")}
+              </span>
+            )}
+            <span style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.35rem",
+              padding: "0.3rem 0.75rem",
+              borderRadius: "999px",
+              fontSize: "0.78rem",
+              fontWeight: 700,
+              backgroundColor: typeInfo.bg,
+              color: typeInfo.color,
+              border: `1px solid ${typeInfo.border}`
+            }}>
+              <Briefcase size={13} />
+              {typeInfo.label}
+            </span>
+          </div>
         </div>
 
         {/* Trazabilidad: Creada por y fechas */}
@@ -1914,8 +2875,8 @@ function RequestCardItem({
           borderRadius: "0.5rem", 
           border: "1px solid hsl(var(--border) / 0.4)" 
         }}>
-          <div><strong style={{ color: "hsl(var(--foreground))" }}>Creada por:</strong> {request.createdBy?.name || request.user?.name || "No disponible"}</div>
-          <div><strong style={{ color: "hsl(var(--foreground))" }}>Fecha de registro:</strong> {formatDateLong(request.createdAt)} a las {formatTime12h(request.createdAt)}</div>
+          <div><strong style={{ color: "hsl(var(--foreground))" }}>{t("dashboard.createdBy")}:</strong> {request.createdBy?.name || request.user?.name || "No disponible"}</div>
+          <div><strong style={{ color: "hsl(var(--foreground))" }}>{t("dashboard.registrationDate")}:</strong> {formatDateLong(request.createdAt, locale === "en" ? "en-US" : "es-ES")} {t("feed.at")} {formatTime12h(request.createdAt)}</div>
         </div>
 
         {/* Detalles de Fechas y Horarios */}
@@ -1924,26 +2885,62 @@ function RequestCardItem({
             <Calendar size={15} color="hsl(var(--primary))" />
             <span>
               {request.type === "HOURS_MAKEUP" ? (
-                <>Ausencia: <strong>{request.absenceDate ? formatDateShort(request.absenceDate) : "N/A"}</strong> | Propuesta Reposición: <strong>{request.makeupDate ? formatDateShort(request.makeupDate) : "N/A"}</strong> ({request.makeupStartTime || "N/A"} a {request.makeupEndTime || "N/A"})</>
-              ) : request.type === "SPECIAL" && request.specialType === "HOURS" ? (
-                <>Fecha: <strong>{formatDateShort(request.startDate)}</strong> | Horario: <strong>{request.exitTime || "N/A"} a {request.returnTime || "N/A"}</strong></>
+                <>{t("dashboard.absence")} <strong>{request.absenceDate ? formatDateShort(request.absenceDate) : "N/A"}</strong> | {t("dashboard.proposedMakeup")} <strong>{request.makeupDate ? formatDateShort(request.makeupDate) : "N/A"}</strong> ({formatTimeStr12h(request.makeupStartTime) || request.makeupStartTime || "N/A"} - {formatTimeStr12h(request.makeupEndTime) || request.makeupEndTime || "N/A"})</>
+              ) : (request.type === "SPECIAL" || request.type === "PERMISSION") && (request.specialType === "HOURS" || request.exitTime || request.returnTime) ? (
+                <>{t("common.date")}: <strong>{formatDateShort(request.startDate)}</strong> | {t("common.schedule")}: <strong style={{ color: "hsl(var(--primary))" }}>{formatTimeStr12h(request.exitTime) || request.exitTime || "N/A"} - {formatTimeStr12h(request.returnTime) || request.returnTime || "N/A"}</strong></>
               ) : request.type === "EARLY_LEAVE" ? (
-                <>Salida: <strong>{formatDateShort(request.startDate)}</strong> a las <strong>{formatTime12h(request.startDate)}</strong></>
+                <>{t("dashboard.scheduledExit")}: <strong>{formatDateShort(request.startDate)}</strong> {t("feed.at")} <strong style={{ color: "#eab308" }}>{formatTimeStr12h(request.exitTime) || formatTime12h(request.startDate)}</strong></>
+              ) : request.type === "LATE_ARRIVAL" ? (
+                <>{t("dashboard.scheduledArrival")}: <strong>{formatDateShort(request.startDate)}</strong> {t("feed.at")} <strong style={{ color: "#f97316" }}>{formatTimeStr12h(request.returnTime) || formatTime12h(request.startDate)}</strong></>
               ) : (
-                <>Del <strong>{formatDateShort(request.startDate)}</strong> al <strong>{formatDateShort(request.endDate)}</strong></>
+                <>{t("dashboard.from")} <strong>{formatDateShort(request.startDate)}</strong> {t("dashboard.to")} <strong>{formatDateShort(request.endDate)}</strong></>
               )}
             </span>
           </div>
 
-          {(request.type === "HOURS_MAKEUP" || (request.type === "SPECIAL" && request.specialType === "HOURS")) && (
+          {(request.type === "HOURS_MAKEUP" || ((request.type === "SPECIAL" || request.type === "PERMISSION") && (request.specialType === "HOURS" || request.exitTime || request.returnTime || request.hoursRequested))) && (
             <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
               <Clock size={15} color="hsl(var(--primary))" />
               <span style={{ fontSize: "0.8rem", color: "hsl(var(--primary))", fontWeight: 700 }}>
                 {request.type === "HOURS_MAKEUP" ? (
-                  <>A reponer: {request.hoursToMakeUp || 0} hrs | Aprobadas: {request.hoursApproved !== null && request.hoursApproved !== undefined ? `${request.hoursApproved} hrs` : "Pendiente"}</>
+                  <>{t("vacations.makeupHoursLabel")}: {request.hoursToMakeUp || 0} hrs | {t("vacations.approvedHours")}: {request.hoursApproved !== null && request.hoursApproved !== undefined ? `${request.hoursApproved} hrs` : t("common.pending")}</>
                 ) : (
-                  <>Solicitadas: {request.hoursRequested || 0} hrs | Aprobadas: {request.hoursApproved !== null && request.hoursApproved !== undefined ? `${request.hoursApproved} hrs` : "Pendiente"} | Reales: {request.hoursUsed !== null && request.hoursUsed !== undefined ? `${request.hoursUsed} hrs` : "Pendiente"}</>
+                  <>{t("vacations.requestedHours")}: {request.hoursRequested || 0} hrs | {t("vacations.approvedHours")}: {request.hoursApproved !== null && request.hoursApproved !== undefined ? `${request.hoursApproved} hrs` : t("common.pending")} | {t("vacations.realHours")}: {request.hoursUsed !== null && request.hoursUsed !== undefined ? `${request.hoursUsed} hrs` : t("common.pending")}</>
                 )}
+              </span>
+            </div>
+          )}
+
+          {request.type === "EARLY_LEAVE" && (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <Clock size={15} color="#eab308" />
+              <span style={{ fontSize: "0.8rem", color: "#eab308", fontWeight: 700 }}>
+                {t("dashboard.exitTimeBadge")}: {formatTimeStr12h(request.exitTime) || formatTime12h(request.startDate)}
+              </span>
+            </div>
+          )}
+
+          {request.type === "LATE_ARRIVAL" && (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <Clock size={15} color="#f97316" />
+                <span style={{ fontSize: "0.8rem", color: "#f97316", fontWeight: 700 }}>
+                  {t("dashboard.arrivalTimeBadge")}: {formatTimeStr12h(request.returnTime) || formatTime12h(request.startDate)}
+                </span>
+              </div>
+              <span style={{
+                fontSize: "0.75rem",
+                fontWeight: 700,
+                padding: "0.15rem 0.55rem",
+                borderRadius: "999px",
+                backgroundColor: request.specialType === "PRE_APPROVED" ? "rgba(16, 185, 129, 0.12)" : "rgba(239, 68, 68, 0.12)",
+                color: request.specialType === "PRE_APPROVED" ? "#10b981" : "#ef4444",
+                border: request.specialType === "PRE_APPROVED" ? "1px solid rgba(16, 185, 129, 0.25)" : "1px solid rgba(239, 68, 68, 0.25)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.25rem"
+              }}>
+                {request.specialType === "PRE_APPROVED" ? `✓ ${t("vacations.preApprovedBadge")}` : `✕ ${t("vacations.notPreApprovedBadge")}`}
               </span>
             </div>
           )}
@@ -1961,7 +2958,7 @@ function RequestCardItem({
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.2rem", color: "hsl(var(--muted-foreground))" }}>
               <MessageSquare size={13} />
-              <span style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>Motivo de la Solicitud</span>
+              <span style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" }}>{t("dashboard.reasonTitle")}</span>
             </div>
             {request.reason}
           </div>
@@ -1971,7 +2968,7 @@ function RequestCardItem({
         {request.documentUrl && (
           <div style={{ marginTop: "0.75rem" }}>
             <a
-              href={request.documentUrl}
+              href={`/api/attachments/${request.id}`}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -1990,7 +2987,7 @@ function RequestCardItem({
               }}
             >
               <Paperclip size={13} />
-              <span>Ver Documento Adjunto</span>
+              <span>{t("dashboard.attachment")}</span>
               <ExternalLink size={11} style={{ opacity: 0.7 }} />
             </a>
           </div>
@@ -2006,7 +3003,7 @@ function RequestCardItem({
             borderRadius: "0 0.5rem 0.5rem 0", 
             fontSize: "0.825rem" 
           }}>
-            <span style={{ fontWeight: 700, display: "block", marginBottom: "0.2rem", color: "hsl(var(--primary))" }}>Nota del Supervisor:</span>
+            <span style={{ fontWeight: 700, display: "block", marginBottom: "0.2rem", color: "hsl(var(--primary))" }}>{t("dashboard.supervisorNote")}:</span>
             {request.supervisorNote}
           </div>
         )}
@@ -2036,7 +3033,7 @@ function RequestCardItem({
             }}
           >
             <CheckCircle2 size={15} />
-            <span>Aprobar</span>
+            <span>{t("dashboard.approveAction")}</span>
           </button>
 
           <button 
@@ -2059,7 +3056,7 @@ function RequestCardItem({
             }}
           >
             <XCircle size={15} />
-            <span>Denegar</span>
+            <span>{t("dashboard.rejectAction")}</span>
           </button>
 
           <button 
@@ -2078,10 +3075,10 @@ function RequestCardItem({
               justifyContent: "center",
               gap: "0.35rem"
             }}
-            title="Editar solicitud"
+            title={t("common.edit")}
           >
             <Pencil size={13} />
-            <span>Editar</span>
+            <span>{t("common.edit")}</span>
           </button>
         </div>
       ) : (
@@ -2095,7 +3092,7 @@ function RequestCardItem({
               border: request.status === "APPROVED" ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(239, 68, 68, 0.3)"
             }}>
               {request.status === "APPROVED" ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
-              {request.status === "APPROVED" ? "Aprobada" : "Rechazada"}
+              {request.status === "APPROVED" ? t("common.approved") : t("common.rejected")}
             </span>
             {request.status === "APPROVED" && (
               <span style={{ 
@@ -2105,19 +3102,19 @@ function RequestCardItem({
                 color: request.affectsBonus ? "#ef4444" : "#10b981",
                 border: request.affectsBonus ? "1px solid rgba(239, 68, 68, 0.2)" : "1px solid rgba(16, 185, 129, 0.2)"
               }}>
-                {request.affectsBonus ? "Afecta Bono" : "No Afecta Bono"}
+                {request.affectsBonus ? t("dashboard.affectsBonus") : t("dashboard.doesNotAffectBonus")}
               </span>
             )}
             <div style={{ fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", textAlign: "right", marginTop: "0.2rem", display: "flex", flexDirection: "column", gap: "0.15rem" }}>
-              <div>Registrada: {formatDateTimeShort(request.createdAt)}</div>
+              <div>{t("dashboard.registeredBadge")} {formatDateTimeShort(request.createdAt)}</div>
               {request.status === "APPROVED" && (
                 <div>
-                  Aprobada: <strong>{formatDateTimeShort(request.approvedAt)}</strong>{request.approvedBy?.name ? ` por ${request.approvedBy.name}` : ""}
+                  {t("dashboard.approvedBy")}: <strong>{formatDateTimeShort(request.approvedAt)}</strong>{request.approvedBy?.name ? ` por ${request.approvedBy.name}` : ""}
                 </div>
               )}
               {request.status === "REJECTED" && (
                 <div>
-                  Rechazada: <strong>{formatDateTimeShort(request.rejectedAt)}</strong>{request.rejectedBy?.name ? ` por ${request.rejectedBy.name}` : ""}
+                  {t("dashboard.rejectedBy")}: <strong>{formatDateTimeShort(request.rejectedAt)}</strong>{request.rejectedBy?.name ? ` por ${request.rejectedBy.name}` : ""}
                 </div>
               )}
             </div>
@@ -2128,7 +3125,7 @@ function RequestCardItem({
               onClick={() => onEdit(request)}
               disabled={isBeingProcessed}
               className="btn btn-ghost" 
-              title="Editar solicitud"
+              title={t("common.edit")}
               style={{ padding: "0.4rem", color: "hsl(var(--primary))" }}
             >
               <Pencil size={15} />
@@ -2138,7 +3135,7 @@ function RequestCardItem({
               onClick={() => onDelete(request.id)}
               disabled={isBeingProcessed}
               className="btn btn-ghost" 
-              title="Limpiar registro del historial"
+              title={t("common.delete")}
               style={{ padding: "0.4rem", color: "hsl(0 70% 55%)" }}
             >
               <Trash2 size={15} />

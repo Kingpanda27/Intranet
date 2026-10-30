@@ -1,10 +1,11 @@
 "use server"
 
 import { requireAuth } from "@/lib/permissions"
+import { isSuperAdminEmail } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 
-const ALLOWED_ROLES = ["AGENT", "USER", "SUPERVISOR", "MANAGER", "HR", "TECHNOLOGY", "TECHNOLOGY_ADMIN", "IT_MANAGER"]
+const ALLOWED_ROLES = ["AGENT", "USER", "SUPERVISOR", "MANAGER", "HR", "TECHNOLOGY", "TECHNOLOGY_ADMIN", "ADMIN", "IT_MANAGER"]
 
 const ROLE_LEVELS: Record<string, number> = {
   AGENT: 10,
@@ -13,6 +14,7 @@ const ROLE_LEVELS: Record<string, number> = {
   MANAGER: 30,
   HR: 35,
   TECHNOLOGY: 40,
+  ADMIN: 45,
   TECHNOLOGY_ADMIN: 50,
   IT_MANAGER: 50
 }
@@ -152,7 +154,7 @@ export async function createRoleChangeRequest({
 export async function getRoleChangeRequests(statusFilter?: string) {
   const caller = await requireAuth()
 
-  const isMasterAdmin = caller.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (caller as any).isSuperAdmin
+  const isMasterAdmin = isSuperAdminEmail(caller.email) || (caller as any).isSuperAdmin
   const isTech = caller.role === "TECHNOLOGY" || caller.role === "TECHNOLOGY_ADMIN" || caller.role === "IT_MANAGER" || isMasterAdmin
 
   const whereClause: any = {}
@@ -190,7 +192,7 @@ export async function getRoleChangeRequests(statusFilter?: string) {
 export async function approveRoleChangeRequest(requestId: string) {
   const caller = await requireAuth()
 
-  const isMasterAdmin = caller.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (caller as any).isSuperAdmin
+  const isMasterAdmin = isSuperAdminEmail(caller.email) || (caller as any).isSuperAdmin
   const isTech = caller.role === "TECHNOLOGY" || caller.role === "TECHNOLOGY_ADMIN" || caller.role === "IT_MANAGER" || isMasterAdmin
   if (!isTech) {
     return { success: false, error: "Acceso denegado: Se requieren permisos de Tecnología para aprobar solicitudes." }
@@ -306,7 +308,7 @@ export async function rejectRoleChangeRequest({
 }) {
   const caller = await requireAuth()
 
-  const isMasterAdmin = caller.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (caller as any).isSuperAdmin
+  const isMasterAdmin = isSuperAdminEmail(caller.email) || (caller as any).isSuperAdmin
   const isTech = caller.role === "TECHNOLOGY" || caller.role === "TECHNOLOGY_ADMIN" || caller.role === "IT_MANAGER" || isMasterAdmin
   if (!isTech) {
     return { success: false, error: "Acceso denegado: Se requieren permisos de Tecnología para rechazar solicitudes." }

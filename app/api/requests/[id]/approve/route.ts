@@ -6,21 +6,21 @@ import { updateRequestStatus } from "@/app/actions/timeOffActions"
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   return handleApprove(req, params)
 }
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   return handleApprove(req, params)
 }
 
 async function handleApprove(
   req: NextRequest,
-  rawParams: Promise<{ id: string }> | { id: string }
+  rawParams: Promise<{ id: string }>
 ) {
   const session = await getServerSession(authOptions)
   if (!session || !session.user) {

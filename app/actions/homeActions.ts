@@ -3,6 +3,7 @@
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { NON_ABSENCE_REQUEST_TYPES } from "@/lib/userUtils"
 
 export async function updateHeartbeat() {
   try {
@@ -52,7 +53,8 @@ export async function getHomeMetrics() {
       where: {
         status: "APPROVED",
         startDate: { lte: endOfDay },
-        endDate: { gte: startOfDay }
+        endDate: { gte: startOfDay },
+        type: { notIn: NON_ABSENCE_REQUEST_TYPES }
       }
     }),
     prisma.calendarEvent.count({
@@ -113,7 +115,8 @@ export async function getUpcomingAbsences() {
   const requests = await prisma.timeOffRequest.findMany({
     where: {
       status: "APPROVED",
-      startDate: { gt: startOfDay, lte: in7Days }
+      startDate: { gt: startOfDay, lte: in7Days },
+      type: { notIn: NON_ABSENCE_REQUEST_TYPES }
     },
     include: { user: { select: { name: true, image: true } } },
     orderBy: { startDate: "asc" },
@@ -148,7 +151,12 @@ export async function getPersonalSummary(userId: string) {
   })
   
   const nextAbsence = await prisma.timeOffRequest.findFirst({
-    where: { userId, status: "APPROVED", startDate: { gt: today } },
+    where: { 
+      userId, 
+      status: "APPROVED", 
+      startDate: { gt: today },
+      type: { notIn: NON_ABSENCE_REQUEST_TYPES }
+    },
     orderBy: { startDate: "asc" }
   })
   
@@ -204,7 +212,12 @@ export async function getAbsentEmployeesDetails() {
   endOfDay.setHours(23, 59, 59, 999)
 
   return prisma.timeOffRequest.findMany({
-    where: { status: "APPROVED", startDate: { lte: endOfDay }, endDate: { gte: startOfDay } },
+    where: { 
+      status: "APPROVED", 
+      startDate: { lte: endOfDay }, 
+      endDate: { gte: startOfDay },
+      type: { notIn: NON_ABSENCE_REQUEST_TYPES }
+    },
     include: { 
       user: { 
         select: { id: true, name: true, email: true, image: true, position: true, project: { select: { name: true } } } 

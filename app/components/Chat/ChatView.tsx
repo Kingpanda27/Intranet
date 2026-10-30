@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Send, MessageSquare, Phone, MoreVertical, Image as ImageIcon, X } from "lucide-react"
+import { Send, MessageSquare, Phone, MoreVertical, Image as ImageIcon, X, Mic } from "lucide-react"
 import { getChatMessages, sendMessage, updateLastSeen } from "@/app/actions/chatActions"
 
 export function ChatView({ conversationId, currentUserId }: { conversationId: string, currentUserId: string }) {
@@ -10,8 +10,10 @@ export function ChatView({ conversationId, currentUserId }: { conversationId: st
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const recognitionRef = useRef<any>(null)
 
   useEffect(() => {
     if (!conversationId) return
@@ -67,6 +69,53 @@ export function ChatView({ conversationId, currentUserId }: { conversationId: st
         setImagePreview(reader.result as string)
       }
       reader.readAsDataURL(file)
+    }
+  }
+
+  const handleToggleRecording = () => {
+    if (isRecording) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop()
+      }
+      setIsRecording(false)
+      return
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (SpeechRecognition) {
+      try {
+        const recognition = new SpeechRecognition()
+        recognition.lang = "es-ES"
+        recognition.continuous = false
+        recognition.interimResults = true
+
+        recognition.onstart = () => {
+          setIsRecording(true)
+        }
+
+        recognition.onresult = (event: any) => {
+          const transcript = Array.from(event.results)
+            .map((result: any) => result[0].transcript)
+            .join("")
+          setInputValue((prev) => (prev ? `${prev} ${transcript}` : transcript))
+        }
+
+        recognition.onerror = () => {
+          setIsRecording(false)
+        }
+
+        recognition.onend = () => {
+          setIsRecording(false)
+        }
+
+        recognitionRef.current = recognition
+        recognition.start()
+      } catch (e) {
+        console.warn("Speech recognition error:", e)
+        setIsRecording(false)
+      }
+    } else {
+      alert("El dictado por voz no está soportado en este navegador.")
     }
   }
 
@@ -149,20 +198,33 @@ export function ChatView({ conversationId, currentUserId }: { conversationId: st
         })}
       </div>
 
-      <form onSubmit={handleSend} style={{ padding: "1rem 1.5rem", borderTop: "1px solid hsl(var(--border))", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+      <form 
+        onSubmit={handleSend} 
+        style={{ 
+          padding: "0.85rem 1.25rem", 
+          background: "rgba(15, 23, 42, 0.65)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          borderTop: "1px solid rgba(255, 255, 255, 0.08)", 
+          display: "flex", 
+          flexDirection: "column", 
+          gap: "0.5rem" 
+        }}
+      >
         {imagePreview && (
-          <div style={{ position: "relative", width: "80px", height: "80px", borderRadius: "0.5rem", overflow: "hidden", border: "2px solid hsl(var(--primary))" }}>
+          <div style={{ position: "relative", width: "70px", height: "70px", borderRadius: "12px", overflow: "hidden", border: "2px solid rgba(59, 130, 246, 0.6)", boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
             <img src={imagePreview} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             <button 
               type="button"
               onClick={() => { setImageFile(null); setImagePreview(null); }}
-              style={{ position: "absolute", top: 2, right: 2, backgroundColor: "rgba(0,0,0,0.5)", color: "white", border: "none", borderRadius: "50%", width: 20, height: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+              style={{ position: "absolute", top: 3, right: 3, backgroundColor: "rgba(0,0,0,0.65)", color: "white", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "50%", width: 20, height: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+              title="Quitar imagen"
             >
               <X size={12} />
             </button>
           </div>
         )}
-        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "0.6rem", alignItems: "center" }}>
           <input 
             type="file" 
             ref={fileInputRef} 
@@ -172,20 +234,100 @@ export function ChatView({ conversationId, currentUserId }: { conversationId: st
           />
           <button 
             type="button" 
-            className="btn btn-ghost" 
+            className="hover-scale" 
             onClick={() => fileInputRef.current?.click()}
-            style={{ padding: "0.6rem", color: "hsl(var(--muted-foreground))" }}
+            title="Adjuntar imagen o archivo"
+            style={{ 
+              background: "transparent",
+              border: "none",
+              color: "#94a3b8", 
+              cursor: "pointer",
+              padding: "0.5rem", 
+              borderRadius: "50%", 
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "center",
+              transition: "all 0.2s"
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "#ffffff"; e.currentTarget.style.background = "rgba(255,255,255,0.08)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "#94a3b8"; e.currentTarget.style.background = "transparent"; }}
           >
             <ImageIcon size={22} />
           </button>
-          <input 
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Escribe un mensaje..."
-            className="input"
-            style={{ flex: 1 }}
-          />
-          <button type="submit" className="btn btn-primary" disabled={loading || (!inputValue.trim() && !imageFile)} style={{ padding: "0.6rem 1.25rem" }}>
+
+          {/* Input Capsule with Mic inside */}
+          <div style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            background: "rgba(255, 255, 255, 0.05)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            border: isRecording ? "1px solid rgba(239, 68, 68, 0.5)" : "1px solid rgba(255, 255, 255, 0.08)",
+            borderRadius: "20px",
+            padding: "0.35rem 0.65rem 0.35rem 1rem",
+            minHeight: "42px",
+            transition: "all 0.25s ease"
+          }}>
+            <input 
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              placeholder={isRecording ? "Escuchando dictado..." : "Escribe un mensaje..."}
+              style={{
+                flex: 1,
+                background: "transparent",
+                border: "none",
+                outline: "none",
+                color: isRecording ? "#ef4444" : "#f8fafc",
+                fontSize: "0.95rem"
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleToggleRecording}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: isRecording ? "#ef4444" : "#94a3b8",
+                cursor: "pointer",
+                padding: "0.3rem",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s"
+              }}
+              title={isRecording ? "Detener dictado" : "Grabar nota de voz o dictado"}
+              onMouseEnter={(e) => { if (!isRecording) e.currentTarget.style.color = "#ffffff"; }}
+              onMouseLeave={(e) => { if (!isRecording) e.currentTarget.style.color = "#94a3b8"; }}
+            >
+              <Mic size={20} />
+            </button>
+          </div>
+
+          {/* Send Button with gradient */}
+          <button 
+            type="submit" 
+            disabled={loading || (!inputValue.trim() && !imageFile)} 
+            style={{ 
+              borderRadius: "50%", 
+              width: "42px", 
+              height: "42px", 
+              padding: 0, 
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "center",
+              background: "linear-gradient(135deg, #2563eb, #6366f1)",
+              color: "#ffffff",
+              border: "none",
+              cursor: (!inputValue.trim() && !imageFile) ? "not-allowed" : "pointer",
+              opacity: (!inputValue.trim() && !imageFile) ? 0.45 : 1,
+              boxShadow: (!inputValue.trim() && !imageFile) ? "none" : "0 4px 14px rgba(37, 99, 235, 0.35)",
+              transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)"
+            }}
+            className="hover-scale"
+            title="Enviar mensaje"
+          >
             <Send size={18} />
           </button>
         </div>

@@ -35,9 +35,9 @@ export const commentCreateSchema = z.object({
 
 export const timeOffRequestSchema = z.object({
   type: z.enum([
-    "VACATION", "PERMISSION", "EARLY_LEAVE", "SICK_LEAVE",
+    "VACATION", "PERMISSION", "EARLY_LEAVE", "LATE_ARRIVAL", "SICK_LEAVE",
     "MEDICAL_LEAVE", "MATERNITY_LEAVE", "PATERNITY_LEAVE",
-    "MATERNITY_PATERNITY", "BEREAVEMENT_LEAVE", "HOURS_MAKEUP", "SPECIAL",
+    "MATERNITY_PATERNITY", "BEREAVEMENT_LEAVE", "MARRIAGE_LEAVE", "HOURS_MAKEUP", "SPECIAL",
     "REMOTE_INTERNET", "REMOTE_POWER", "REMOTE_HARDWARE", "REMOTE_VPN"
   ]),
   startDate: z.string().min(1, "Fecha de inicio es obligatoria"),

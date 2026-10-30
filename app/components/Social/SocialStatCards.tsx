@@ -1,9 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Globe, UserCheck, UserPlus, X, ChevronDown } from "lucide-react"
 import { getSocialStatsDetail } from "@/app/actions/friendActions"
 import { acceptFriendRequest, declineFriendRequest } from "@/app/actions/friendActions"
+import { useTranslation } from "@/lib/i18n/LanguageContext"
 
 const ROLE_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   MANAGER:    { label: "Manager",    color: "#f97316", bg: "rgba(249,115,22,0.12)" },
@@ -15,14 +16,16 @@ const ROLE_LABELS: Record<string, { label: string; color: string; bg: string }> 
 }
 
 function RoleBadge({ role }: { role: string }) {
+  const { t } = useTranslation()
   const meta = ROLE_LABELS[role] ?? { label: role, color: "hsl(var(--muted-foreground))", bg: "hsl(var(--muted))" }
+  const localizedLabel = t(`social.roles.${role}` as any) || meta.label
   return (
     <span style={{
       fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.05em",
       textTransform: "uppercase", padding: "0.15rem 0.45rem", borderRadius: "9999px",
       color: meta.color, backgroundColor: meta.bg
     }}>
-      {meta.label}
+      {localizedLabel}
     </span>
   )
 }
@@ -84,7 +87,9 @@ interface StatCardData {
 }
 
 export function SocialStatCards({ initialStats }: { initialStats: StatCardData }) {
+  const { t } = useTranslation()
   const [activePanel, setActivePanel] = useState<Panel>(null)
+  const [counts, setCounts] = useState<StatCardData>(initialStats)
   const [detail, setDetail] = useState<{
     allUsers: any[];
     myConnections: any[];
@@ -93,28 +98,46 @@ export function SocialStatCards({ initialStats }: { initialStats: StatCardData }
   const [loadingPanel, setLoadingPanel] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
+  useEffect(() => {
+    const onUpdated = async () => {
+      try {
+        const data = await getSocialStatsDetail()
+        setDetail(data)
+        setCounts({
+          totalUsers: data.allUsers.length,
+          myFriends: data.myConnections.length,
+          pendingCount: data.pendingRequests.length
+        })
+      } catch (e) {
+        console.error("Error refreshing social stats detail:", e)
+      }
+    }
+    window.addEventListener('friendship-updated', onUpdated)
+    return () => window.removeEventListener('friendship-updated', onUpdated)
+  }, [])
+
   const stats = [
     {
       id: "network" as Panel,
       icon: Globe,
-      label: "Personas en la red",
-      value: initialStats.totalUsers,
+      label: t("social.networkPeople"),
+      value: counts.totalUsers,
       color: "hsl(var(--primary))",
       bg: "hsl(var(--primary) / 0.08)"
     },
     {
       id: "connections" as Panel,
       icon: UserCheck,
-      label: "Mis conexiones",
-      value: initialStats.myFriends,
+      label: t("social.myConnections"),
+      value: counts.myFriends,
       color: "#10b981",
       bg: "rgba(16,185,129,0.08)"
     },
     {
       id: "requests" as Panel,
       icon: UserPlus,
-      label: "Solicitudes recibidas",
-      value: initialStats.pendingCount,
+      label: t("social.receivedRequests"),
+      value: counts.pendingCount,
       color: "#f97316",
       bg: "rgba(249,115,22,0.08)"
     },
@@ -130,31 +153,65 @@ export function SocialStatCards({ initialStats }: { initialStats: StatCardData }
       setLoadingPanel(true)
       const data = await getSocialStatsDetail()
       setDetail(data)
+      setCounts({
+        totalUsers: data.allUsers.length,
+        myFriends: data.myConnections.length,
+        pendingCount: data.pendingRequests.length
+      })
       setLoadingPanel(false)
     }
   }
 
   const handleAccept = async (friendshipId: string) => {
     setActionLoading(friendshipId)
-    await acceptFriendRequest(friendshipId)
-    // Refresh detail
-    const data = await getSocialStatsDetail()
-    setDetail(data)
-    setActionLoading(null)
+    try {
+      const res = await acceptFriendRequest(friendshipId)
+      if (res && res.success) {
+        const data = await getSocialStatsDetail()
+        setDetail(data)
+        setCounts({
+          totalUsers: data.allUsers.length,
+          myFriends: data.myConnections.length,
+          pendingCount: data.pendingRequests.length
+        })
+        window.dispatchEvent(new CustomEvent('friendship-updated'))
+      } else {
+        alert(res?.error || "Error al aceptar solicitud")
+      }
+    } catch (e: any) {
+      alert("Error al procesar solicitud: " + (e?.message || "Desconocido"))
+    } finally {
+      setActionLoading(null)
+    }
   }
 
   const handleDecline = async (friendshipId: string) => {
     setActionLoading(friendshipId)
-    await declineFriendRequest(friendshipId)
-    const data = await getSocialStatsDetail()
-    setDetail(data)
-    setActionLoading(null)
+    try {
+      const res = await declineFriendRequest(friendshipId)
+      if (res && res.success) {
+        const data = await getSocialStatsDetail()
+        setDetail(data)
+        setCounts({
+          totalUsers: data.allUsers.length,
+          myFriends: data.myConnections.length,
+          pendingCount: data.pendingRequests.length
+        })
+        window.dispatchEvent(new CustomEvent('friendship-updated'))
+      } else {
+        alert(res?.error || "Error al declinar solicitud")
+      }
+    } catch (e: any) {
+      alert("Error al procesar solicitud: " + (e?.message || "Desconocido"))
+    } finally {
+      setActionLoading(null)
+    }
   }
 
   const panelTitle: Record<string, string> = {
-    network: "Personas en la red",
-    connections: "Mis conexiones",
-    requests: "Solicitudes recibidas"
+    network: t("social.networkPeople"),
+    connections: t("social.myConnections"),
+    requests: t("social.receivedRequests")
   }
 
   const panelItems = (panel: Panel): any[] => {
@@ -259,7 +316,7 @@ export function SocialStatCards({ initialStats }: { initialStats: StatCardData }
                   color: "hsl(var(--primary))",
                   padding: "0.2rem 0.6rem", borderRadius: "9999px"
                 }}>
-                  {panelItems(activePanel).length} {panelItems(activePanel).length === 1 ? "registro" : "registros"}
+                  {panelItems(activePanel).length} {panelItems(activePanel).length === 1 ? t("common.record") : t("common.records")}
                 </span>
               )}
               <button
@@ -290,10 +347,10 @@ export function SocialStatCards({ initialStats }: { initialStats: StatCardData }
             ) : panelItems(activePanel).length === 0 ? (
               <p style={{ fontSize: "0.82rem", color: "hsl(var(--muted-foreground))", textAlign: "center", padding: "1.5rem 0" }}>
                 {activePanel === "requests"
-                  ? "No tienes solicitudes de conexión pendientes."
+                  ? t("social.noPendingRequests")
                   : activePanel === "connections"
-                  ? "Aún no tienes conexiones. ¡Busca a tus compañeros!"
-                  : "No hay personas registradas."}
+                  ? t("social.noConnectionsYet")
+                  : t("social.noPeopleRegistered")}
               </p>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
@@ -314,7 +371,7 @@ export function SocialStatCards({ initialStats }: { initialStats: StatCardData }
                               opacity: actionLoading === person.friendshipId ? 0.6 : 1
                             }}
                           >
-                            Aceptar
+                            {t("common.accept")}
                           </button>
                           <button
                             disabled={actionLoading === person.friendshipId}
@@ -326,7 +383,7 @@ export function SocialStatCards({ initialStats }: { initialStats: StatCardData }
                               opacity: actionLoading === person.friendshipId ? 0.6 : 1
                             }}
                           >
-                            Ignorar
+                            {t("common.decline")}
                           </button>
                         </div>
                       ) : undefined

@@ -4,11 +4,82 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/) y este proyecto se adhiere a [Semantic Versioning (SemVer)](https://semver.org/lang/es/).
 
+## [1.4.0] - 2026-10-30
+
+### Added
+- **Arquitectura de Roles Administrativos y Super Administradores (`lib/auth.ts`, `lib/permissions.ts`, `lib/authorizationRoles.ts`, `lib/auditPermissions.ts`, `lib/requestAuthorization.ts`):**
+  - **Nuevo Rol `ADMIN` Operativo:** Creado rol para Rose Estevez, Ivana Lowe y María Peralta con alcance corporativo global:
+    - Creación de solicitudes de cualquier incidencia para sí mismos o en nombre de cualquier colaborador.
+    - Aprobación y rechazo global de solicitudes en el Panel de Control (`/dashboard`) sin importar el grupo o departamento.
+    - Acceso habilitado a Gestión de Usuarios (`/admin/users`) y Gestión de Grupos (`/admin/groups`).
+    - Bloqueo y protección estricta contra acceso a Logs de Auditoría (`/admin/audit-logs`), Configuración TI (`/admin/config`) y Solicitudes de Rol (`/admin/role-requests`), tanto en el backend como en la barra lateral de navegación (`Sidebar.tsx`).
+  - **Super Administradores Corporativos:** Asignación de privilegios de Super Administrador con acceso maestro total para Rafael Ureña y Pablo Brun (junto a Iván Reyes).
+- **Soporte Multi-Grupo para Colaboradores y Managers (`prisma/schema.prisma`, `groupActions.ts`, `teamActions.ts`, `scripts/migrate_multi_group.mjs`):**
+  - Colaboradores y managers ahora pueden pertenecer a múltiples grupos o proyectos simultáneamente mediante la relación many-to-many `ProjectMembers`.
+  - Sincronización en tiempo real del grupo primario (`projectId`) y membresía multi-grupo (`projects`).
+- **Asignación Obligatoria de Líder al Crear Grupos (`GroupManager.tsx`, `groupActions.ts`):**
+  - El modal de creación de nuevos grupos ahora exige seleccionar un Líder de Escuadrón (Supervisor / Manager) antes de guardar, garantizando que todo grupo nazca con liderazgo operativo asignado.
+- **División Independiente de Checkboxes de Aprobación y Bono (`timeOffActions.ts`, `VacationForm.tsx`):**
+  - Separación funcional en el formulario de registro administrado: ahora se presentan dos opciones independientes: *"Aprobar automáticamente"* e *"Impactar bono"*.
+- **Exportación de Reportes con Filtros Semanales y por Tipo de Incidencia (`AdminDashboard.tsx`, `timeOffActions.ts`):**
+  - Selector de periodicidad ampliado en el Panel de Control: exportación de incidencias filtradas por semana específica (`Semana 1`, `Semana 2`, etc.) o por mes completo.
+  - Filtro granular por tipo específico de incidencia (Vacaciones, Permisos Especiales, Llegadas Tarde, Salidas Tempranas, Falla de Internet/Remoto, etc.).
+- **Licencia por Matrimonio según Ley Laboral Dominicana (`VacationForm.tsx`, `timeOffActions.ts`, `holidayData.ts`):**
+  - Nueva incidencia en la categoría *Salud y Familia*: 3 días laborables remunerados con justificación legal según el Art. 54 del Código de Trabajo de la República Dominicana y carga obligatoria de acta o certificado de matrimonio.
+- **Soporte para Documentos y Correos de Outlook `.msg` (`VacationForm.tsx`, `lib/privateStorage.ts`):**
+  - Incorporación de la extensión `.msg` entre los formatos admitidos para adjuntos y documentación de soporte en todas las incidencias.
+
+### Fixed
+- **Adaptabilidad a Modo Claro en Formulario de Nueva Solicitud (`VacationForm.tsx`, `vacations.module.css`):**
+  - Corrección de estilos fijos oscuros en el apartado de Nueva Solicitud; ahora responde correctamente al tema claro con fondos, bordes y textos adaptados.
+- **Insignias de País en Feriados Oficiales (`UpcomingHolidaysWidget.tsx`):**
+  - Corrección visual en la visualización de feriados en inglés y español para mostrar adecuadamente los distintivos de país ("DO" y "US") en miniatura.
+
+## [1.3.1] - 2026-10-28
+
+### Added
+- **Edición Directa de Grupos desde el Tablero (`app/groups/[id]/`, `groupActions.ts`, `route.ts`):**
+  - **Acceso Exclusivo por Permisos:** Los Líderes de Escuadrón (supervisores y sub-líderes asignados al grupo) y los Administradores del Intranet (`TECHNOLOGY`, `IT_MANAGER`, `TECHNOLOGY_ADMIN`, Superadmin) ahora pueden editar la configuración del grupo directamente al abrir su tablero (`/groups/[id]`), sin tener que depender exclusivamente de "Gestión de Grupos".
+  - **Modal Integral de Configuración de Grupo (`GroupEditModal.tsx`):**
+    - **Pestaña "Información General":** Edición de nombre del grupo, misión/descripción, correo electrónico de contacto, color temático (con selector nativo y paleta de 10 colores predefinidos), ícono/emoji distintivo (selector de 20 emojis y campo libre) y URL de imagen/logo.
+    - **Pestaña "Integrantes":** Búsqueda de colaboradores en tiempo real con selector multi-selección, incorporación masiva al grupo y desvinculación de integrantes con un solo clic.
+    - **Pestaña "Liderazgo":** Asignación y actualización directa de Líderes de Escuadrón (Supervisores) y Sub-Líderes.
+  - **Botones y Accesos Rápidos Contextuales (`TeamDashboardView.tsx`):**
+    - Botón destacado *"Editar Grupo"* en la cabecera y en el panel principal del escuadrón.
+    - Acciones contextuales *"Sumar Integrantes"* y *"Gestionar Líderes"* dentro de la sección "Estructura del Equipo".
+    - Enlace inteligente de retorno: dirige a *"Gestión de Grupos"* para administradores o a *"Inicio"* para líderes operativos sin acceso al panel TI.
+  - **Seguridad en Backend y Auditoría (`groupActions.ts`, `api/admin/groups/members`):**
+    - Implementación de `assertCanEditGroup(groupId)` en Server Actions (`updateGroup`, `addMembersToGroup`, `removeMembersFromGroup`, `setGroupLeaders`) y en la API REST.
+    - Verificación a nivel de base de datos para impedir que usuarios ajenos o sin liderazgo en el grupo modifiquen sus datos, manteniendo la creación y eliminación definitiva de grupos restringida a administradores de Tecnología.
+
+## [1.3.0] - 2026-10-27
+
+### Added
+- **Visualización Dinámica de Versión en Pie de Menú y Login (`Sidebar.tsx`, `LoginForm.tsx`, `lib/version.ts`):**
+  - Indicador automático de la versión activa de la Intranet corporativa (`v1.3.0`) sincronizado dinámicamente desde `package.json` debajo de la sección de soporte.
+- **Almacenamiento Seguro Fuera del Árbol Público para Documentos Médicos (`lib/privateStorage.ts`):**
+  - Migración y aislamiento de justificantes médicos hacia `/home/storage/private-uploads/medical/` fuera de `public/` para neutralizar accesos directos no autenticados.
+  - Validación criptográfica estricta de formato mediante Magic Bytes (PDF, PNG, JPG/JPEG y WEBP) rechazando archivos ejecutables o camuflados.
+  - Asignación de nombres anonimizados con UUID v4 y saneamiento contra vulnerabilidades de *Path Traversal*.
+  - Configuración flexible mediante variable de entorno `PRIVATE_STORAGE_PATH` con soporte fallback a rutas anteriores.
+- **Endpoint Seguro de Streaming y Prevención BOLA/IDOR (`app/api/attachments/[requestId]`):**
+  - Controlador de streaming con autorización a nivel de fila (*Row-Level Authorization*), permitiendo la descarga exclusivamente al colaborador solicitante, su supervisor directo, Managers, RRHH o Administrador Maestro.
+  - Registro inmediato de incidentes de intento no autorizado en la tabla de auditoría (`AuditLog`) con IP, cabeceras seguras (`X-Content-Type-Options: nosniff`) y control estricto de caché (`no-store, no-cache`).
+- **Arquitectura de Baja Lógica (Soft Delete) y Preservación de Trazabilidad (`prisma/schema.prisma`, `userActions.ts`):**
+  - Implementación de campos `isActive`, `deletedAt` y `deactivatedBy` con índice compuesto `@@index([isActive, email])` en la base de datos MySQL.
+  - Eliminación del borrado físico en cascada destructivo que eliminaba registros relacionales en más de 15 tablas, preservando permanentemente el historial de vacaciones, aprobaciones, reportes CSV de nómina y logs de auditoría.
+  - Revocación de sesiones en tiempo real en Redis (`invalidateUserSessionsInRedis`) al desactivar una cuenta.
+  - Filtrado integral de usuarios inactivos en listados de colaboradores, buscador, solicitudes de amistad y selector de grupos.
+- **Diseño Ergonómico y Responsivo del Módulo de Vacaciones (`app/vacations/`):**
+  - Sustitución del contenedor rígido de 1560px por un esquema adaptativo (`width: 100%; max-width: 1560px; margin-inline: auto; padding-inline: clamp(1rem, 3vw, 2.5rem)`).
+  - Eliminación total del desbordamiento horizontal en pantallas estándar (1366x768, 1440x900) y optimización en monitores verticales o ultrawide.
+  - Reestructuración de tarjetas informativas mediante CSS Grid dinámico (`minmax(260px, 1fr)`) y scroll horizontal contenido en tablas y calendarios.
+
 ## [1.2.9] - 2026-10-26
 
 ### Added
 - **Motor de Búsqueda Integral en Toda la Aplicación y Autorización Maestra para TN Assistant (`app/api/chat/route.ts`):**
-  - **Reconocimiento del Administrador Maestro:** Integración de `isCEO(session.user)` en el prompt del sistema. El asistente ahora reconoce a Iván Reyes (CEO / Administrador Maestro) con nivel de acceso global irrestricto, respondiendo con datos corporativos completos y eliminando respuestas evasivas de *"contacta a Recursos Humanos o a tu supervisor"*.
+  - **Reconocimiento del Administrador Maestro:** Integración de `isCEO(session.user)` en el prompt del sistema. El asistente ahora reconoce a Iván Reyes (Administrador Maestro / AI & Software Development) con nivel de acceso global irrestricto, respondiendo con datos corporativos completos y eliminando respuestas evasivas de *"contacta a Recursos Humanos o a tu supervisor"*.
   - **Búsqueda Multi-Tabla Exhaustiva en la Base de Datos:**
     - **Compatibilidad con MySQL:** Corrección del error de validación de Prisma (`mode: insensitive`) incompatible con el dialecto MySQL, permitiendo que la búsqueda de colaboradores (`User`) encuentre de manera infalible a cualquier persona por nombre o apellido.
     - **Búsqueda de Colaboradores e Historial:** Extrae en tiempo real nombre completo, cargo/posición, departamento/grupo, balance de vacaciones (`vacationBalance`) y el historial de solicitudes recientes (`TimeOffRequest`).

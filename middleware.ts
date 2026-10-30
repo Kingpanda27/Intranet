@@ -43,6 +43,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // 2.1 Bloqueo estricto de usuarios inactivos o dados de baja (Soft Delete)
+  const isInactiveUser = (token as any)?.isActive === false || (token as any)?.status === "INACTIVE"
+  if (isInactiveUser) {
+    if (pathname.startsWith('/api')) {
+      return new NextResponse(
+        JSON.stringify({ error: "Acceso denegado: Tu cuenta ha causado baja o se encuentra inactiva." }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+    const response = NextResponse.redirect(new URL('/?error=AccountDeactivated', request.url))
+    response.cookies.delete('next-auth.session-token')
+    response.cookies.delete('__Secure-next-auth.session-token')
+    return response
+  }
+
   // 3. Bypass maestro para CEO y Master Admin
   if (isCEO(token as any)) {
     return NextResponse.next()

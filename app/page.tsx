@@ -15,8 +15,15 @@ import { Users, UserX, Calendar, Award, FileText, Bell, Plus, CalendarPlus, Fold
 import Link from "next/link"
 import { MetricsInteractiveCards } from "./components/Dashboard/MetricsInteractiveCards"
 import { DailySummary } from "./components/Dashboard/DailySummary"
+import { cookies } from "next/headers"
+import { translate } from "@/lib/i18n/dictionaries"
+import { Locale, TranslationKey } from "@/lib/i18n/types"
 
 export default async function Home() {
+  const cookieStore = await cookies()
+  const locale = (cookieStore.get("intranet_locale")?.value || "es") as Locale
+  const t = (k: TranslationKey, params?: Record<string, string | number>) => translate(locale, k, params)
+
   const session = await getServerSession(authOptions)
 
   if (!session?.user) {
@@ -92,7 +99,11 @@ export default async function Home() {
   }).format(new Date())
   
   const currentHour = parseInt(easternHourStr, 10)
-  const greeting = currentHour < 12 ? "Buenos días" : currentHour < 19 ? "Buenas tardes" : "Buenas noches"
+  const greeting = currentHour < 12 
+    ? t("home.greetingMorning") 
+    : currentHour < 19 
+      ? t("home.greetingAfternoon") 
+      : t("home.greetingEvening")
 
   return (
     <div className="container" style={{ padding: "1.5rem" }}>
@@ -104,7 +115,12 @@ export default async function Home() {
             {greeting}, {(session.user as any).name?.split(" ")[0]}! 👋
           </h1>
           <p style={{ color: "hsl(var(--muted-foreground))", fontSize: "0.95rem", display: "flex", gap: "1rem", marginTop: "0.25rem" }}>
-            <span>{personalSummary.nextAbsence ? `Próxima ausencia: ${new Date(personalSummary.nextAbsence.startDate).toLocaleDateString("es-ES")}` : "Sin ausencias programadas"}</span>
+            <span>{personalSummary.nextAbsence ? (() => {
+              const d = new Date(personalSummary.nextAbsence.startDate)
+              const isUtcMidnight = d.getUTCHours() === 0 && d.getUTCMinutes() === 0
+              const dateStr = d.toLocaleDateString(locale === "en" ? "en-US" : "es-ES", { timeZone: isUtcMidnight ? "UTC" : undefined })
+              return t("home.nextAbsence", { date: dateStr })
+            })() : t("home.noAbsences")}</span>
           </p>
         </div>
       </div>
@@ -118,10 +134,10 @@ export default async function Home() {
       {/* Quick Access Row */}
       <div className="animate-in slide-in-bottom-sm" style={{ display: "flex", gap: "1rem", marginBottom: "2.5rem", overflowX: "auto", paddingBottom: "0.5rem", animationDelay: "200ms" }}>
         {[
-          { label: "Nueva Publicación", icon: Plus, href: "#create-post", primary: true },
-          { label: "Solicitar Tiempo", icon: CalendarPlus, href: "/vacations", primary: false },
-          { label: "Documentos", icon: FolderOpen, href: "/knowledge-base", primary: false },
-          { label: "Mi Perfil", icon: UserCircle, href: "/profile", primary: false }
+          { label: t("home.newPost"), icon: Plus, href: "#create-post", primary: true },
+          { label: t("home.requestTime"), icon: CalendarPlus, href: "/vacations", primary: false },
+          { label: t("home.documents"), icon: FolderOpen, href: "/knowledge-base", primary: false },
+          { label: t("home.myProfile"), icon: UserCircle, href: "/profile", primary: false }
         ].map((btn, i) => (
           <Link key={i} href={btn.href} className={`btn ${btn.primary ? 'btn-primary' : 'btn-surface'} hover-scale`} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.75rem 1.25rem", borderRadius: "9999px", flexShrink: 0, fontWeight: 700, fontSize: "0.85rem" }}>
             <btn.icon size={16} /> {btn.label}
@@ -156,7 +172,7 @@ export default async function Home() {
           {featuredPosts.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", fontWeight: 800, color: "hsl(340 80% 60%)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                <Zap size={16} /> Destacados
+                <Zap size={16} /> {locale === "en" ? "Featured" : "Destacados"}
               </div>
               {featuredPosts.map((post: any) => {
                 const userLike = post.likes.find((like: any) => like.authorId === currentUserId)
@@ -179,7 +195,7 @@ export default async function Home() {
           <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
             {normalPosts.length === 0 && featuredPosts.length === 0 ? (
               <div className="card glass animate-in" style={{ textAlign: "center", padding: "4rem 2rem", borderRadius: "1.25rem" }}>
-                <p style={{ margin: 0, color: "hsl(var(--muted-foreground))", fontWeight: 600 }}>Aún no hay publicaciones. ¡Sé el primero en compartir algo!</p>
+                <p style={{ margin: 0, color: "hsl(var(--muted-foreground))", fontWeight: 600 }}>{t("feed.emptyFeed")}</p>
               </div>
             ) : (
               normalPosts.map((post: any, index: number) => {

@@ -3,15 +3,15 @@
 import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { authOptions, isSuperAdminEmail } from "@/lib/auth"
 import { createAuditLog } from "./auditActions"
 
 async function isAdmin() {
   const session = await getServerSession(authOptions)
-  const isMasterAdmin = (session?.user as any)?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (session?.user as any)?.isSuperAdmin
+  const isMasterAdmin = isSuperAdminEmail((session?.user as any)?.email) || (session?.user as any)?.isSuperAdmin
   if (isMasterAdmin) return true
   const role = (session?.user as any)?.role
-  return role === "TECHNOLOGY" || role === "IT_MANAGER" || role === "TECHNOLOGY_ADMIN" || role === "ADMIN"
+  return role === "TECHNOLOGY" || role === "IT_MANAGER" || role === "TECHNOLOGY_ADMIN"
 }
 
 export async function createApiConfig(formData: FormData) {

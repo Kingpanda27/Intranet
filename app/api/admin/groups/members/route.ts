@@ -5,33 +5,64 @@ import { prisma } from "@/lib/prisma"
 import { revalidatePath } from "next/cache"
 import { createAuditLog } from "@/app/actions/auditActions"
 
-async function assertAuth() {
+async function assertAuth(groupId?: string) {
   const session = await getServerSession(authOptions)
-  const isMasterAdmin = (session?.user as any)?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || (session?.user as any)?.isSuperAdmin
+  if (!session?.user) return null
+
+  const user = session.user as any
+  const isMasterAdmin = user?.email?.toLowerCase().trim() === "ireyes@tnoutsourcing.com" || user?.isSuperAdmin
   if (isMasterAdmin) return session
-  const role = (session?.user as any)?.role
-  if (!session?.user || (role !== "TECHNOLOGY" && role !== "IT_MANAGER" && role !== "TECHNOLOGY_ADMIN" && role !== "ADMIN")) {
-    return null
+
+  const role = user?.role
+  if (role === "TECHNOLOGY" || role === "IT_MANAGER" || role === "TECHNOLOGY_ADMIN" || role === "ADMIN") {
+    return session
   }
-  return session
+
+  // Si se provee groupId, verificar si es líder (supervisor o subLeader) del grupo
+  if (groupId && user.id) {
+    const isLeader = await prisma.project.findFirst({
+      where: {
+        id: groupId,
+        OR: [
+          { supervisors: { some: { id: user.id } } },
+          { subLeaders: { some: { id: user.id } } }
+        ]
+      },
+      select: { id: true }
+    })
+    if (isLeader) return session
+  }
+
+  return null
 }
 
 export async function POST(req: NextRequest) {
-  const session = await assertAuth()
-  if (!session) {
-    return NextResponse.json({ error: "Acceso denegado" }, { status: 403 })
-  }
-
   try {
     const body = await req.json()
     const { groupId, userIds } = body
+
+    const session = await assertAuth(groupId)
+    if (!session) {
+      return NextResponse.json({ error: "Acceso denegado: Solo administradores o líderes del grupo pueden agregar integrantes." }, { status: 403 })
+    }
 
     if (!groupId || !Array.isArray(userIds) || userIds.length === 0) {
       return NextResponse.json({ error: "Parámetros inválidos" }, { status: 400 })
     }
 
+    // Conectar en relación muchos a muchos
+    await prisma.project.update({
+      where: { id: groupId },
+      data: {
+        members: {
+          connect: userIds.map((id: string) => ({ id }))
+        }
+      }
+    })
+
+    // Mantener compatibilidad con campo legado si no tenía ningún grupo
     await prisma.user.updateMany({
-      where: { id: { in: userIds } },
+      where: { id: { in: userIds }, projectId: null },
       data: { projectId: groupId }
     })
 
@@ -52,17 +83,17 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const session = await assertAuth()
-  if (!session) {
-    return NextResponse.json({ error: "Acceso denegado" }, { status: 403 })
-  }
-
   try {
     const body = await req.json()
     const { groupId, userIds, action } = body
 
-    // Soporte para eliminar grupo completo vía API REST
+    // Soporte para eliminar grupo completo vía API REST (solo administradores)
     if (action === "deleteGroup" && groupId) {
+      const adminSession = await assertAuth()
+      if (!adminSession) {
+        return NextResponse.json({ error: "Acceso denegado: Solo administradores pueden eliminar un grupo." }, { status: 403 })
+      }
+
       await prisma.user.updateMany({
         where: { projectId: groupId },
         data: { projectId: null }
@@ -87,30 +118,49 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
+    const session = await assertAuth(groupId)
+    if (!session) {
+      return NextResponse.json({ error: "Acceso denegado: Solo administradores o líderes del grupo pueden remover integrantes." }, { status: 403 })
+    }
+
     if (!Array.isArray(userIds) || userIds.length === 0) {
       return NextResponse.json({ error: "Debes especificar los IDs de los usuarios a remover" }, { status: 400 })
     }
 
-    // 1. Quitar de members (projectId = null)
-    await prisma.user.updateMany({
-      where: { 
-        id: { in: userIds },
-        ...(groupId ? { projectId: groupId } : {})
-      },
-      data: { projectId: null }
-    })
-
-    // 2. Si se especificó groupId, también desconectar de supervisors y subLeaders
     if (groupId) {
+      // 1. Desconectar de members, supervisors y subLeaders de este grupo
       await prisma.project.update({
         where: { id: groupId },
         data: {
+          members: { disconnect: userIds.map((id: string) => ({ id })) },
           supervisors: { disconnect: userIds.map((id: string) => ({ id })) },
           subLeaders: { disconnect: userIds.map((id: string) => ({ id })) }
         }
       }).catch(err => {
-        console.warn("Notice on disconnecting supervisors/subLeaders in API:", err?.message)
+        console.warn("Notice on disconnecting members/supervisors in API:", err?.message)
       })
+
+      // 2. Si el projectId legado era este grupo, reasignar a otro restante
+      const usersToReassign = await prisma.user.findMany({
+        where: { id: { in: userIds }, projectId: groupId },
+        select: { id: true, projects: { select: { id: true }, take: 1 } }
+      })
+      for (const u of usersToReassign) {
+        await prisma.user.update({
+          where: { id: u.id },
+          data: { projectId: u.projects[0]?.id || null }
+        })
+      }
+    } else {
+      for (const userId of userIds) {
+        await prisma.user.update({
+          where: { id: userId },
+          data: {
+            projects: { set: [] },
+            projectId: null
+          }
+        })
+      }
     }
 
     await createAuditLog({
@@ -132,17 +182,17 @@ export async function DELETE(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const session = await assertAuth()
-  if (!session) {
-    return NextResponse.json({ error: "Acceso denegado" }, { status: 403 })
-  }
-
   try {
     const body = await req.json()
     const { groupId, supervisorIds = [], subLeaderIds = [] } = body
 
     if (!groupId) {
       return NextResponse.json({ error: "Falta groupId" }, { status: 400 })
+    }
+
+    const session = await assertAuth(groupId)
+    if (!session) {
+      return NextResponse.json({ error: "Acceso denegado: Solo administradores o líderes del grupo pueden gestionar el liderazgo." }, { status: 403 })
     }
 
     const updated = await prisma.project.update({

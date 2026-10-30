@@ -438,3 +438,158 @@ export function deduplicateHolidays<T extends {
     return dateA - dateB
   })
 }
+
+// Diccionario bilingüe para nombres de días feriados oficiales
+export const HOLIDAY_TRANSLATIONS: Record<string, { en: string; es: string }> = {
+  rd_ano_nuevo: {
+    es: "Año Nuevo",
+    en: "New Year's Day"
+  },
+  rd_santos_reyes: {
+    es: "Día de los Santos Reyes",
+    en: "Epiphany / Three Kings Day"
+  },
+  rd_altagracia: {
+    es: "Día de Nuestra Señora de la Altagracia",
+    en: "Our Lady of Altagracia Day"
+  },
+  rd_duarte: {
+    es: "Día del Patricio Juan Pablo Duarte",
+    en: "Duarte's Day"
+  },
+  rd_independencia: {
+    es: "Día de la Independencia Nacional",
+    en: "National Independence Day"
+  },
+  rd_viernes_santo: {
+    es: "Viernes Santo",
+    en: "Good Friday"
+  },
+  rd_trabajo: {
+    es: "Día Internacional del Trabajo",
+    en: "International Labor Day"
+  },
+  rd_corpus_christi: {
+    es: "Corpus Christi",
+    en: "Corpus Christi"
+  },
+  rd_restauracion: {
+    es: "Día de la Restauración de la República",
+    en: "Restoration Day"
+  },
+  rd_mercedes: {
+    es: "Día de Nuestra Señora de las Mercedes",
+    en: "Our Lady of Mercedes Day"
+  },
+  rd_constitucion: {
+    es: "Día de la Constitución",
+    en: "Constitution Day"
+  },
+  rd_navidad: {
+    es: "Día de Navidad",
+    en: "Christmas Day"
+  },
+  us_new_year: {
+    es: "Año Nuevo (EE.UU.)",
+    en: "US New Year's Day"
+  },
+  us_mlk: {
+    es: "Día de Martin Luther King Jr.",
+    en: "US Martin Luther King Jr. Day"
+  },
+  us_presidents: {
+    es: "Día de los Presidentes",
+    en: "US Presidents' Day"
+  },
+  us_memorial: {
+    es: "Día de los Caídos (Memorial Day)",
+    en: "US Memorial Day"
+  },
+  us_juneteenth: {
+    es: "Día de la Emancipación (Juneteenth)",
+    en: "US Juneteenth National Independence Day"
+  },
+  us_independence: {
+    es: "Día de la Independencia de EE.UU.",
+    en: "US Independence Day (4th of July)"
+  },
+  us_labor: {
+    es: "Día del Trabajo (EE.UU.)",
+    en: "US Labor Day"
+  },
+  us_columbus: {
+    es: "Día de Colón / Pueblos Indígenas",
+    en: "US Columbus Day / Indigenous Peoples' Day"
+  },
+  us_veterans: {
+    es: "Día de los Veteranos",
+    en: "US Veterans Day"
+  },
+  us_thanksgiving: {
+    es: "Día de Acción de Gracias",
+    en: "US Thanksgiving Day"
+  },
+  us_christmas: {
+    es: "Navidad (EE.UU.)",
+    en: "US Christmas Day"
+  }
+}
+
+/**
+ * Traduce de forma dinámica el nombre de un feriado (incluyendo días feriados dominicanos y estadounidenses)
+ * según el idioma activo (es / en), preservando banderas y sufijos como "(Día trasladado)".
+ */
+export function getLocalizedHolidayTitle(title: string, locale: string = "es"): string {
+  if (!title || locale !== "en") return title
+
+  // Detectar prefijos comunes de banderas o país (ej. "🇩🇴 ", "🇺🇸 ", "DO ", "US ", "RD ")
+  let prefix = ""
+  let cleanTitle = title.trim()
+  const flagMatch = cleanTitle.match(/^([\u{1F1E6}-\u{1F1FF}]{2}\s*|[A-Za-z]{2}\s+)/u)
+  if (flagMatch) {
+    prefix = flagMatch[0]
+    cleanTitle = cleanTitle.substring(prefix.length).trim()
+  }
+
+  const prefixStr = prefix ? (prefix.trim() + " ") : ""
+  const isObserved = /d[íi]a trasladado|trasladado|observado/i.test(cleanTitle)
+
+  // Búsqueda por metadatos catalogados (incluyendo prefijo para desambiguar país)
+  const meta = getHolidayMetadata(`${prefixStr}${cleanTitle}`)
+  if (meta && meta.id && HOLIDAY_TRANSLATIONS[meta.id]) {
+    const enBase = HOLIDAY_TRANSLATIONS[meta.id].en
+    const suffix = isObserved ? " (Observed)" : ""
+    return `${prefixStr}${enBase}${suffix}`
+  }
+
+  // Traducción basada en patrones para feriados dominicanos y variantes
+  let localized = cleanTitle
+    .replace(/Día de la Constitución/gi, "Constitution Day")
+    .replace(/Día de los Santos Reyes/gi, "Epiphany / Three Kings Day")
+    .replace(/Santos Reyes/gi, "Three Kings Day")
+    .replace(/Día de Nuestra Señora de la Altagracia/gi, "Our Lady of Altagracia Day")
+    .replace(/Nuestra Señora de la Altagracia/gi, "Our Lady of Altagracia Day")
+    .replace(/Día del Patricio Juan Pablo Duarte/gi, "Duarte's Day")
+    .replace(/Día de Duarte/gi, "Duarte's Day")
+    .replace(/Día de la Independencia Nacional/gi, "National Independence Day")
+    .replace(/Día de la Independencia/gi, "Independence Day")
+    .replace(/Viernes Santo/gi, "Good Friday")
+    .replace(/Día Internacional del Trabajo/gi, "International Labor Day")
+    .replace(/Día del Trabajo/gi, "Labor Day")
+    .replace(/Corpus Christi/gi, "Corpus Christi")
+    .replace(/Día de la Restauración de la República/gi, "Restoration Day")
+    .replace(/Día de la Restauración/gi, "Restoration Day")
+    .replace(/Día de Nuestra Señora de las Mercedes/gi, "Our Lady of Mercedes Day")
+    .replace(/Nuestra Señora de las Mercedes/gi, "Our Lady of Mercedes Day")
+    .replace(/Día de Navidad/gi, "Christmas Day")
+    .replace(/Navidad/gi, "Christmas")
+    .replace(/Año Nuevo/gi, "New Year's Day")
+    .replace(/\(Día trasladado\)/gi, "(Observed)")
+    .replace(/\(Día de los Veteranos\)/gi, "")
+    .replace(/\(Día de Acción de Gracias\)/gi, "")
+    .replace(/\(Año Nuevo US\)/gi, "")
+    .replace(/\(Día de los Caídos\)/gi, "")
+    .trim()
+
+  return `${prefixStr}${localized}`
+}

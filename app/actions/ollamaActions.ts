@@ -233,94 +233,162 @@ Contenido: ${content}
 
 Devuelve el resultado en formato Markdown corto y conciso.`
 
-    if (globalConfig) {
-      const response = await fetch(`${globalConfig.url}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: globalConfig.modelName,
-          prompt,
-          stream: false
-        })
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        return { success: true, summary: data.response }
-      }
-    }
-
+    // 1. Prioridad: NVIDIA NIM AI
     if (process.env.NVIDIA_API_KEY) {
-      const nvidiaResp = await generateNvidiaResponse(prompt)
-      return { success: true, summary: nvidiaResp }
-    }
-
-    throw new Error("Ollama api error")
-  } catch (e: any) {
-    if (prompt && process.env.NVIDIA_API_KEY) {
       try {
         const nvidiaResp = await generateNvidiaResponse(prompt)
-        return { success: true, summary: nvidiaResp }
+        if (nvidiaResp && nvidiaResp.trim()) {
+          return { success: true, summary: nvidiaResp.trim() }
+        }
       } catch (nErr: any) {
-        console.error("NVIDIA fallback failed in summarizeDocument:", nErr)
+        console.warn("[SummarizeDoc] NVIDIA error, intentando Ollama:", nErr.message)
       }
     }
+
+    // 2. Fallback: Ollama local con timeout para no congelar
+    if (globalConfig && globalConfig.url) {
+      try {
+        const response = await fetch(`${globalConfig.url}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: globalConfig.modelName,
+            prompt,
+            stream: false
+          }),
+          signal: AbortSignal.timeout(4000)
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          return { success: true, summary: data.response }
+        }
+      } catch (ollamaErr: any) {
+        console.warn("[SummarizeDoc] Ollama no disponible:", ollamaErr.message)
+      }
+    }
+
+    throw new Error("No hay un servicio de IA disponible para generar el resumen.")
+  } catch (e: any) {
     return { error: e.message || "Error resumiendo" }
   }
 }
 
-export async function generateTextWithAI(promptType: "POST" | "RECOGNITION", userPrompt: string) {
+export async function generateTextWithAI(promptType: "POST" | "RECOGNITION", userPrompt: string, tone?: string) {
   const session = await getServerSession(authOptions)
   if (!session || !session.user) return { error: "No autorizado" }
 
+  const trimmedPrompt = (userPrompt || "").trim()
+  if (!trimmedPrompt) {
+    return { error: "Por favor proporciona una idea o palabras clave para redactar." }
+  }
+
   let fullPrompt = ""
   try {
-    const configs = await (prisma as any).ollamaConfig.findMany();
-    const globalConfig = configs.find((c: any) => c.isGlobal) || configs[0];
-    if (!globalConfig && !process.env.NVIDIA_API_KEY) return { error: "No hay configuración de IA disponible" }
-
     let systemPrompt = ""
     if (promptType === "POST") {
-      systemPrompt = `Eres un asistente de redacción corporativo. El usuario quiere publicar un anuncio o comunicado en la intranet. Toma su idea informal y redacta un comunicado profesional, claro y empático. No agregues preámbulos, solo devuelve el texto final.`
+      systemPrompt = `Eres el asistente corporativo oficial de redacción de comunicados para la intranet de Telecom Networks.
+Tu función es ayudar a colaboradores y líderes a redactar publicaciones de alta calidad, claras, profesionales y atractivas.
+- Si el usuario proporciona pocas palabras o una idea básica, expándela en un comunicado corporativo completo con título destacado, cuerpo bien estructurado y cierre cordial.
+- Utiliza emojis apropiados según el contexto para que sea dinámico y agradable de leer.
+${tone ? `- Aplica un tono ${tone}.` : "- Utiliza un tono profesional, claro, colaborativo y positivo."}
+- NO agregues introducciones conversacionales ("¡Hola!", "Aquí tienes:", etc.) ni notas al pie. Devuelve ÚNICAMENTE el texto final listo para publicar.`
     } else {
-      systemPrompt = `Eres un asistente de Recursos Humanos. El usuario quiere dar un reconocimiento (Kudo) a un compañero. Toma su idea y redacta un mensaje de reconocimiento motivador, profesional y breve (1 o 2 párrafos). No agregues preámbulos, solo devuelve el texto final.`
+      systemPrompt = `Eres un asistente de Recursos Humanos de Telecom Networks especializado en reconocimiento laboral (Kudos).
+Toma la idea del usuario y redacta un mensaje de felicitación y agradecimiento cálido, motivador y profesional (1 o 2 párrafos).
+${tone ? `- Aplica un tono ${tone}.` : "- Utiliza un tono motivador, sincero y profesional."}
+- NO agregues introducciones ni notas. Devuelve ÚNICAMENTE el mensaje de reconocimiento final.`
     }
 
-    fullPrompt = `${systemPrompt}\n\nIdea del usuario: ${userPrompt}\nTexto final:`
+    fullPrompt = `${systemPrompt}\n\nInstrucción o idea del colaborador:\n"${trimmedPrompt}"\n\nPublicación final redactada:`
 
-    if (globalConfig) {
-      const response = await fetch(`${globalConfig.url}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: globalConfig.modelName,
-          prompt: fullPrompt,
-          stream: false
-        })
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        return { success: true, generatedText: data.response }
-      }
-    }
-
-    if (process.env.NVIDIA_API_KEY) {
-      const nvidiaResp = await generateNvidiaResponse(fullPrompt)
-      return { success: true, generatedText: nvidiaResp }
-    }
-
-    throw new Error("Ollama api error")
-  } catch (e: any) {
-    if (fullPrompt && process.env.NVIDIA_API_KEY) {
+    // 1. MOTOR PRINCIPAL: NVIDIA NIM (Llama 3.2 11B Vision / Instruct)
+    const nvidiaKey = process.env.NVIDIA_API_KEY
+    if (nvidiaKey && nvidiaKey.trim()) {
       try {
-        const nvidiaResp = await generateNvidiaResponse(fullPrompt)
-        return { success: true, generatedText: nvidiaResp }
+        console.log("[AI Assistant] Solicitando redacción a NVIDIA NIM...")
+        const nvidiaResp = await generateNvidiaResponse(
+          fullPrompt,
+          process.env.NVIDIA_MODEL || 'meta/llama-3.2-11b-vision-instruct',
+          systemPrompt
+        )
+        if (nvidiaResp && nvidiaResp.trim()) {
+          return { success: true, generatedText: nvidiaResp.trim(), provider: "NVIDIA" }
+        }
       } catch (nErr: any) {
-        console.error("NVIDIA fallback failed in generateTextWithAI:", nErr)
+        console.warn("[AI Assistant] Error en llamada a NVIDIA NIM:", nErr.message)
       }
     }
-    return { error: e.message || "Error generando texto" }
+
+    // 2. MOTOR SECUNDARIO: Configuración de API en base de datos (si existe y está activa)
+    try {
+      const activeApi = await prisma.apiConfiguration.findFirst({
+        where: { isActive: true }
+      })
+      if (activeApi && activeApi.apiKey) {
+        const apiKey = activeApi.apiKey.trim()
+        const model = process.env.NVIDIA_MODEL || 'meta/llama-3.2-11b-vision-instruct'
+        const endpoint = activeApi.baseUrl || 'https://integrate.api.nvidia.com/v1/chat/completions'
+        
+        const resp = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: trimmedPrompt }
+            ],
+            temperature: 0.3,
+            max_tokens: 1024
+          }),
+          signal: AbortSignal.timeout(8000)
+        })
+        if (resp.ok) {
+          const data = await resp.json()
+          const text = data.choices?.[0]?.message?.content?.trim()
+          if (text) {
+            return { success: true, generatedText: text, provider: activeApi.name || "API DB" }
+          }
+        }
+      }
+    } catch (dbApiErr: any) {
+      console.warn("[AI Assistant] Error probando API de BD:", dbApiErr.message)
+    }
+
+    // 3. MOTOR DE CONTINGENCIA: Ollama local (con timeout estricto de 3.5s para no bloquear la app si está offline)
+    try {
+      const configs = await (prisma as any).ollamaConfig.findMany()
+      const globalConfig = configs.find((c: any) => c.isGlobal) || configs[0]
+      if (globalConfig && globalConfig.url) {
+        const response = await fetch(`${globalConfig.url}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: globalConfig.modelName || 'llama3.2',
+            prompt: fullPrompt,
+            stream: false
+          }),
+          signal: AbortSignal.timeout(3500)
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.response) {
+            return { success: true, generatedText: data.response.trim(), provider: "Ollama" }
+          }
+        }
+      }
+    } catch (ollamaErr: any) {
+      console.warn("[AI Assistant] Ollama local no disponible:", ollamaErr.message)
+    }
+
+    return { error: "No se pudo conectar a los servicios de IA (NVIDIA NIM u Ollama). Por favor verifica la conexión." }
+  } catch (e: any) {
+    return { error: e.message || "Error inesperado al generar el texto" }
   }
 }
 
@@ -332,7 +400,6 @@ export async function generateDailySummary() {
   try {
     const configs = await (prisma as any).ollamaConfig.findMany();
     const globalConfig = configs.find((c: any) => c.isGlobal) || configs[0];
-    if (!globalConfig && !process.env.NVIDIA_API_KEY) return { error: "No hay configuración de IA disponible" }
 
     // Fetch context data
     const posts = await prisma.post.findMany({
@@ -357,38 +424,43 @@ ${docs.map(d => `- ${d.title}`).join('\n')}
 
 Escribe un resumen en primera persona del plural (nosotros) de forma natural, sin decir "Aquí tienes los datos" o "Publicaciones recientes". Dirígete al equipo en tono corporativo pero amigable.`
 
-    if (globalConfig) {
-      const response = await fetch(`${globalConfig.url}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: globalConfig.modelName,
-          prompt: prompt,
-          stream: false
-        })
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        return { success: true, summary: data.response }
-      }
-    }
-
+    // 1. Prioridad: NVIDIA NIM
     if (process.env.NVIDIA_API_KEY) {
-      const nvidiaResp = await generateNvidiaResponse(prompt)
-      return { success: true, summary: nvidiaResp }
-    }
-
-    throw new Error("Ollama api error")
-  } catch (e: any) {
-    if (prompt && process.env.NVIDIA_API_KEY) {
       try {
         const nvidiaResp = await generateNvidiaResponse(prompt)
-        return { success: true, summary: nvidiaResp }
+        if (nvidiaResp && nvidiaResp.trim()) {
+          return { success: true, summary: nvidiaResp.trim() }
+        }
       } catch (nErr: any) {
-        console.error("NVIDIA fallback failed in generateDailySummary:", nErr)
+        console.warn("[AI DailySummary] Error con NVIDIA, probando Ollama:", nErr.message)
       }
     }
+
+    // 2. Fallback: Ollama local
+    if (globalConfig && globalConfig.url) {
+      try {
+        const response = await fetch(`${globalConfig.url}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: globalConfig.modelName,
+            prompt: prompt,
+            stream: false
+          }),
+          signal: AbortSignal.timeout(3500)
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          return { success: true, summary: data.response }
+        }
+      } catch (e: any) {
+        console.warn("[AI DailySummary] Ollama no disponible:", e.message)
+      }
+    }
+
+    return { error: "Servicio de IA no disponible en este momento." }
+  } catch (e: any) {
     return { error: e.message || "Error generando resumen" }
   }
 }

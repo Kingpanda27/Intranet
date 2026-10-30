@@ -1,22 +1,29 @@
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
+import { cookies } from "next/headers"
 import { PeopleSearch } from "@/app/components/Social/PeopleSearch"
 import { SocialStatCards } from "@/app/components/Social/SocialStatCards"
 import { prisma } from "@/lib/prisma"
 import { Users } from "lucide-react"
+import { translate } from "@/lib/i18n/dictionaries"
+import { Locale } from "@/lib/i18n/types"
 
 export default async function SocialPage() {
   const session = await getServerSession(authOptions)
   if (!session?.user) redirect("/")
 
+  const cookieStore = await cookies()
+  const localeCookie = cookieStore.get("intranet_locale")?.value as Locale | undefined
+  const locale: Locale = (localeCookie === "en" || localeCookie === "es") ? localeCookie : "es"
+
   const currentUserId = (session.user as any).id
 
   const [totalUsers, myFriends, pendingCount] = await Promise.all([
-    prisma.user.count(),
+    prisma.user.count({ where: { isActive: true } }),
     prisma.friendship.count({
       where: {
-        status: "ACCEPTED",
+        status: { in: ["ACCEPTED", "ACCEP ED"] },
         OR: [{ senderId: currentUserId }, { receiverId: currentUserId }]
       }
     }),
@@ -32,10 +39,10 @@ export default async function SocialPage() {
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
           <div>
             <h1 style={{ fontSize: "2rem", fontWeight: 800, letterSpacing: "-0.03em", marginBottom: "0.35rem" }}>
-              Centro Social
+              {translate(locale, "social.title")}
             </h1>
             <p style={{ margin: 0, fontSize: "0.95rem" }}>
-              Conecta con tus compañeros y expande tu red interna.
+              {translate(locale, "social.subtitle")}
             </p>
           </div>
         </div>
@@ -74,13 +81,13 @@ export default async function SocialPage() {
               textTransform: "uppercase", color: "hsl(var(--primary))",
               display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "1rem"
             }}>
-              <Users size={13} /> ¿Cómo conectar?
+              <Users size={13} /> {translate(locale, "social.howToConnect")}
             </h4>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
               {[
-                { step: "1", text: "Busca a un compañero por nombre o rol." },
-                { step: "2", text: "Haz clic en «Conectar» para enviarle una solicitud." },
-                { step: "3", text: "Una vez aceptada, podrás chatear directamente." },
+                { step: "1", text: translate(locale, "social.step1") },
+                { step: "2", text: translate(locale, "social.step2") },
+                { step: "3", text: translate(locale, "social.step3") },
               ].map(({ step, text }) => (
                 <div key={step} style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
                   <div style={{
@@ -105,16 +112,16 @@ export default async function SocialPage() {
               textTransform: "uppercase", color: "hsl(var(--muted-foreground))",
               marginBottom: "0.875rem"
             }}>
-              Roles en la empresa
+              {translate(locale, "social.companyRoles")}
             </h4>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               {[
-                { label: "Manager",    color: "#f97316", bg: "rgba(249,115,22,0.1)" },
-                { label: "Supervisor", color: "#a855f7", bg: "rgba(168,85,247,0.1)" },
-                { label: "Technology", color: "#06b6d4", bg: "rgba(6,182,212,0.1)" },
-                { label: "IT Manager", color: "#3b82f6", bg: "rgba(59,130,246,0.1)" },
-                { label: "RRHH",       color: "#10b981", bg: "rgba(16,185,129,0.1)" },
-                { label: "Empleado",   color: "#6b7280", bg: "rgba(107,114,128,0.1)" },
+                { key: "MANAGER", label: translate(locale, "social.roles.MANAGER" as any) || "Manager", color: "#f97316" },
+                { key: "SUPERVISOR", label: translate(locale, "social.roles.SUPERVISOR" as any) || "Supervisor", color: "#a855f7" },
+                { key: "TECHNOLOGY", label: translate(locale, "social.roles.TECHNOLOGY" as any) || "Technology", color: "#06b6d4" },
+                { key: "IT_MANAGER", label: translate(locale, "social.roles.IT_MANAGER" as any) || "IT Manager", color: "#3b82f6" },
+                { key: "HR", label: translate(locale, "social.roles.HR" as any) || "HR", color: "#10b981" },
+                { key: "EMPLOYEE", label: translate(locale, "social.roles.EMPLOYEE" as any) || "Employee", color: "#6b7280" },
               ].map(({ label, color }) => (
                 <div key={label} style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
                   <span style={{

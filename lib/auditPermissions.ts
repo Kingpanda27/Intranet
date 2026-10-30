@@ -1,23 +1,35 @@
+import { SUPERADMIN_EMAILS, isSuperAdminEmail } from "@/lib/auth"
+
 /**
  * Permisos y autorización para visualización y consulta de Logs de Auditoría
  * 
  * Acceso permitido a:
- * 1. Supervisores / Team Leads
- * 2. Managers
- * 3. Tecnología / IT (TECHNOLOGY, TECHNOLOGY_ADMIN, IT_MANAGER)
- * 4. Integrantes del equipo 'AI & Software Development'
- * 5. Ivan Reyes (Administrador Maestro)
+ * 1. Super Administradores (Ivan Reyes, Rafael Ureña, Pablo Brun)
+ * 2. Tecnología / IT (TECHNOLOGY, TECHNOLOGY_ADMIN, IT_MANAGER)
+ * 3. Supervisores / Team Leads
+ * 4. Managers de Operaciones
+ * 5. Integrantes del equipo 'AI & Software Development' / Developers
+ * 
+ * Acceso DENEGADO a:
+ * - Rol ADMIN (Rose Estevez, Ivana Lowe, Maria Peralta)
+ * - Agentes / Usuarios generales
  */
 
 export function canViewAuditLogs(user: any): boolean {
   if (!user) return false
 
   const email = String(user.email || '').toLowerCase().trim()
-  if (email === 'ireyes@tnoutsourcing.com' || user.isSuperAdmin) {
+  if (isSuperAdminEmail(email) || user.isSuperAdmin) {
     return true
   }
 
   const role = String(user.role || '').toUpperCase().trim()
+
+  // Rol ADMIN tiene prohibido explícitamente el acceso a Logs de Auditoría
+  if (role === 'ADMIN') {
+    return false
+  }
+
   const allowedRoles = [
     'SUPERVISOR',
     'TEAM_LEAD',

@@ -32,7 +32,7 @@ function chunkText(text: string, maxCharLength = 1500) {
 export async function generateEmbedding(text: string): Promise<number[] | null> {
   try {
     const configs = await getOllamaConfigs()
-    const globalConfig = configs.find(c => c.isGlobal) || configs[0]
+    const globalConfig = configs.find((c: any) => c.isGlobal) || configs[0]
     if (!globalConfig) return null
 
     const response = await fetch(`${globalConfig.url}/api/embeddings`, {

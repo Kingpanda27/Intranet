@@ -10,6 +10,7 @@ export type Role =
   | "HR"
   | "TECHNOLOGY"
   | "TECHNOLOGY_ADMIN"
+  | "ADMIN"
   | "IT_MANAGER"
   | "NO_ROLE"
 
@@ -42,6 +43,7 @@ export const ROLE_HIERARCHY: Record<string, number> = {
   MANAGER: 30,
   HR: 35,
   TECHNOLOGY: 40,
+  ADMIN: 45,
   IT_MANAGER: 50,
   TECHNOLOGY_ADMIN: 50,
 }
@@ -62,6 +64,13 @@ const ROLE_PERMISSIONS: Record<Role, Set<Permission>> = {
     "posts:delete", "posts:feature",
     "vacations:approve", "vacations:create_on_behalf",
     "hr:manage", "it:manage", "admin:full", "config:manage"
+  ]),
+  ADMIN: new Set([
+    "users:create", "users:edit", "users:delete", "users:view_all",
+    "documents:create", "documents:read", "documents:delete",
+    "posts:delete", "posts:feature",
+    "vacations:approve", "vacations:create_on_behalf",
+    "hr:manage", "admin:full"
   ]),
   TECHNOLOGY: new Set([
     "users:create", "users:edit", "users:delete", "users:view_all",
@@ -107,10 +116,19 @@ const ROLE_PERMISSIONS: Record<Role, Set<Permission>> = {
   NO_ROLE: new Set([])
 }
 
-const SUPERADMIN_EMAIL = (process.env.SUPERADMIN_EMAIL || "ireyes@tnoutsourcing.com").toLowerCase().trim()
+export const SUPERADMIN_EMAILS = [
+  "ireyes@tnoutsourcing.com",
+  "rurena@tnoutsourcing.com",
+  "pbrun@tnoutsourcing.com"
+]
+
+export function isSuperAdminEmail(email?: string | null): boolean {
+  if (!email) return false
+  return SUPERADMIN_EMAILS.includes(email.toLowerCase().trim())
+}
 
 export function hasPermission(role: Role | string, permission: Permission, userEmail?: string): boolean {
-  if (userEmail && userEmail.toLowerCase().trim() === SUPERADMIN_EMAIL) {
+  if (userEmail && isSuperAdminEmail(userEmail)) {
     return true
   }
   const cleanRole = (role || "").trim() as Role
@@ -129,7 +147,7 @@ export async function requireAuth() {
   }
   const rawRole = (session.user as any).role || "USER"
   const cleanRole = String(rawRole).trim() as Role
-  const isMaster = (session.user as any).email?.toLowerCase().trim() === SUPERADMIN_EMAIL
+  const isMaster = isSuperAdminEmail((session.user as any).email) || Boolean((session.user as any).isSuperAdmin)
   const user = {
     ...(session.user as any),
     role: cleanRole,
@@ -144,7 +162,7 @@ export async function requireAuth() {
 
 export async function requirePermission(permission: Permission) {
   const user = await requireAuth()
-  if (user.role === "IT_MANAGER" || user.role === "TECHNOLOGY_ADMIN" || user.email?.toLowerCase().trim() === SUPERADMIN_EMAIL || user.isSuperAdmin) {
+  if (user.role === "IT_MANAGER" || user.role === "TECHNOLOGY_ADMIN" || isSuperAdminEmail(user.email) || user.isSuperAdmin) {
     return user
   }
   if (!hasPermission(user.role, permission, user.email)) {

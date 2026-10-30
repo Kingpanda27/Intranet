@@ -80,6 +80,8 @@ _historical_sql_backups/
 _legacy_intranet/
 prisma/*.db*
 SERVER_MIGRATION_PACKAGE/
+storage/
+/storage/
 
 # --- Configuración Docker Local ---
 docker-compose.override.yml

@@ -1,5 +1,5 @@
 import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { authOptions, isSuperAdminEmail } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { getMyRequests, getHolidays, getEligibleEmployeesForTimeOff } from "@/app/actions/timeOffActions"
 import { VacationForm } from "@/app/components/Vacations/VacationForm"
@@ -10,7 +10,16 @@ import { prisma } from "@/lib/prisma"
 import { CalendarDays, Briefcase, Calendar as CalendarIcon, Info } from "lucide-react"
 import { deduplicateHolidays } from "@/lib/holidayData"
 
+import { cookies } from "next/headers"
+import { translate } from "@/lib/i18n/dictionaries"
+import { Locale, TranslationKey } from "@/lib/i18n/types"
+import styles from "./vacations.module.css"
+
 export default async function VacationsPage() {
+  const cookieStore = await cookies()
+  const locale = (cookieStore.get("intranet_locale")?.value || "es") as Locale
+  const t = (k: TranslationKey, params?: Record<string, string | number>) => translate(locale, k, params)
+
   const session = await getServerSession(authOptions)
   
   if (!session || !session.user) {
@@ -22,12 +31,25 @@ export default async function VacationsPage() {
     select: { 
       vacationBalance: true,
       role: true,
-      project: { select: { name: true } } 
+      project: { select: { name: true } },
+      projects: { select: { name: true } }
     }
   }) as any
-  const projectName = userDb?.project?.name || "Sin Grupo Asignado"
+  const projectName = (userDb?.projects && userDb.projects.length > 0)
+    ? userDb.projects.map((p: any) => p.name).join(", ")
+    : (userDb?.project?.name || "Sin Grupo Asignado")
   const balance = userDb?.vacationBalance || 0
-  const canManage = ["SUPERVISOR", "MANAGER", "IT_MANAGER", "HR", "TECHNOLOGY"].includes(userDb?.role)
+  const isMasterAdmin = isSuperAdminEmail(session.user?.email) || (session.user as any)?.isSuperAdmin
+  const canManage = [
+    "SUPERVISOR",
+    "TEAM_LEAD",
+    "MANAGER",
+    "IT_MANAGER",
+    "HR",
+    "TECHNOLOGY",
+    "TECHNOLOGY_ADMIN",
+    "ADMIN"
+  ].includes(userDb?.role) || isMasterAdmin
 
   const eligibleEmployees = canManage ? await getEligibleEmployeesForTimeOff() : []
 
@@ -63,28 +85,28 @@ export default async function VacationsPage() {
     .reduce((sum, r) => sum + (r.requestedDays || 0), 0)
 
   return (
-    <main className="container animate-in" style={{ paddingTop: "2.5rem", paddingBottom: "4rem", maxWidth: "1560px", width: "100%" }}>
-      <header style={{ marginBottom: "2.5rem" }}>
-        <h1 style={{ fontSize: "2rem", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+    <main className={`${styles.vacationsContainer} animate-in`}>
+      <header className={styles.header}>
+        <h1 className={styles.title}>
           <CalendarDays size={32} color="hsl(var(--primary))" />
-          Vacaciones y Permisos
+          {t("vacations.title")}
         </h1>
-        <p style={{ color: "hsl(var(--muted-foreground))" }}>Gestiona, programa y consulta tus solicitudes de tiempo libre corporativo.</p>
+        <p className={styles.subtitle}>{t("vacations.subtitle")}</p>
       </header>
 
-      {/* Fila 1: Métricas Principales */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "2.5rem" }}>
-        <div className="card glass" style={{ padding: "1.25rem", borderRadius: "1rem", border: "1px solid hsl(var(--border))", display: "flex", flexDirection: "column" }}>
-          <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", fontWeight: 700, textTransform: "uppercase" }}>Días Disponibles</div>
-          <div style={{ fontSize: "2rem", fontWeight: 800, color: "hsl(var(--primary))", marginTop: "0.5rem" }}>{balance}</div>
+      {/* Fila 1: Balance y Métricas Rápidas */}
+      <div className={styles.metricsGrid}>
+        <div className={styles.metricCard}>
+          <div className={styles.metricLabel}>{t("vacations.availableDays")}</div>
+          <div className={styles.metricValue} style={{ color: "hsl(var(--primary))" }}>{balance}</div>
         </div>
-        <div className="card glass" style={{ padding: "1.25rem", borderRadius: "1rem", border: "1px solid hsl(var(--border))", display: "flex", flexDirection: "column" }}>
-          <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", fontWeight: 700, textTransform: "uppercase" }}>Días en Proceso</div>
-          <div style={{ fontSize: "2rem", fontWeight: 800, color: "#f97316", marginTop: "0.5rem" }}>{pendingDays}</div>
+        <div className={styles.metricCard}>
+          <div className={styles.metricLabel}>{t("vacations.pendingDays")}</div>
+          <div className={styles.metricValue} style={{ color: "#f97316" }}>{pendingDays}</div>
         </div>
-        <div className="card glass" style={{ padding: "1.25rem", borderRadius: "1rem", border: "1px solid hsl(var(--border))", display: "flex", flexDirection: "column" }}>
-          <div style={{ fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", fontWeight: 700, textTransform: "uppercase" }}>Solicitudes Aprobadas</div>
-          <div style={{ fontSize: "2rem", fontWeight: 800, color: "#10b981", marginTop: "0.5rem" }}>
+        <div className={styles.metricCard}>
+          <div className={styles.metricLabel}>{t("vacations.approvedRequests")}</div>
+          <div className={styles.metricValue} style={{ color: "#10b981" }}>
             {requests.filter((r: any) => r.status === "APPROVED").length}
           </div>
         </div>
@@ -93,17 +115,10 @@ export default async function VacationsPage() {
         <UpcomingHolidayCard upcomingHolidays={holidayEvents as any} />
       </div>
 
-      {/* Fila 2: Formulario (Principal) y Widgets Lateral */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "2rem", alignItems: "flex-start", marginBottom: "2.5rem" }} className="vacations-grid">
-        <style dangerouslySetInnerHTML={{__html: `
-          @media (min-width: 1024px) {
-            .vacations-grid {
-              grid-template-columns: 1fr 380px !important;
-            }
-          }
-        `}} />
-        {/* Main Content Area (Form) */}
-        <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+      {/* Fila 2 & 3: Distribución Responsiva por Breakpoints */}
+      <div className={styles.layoutGrid}>
+        {/* Columna Principal: Formulario y Selector de Tipos (Jerarquía 2 en compactas) */}
+        <section className={styles.formArea}>
           <VacationForm 
             projectName={projectName} 
             balance={balance} 
@@ -111,26 +126,25 @@ export default async function VacationsPage() {
             canCreateForOthers={canManage}
             employees={eligibleEmployees}
           />
-        </div>
+        </section>
 
-        {/* Sidebar Area */}
-        <aside style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          
+        {/* Columna Lateral: Mi Perfil, Feriados y Políticas */}
+        <aside className={styles.sidebarArea}>
           {/* User Info & Balance Summary Widget */}
-          <div className="card glass" style={{ padding: "1.5rem", borderRadius: "1.25rem", border: "1px solid hsl(var(--border))" }}>
+          <div className={styles.sidebarCard}>
             <h3 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <Briefcase size={18} color="hsl(var(--primary))" />
-              Mi Perfil & Balance
+              {t("vacations.myProfileBalance")}
             </h3>
             <div style={{ marginBottom: "1.25rem", paddingBottom: "1.25rem", borderBottom: "1px solid hsl(var(--border) / 0.5)" }}>
-              <div style={{ fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Departamento</div>
+              <div style={{ fontSize: "0.7rem", color: "hsl(var(--muted-foreground))", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>{t("vacations.department")}</div>
               <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "hsl(var(--foreground))" }}>{projectName}</div>
             </div>
             
             <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "0.85rem", color: "hsl(var(--muted-foreground))", fontWeight: 700 }}>Saldo Neto Restante</span>
-                <span style={{ fontSize: "1.25rem", fontWeight: 800, color: "#10b981" }}>{balance - pendingDays} <span style={{fontSize: "0.75rem", fontWeight: 600}}>días</span></span>
+                <span style={{ fontSize: "0.85rem", color: "hsl(var(--muted-foreground))", fontWeight: 700 }}>{t("vacations.netRemainingBalance")}</span>
+                <span style={{ fontSize: "1.25rem", fontWeight: 800, color: "#10b981" }}>{balance - pendingDays} <span style={{fontSize: "0.75rem", fontWeight: 600}}>{t("vacations.daysUnit")}</span></span>
               </div>
             </div>
           </div>
@@ -139,26 +153,26 @@ export default async function VacationsPage() {
           <UpcomingHolidaysSidebarWidget upcomingHolidays={holidayEvents as any} />
 
           {/* Policies Widget */}
-          <div className="card glass" style={{ padding: "1.5rem", borderRadius: "1.25rem", border: "1px solid hsl(var(--primary) / 0.2)", backgroundColor: "hsl(var(--primary) / 0.03)" }}>
+          <div className={styles.policiesCard}>
             <h3 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem", color: "hsl(var(--primary))" }}>
               <Info size={18} />
-              Políticas y Normas (Ley de Rep. Dom.)
+              {t("vacations.policiesTitle")}
             </h3>
             <ul style={{ paddingLeft: "1.2rem", margin: 0, fontSize: "0.8rem", color: "hsl(var(--muted-foreground))", display: "flex", flexDirection: "column", gap: "0.65rem" }}>
-              <li>Las vacaciones deben solicitarse con al menos <strong>25 días de anticipación</strong>.</li>
-              <li>De 1 a 5 años en la empresa corresponden <strong>14 días laborables</strong> de vacaciones (Art. 177).</li>
-              <li>A partir de 5 años continuos corresponden <strong>18 días laborables</strong> de vacaciones.</li>
-              <li>Los permisos médicos requieren la <strong>carga obligatoria</strong> de un certificado válido.</li>
-              <li>Las salidas tempranas están limitadas a un máximo de <strong>4 horas</strong>.</li>
+              <li>{t("vacations.policy1")}</li>
+              <li>{t("vacations.policy2")}</li>
+              <li>{t("vacations.policy3")}</li>
+              <li>{t("vacations.policy4")}</li>
+              <li>{t("vacations.policy5")}</li>
             </ul>
             <AssistantTriggerButton />
           </div>
         </aside>
-      </div>
 
-      {/* Fila 3: Historial de Solicitudes (Ancho Completo) */}
-      <div>
-        <VacationList requests={requests as any} />
+        {/* Fila / Sección Completa: Historial de Solicitudes (Jerarquía 3 en compactas) */}
+        <section className={styles.historyArea}>
+          <VacationList requests={requests as any} />
+        </section>
       </div>
     </main>
   )

@@ -51,14 +51,18 @@ export function GiveRecognitionModal({ onClose }: GiveRecognitionModalProps) {
   }
 
   const handleAIGenerate = async () => {
-    if (!message.trim()) return setError("Escribe unas palabras clave primero para que la IA redacte el mensaje.")
+    let idea = message.trim()
+    if (!idea) {
+      const typeLabel = type === "TEAMWORK" ? "trabajo en equipo" : type === "LEADERSHIP" ? "liderazgo" : type === "INNOVATION" ? "innovación" : "excelente desempeño y compañerismo"
+      idea = `Agradecer y felicitar por su gran ${typeLabel} y constante apoyo en el equipo`
+    }
     setError('')
     setGeneratingAI(true)
-    const result = await generateTextWithAI("RECOGNITION", message)
-    if (result.success) {
+    const result = await generateTextWithAI("RECOGNITION", idea)
+    if (result.success && result.generatedText) {
       setMessage(result.generatedText)
     } else {
-      setError(result.error)
+      setError(result.error || "Error generando reconocimiento")
     }
     setGeneratingAI(false)
   }
@@ -127,7 +131,7 @@ export function GiveRecognitionModal({ onClose }: GiveRecognitionModalProps) {
               <button 
                 type="button" 
                 onClick={handleAIGenerate}
-                disabled={generatingAI || !message.trim()}
+                disabled={generatingAI}
                 className="btn btn-surface hover-scale" 
                 style={{ padding: "0.3rem 0.75rem", borderRadius: "99px", color: "hsl(var(--primary))", border: "1px solid hsl(var(--primary)/0.2)", display: "flex", gap: "0.4rem", alignItems: "center", fontSize: "0.75rem", fontWeight: 700 }}
               >
