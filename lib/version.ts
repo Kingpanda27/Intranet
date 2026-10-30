@@ -1,6 +1,4 @@
-import packageJson from "../package.json"
-
 /**
- * Versión actual de la Intranet Corporativa sincronizada automáticamente desde package.json
+ * Versión actual de la Intranet Corporativa
  */
-export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || packageJson.version || "1.4.0"
+export const APP_VERSION = "1.4.0"

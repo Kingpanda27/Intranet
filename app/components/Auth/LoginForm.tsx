@@ -1,19 +1,14 @@
 "use client"
 
 import { signIn } from "next-auth/react"
-import { AlertCircle, Lock, Mail, Eye, EyeOff } from "lucide-react"
+import { AlertCircle } from "lucide-react"
 import { useState } from "react"
 import { useTheme } from "@/app/Providers"
 import { APP_VERSION } from "@/lib/version"
 
 export function LoginForm() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [loading, setLoading] = useState(false)
   const [loadingMs, setLoadingMs] = useState(false)
-  const [showCredentials, setShowCredentials] = useState(false)
   const [error, setError] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
   const { theme } = useTheme()
 
   const handleMicrosoftSignIn = async () => {
@@ -25,30 +20,6 @@ export function LoginForm() {
       console.error("Error al iniciar sesión con Microsoft:", err)
       setError("Error al conectar con Microsoft Entra ID.")
       setLoadingMs(false)
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError("")
-
-    try {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false
-      })
-
-      if (result?.error) {
-        setError("Credenciales incorrectas o cuenta inactiva.")
-        setLoading(false)
-      } else {
-        window.location.href = "/"
-      }
-    } catch (err) {
-      setError("Ocurrió un error inesperado.")
-      setLoading(false)
     }
   }
 
@@ -92,20 +63,20 @@ export function LoginForm() {
         )}
 
         {/* Microsoft Entra ID Primary Sign In */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", margin: "1rem 0" }}>
           <button
             type="button"
             onClick={handleMicrosoftSignIn}
-            disabled={loadingMs || loading}
+            disabled={loadingMs}
             style={{
               width: "100%",
-              padding: "0.85rem 1rem",
+              padding: "0.9rem 1rem",
               borderRadius: "0.6rem",
               backgroundColor: "#2F2F2F",
               color: "#FFFFFF",
               fontSize: "0.95rem",
               fontWeight: 600,
-              cursor: (loadingMs || loading) ? "not-allowed" : "pointer",
+              cursor: loadingMs ? "not-allowed" : "pointer",
               display: "flex",
               justifyContent: "center",
               alignItems: "center",
@@ -126,130 +97,10 @@ export function LoginForm() {
             <span>{loadingMs ? "Conectando con Microsoft..." : "Sign in with Microsoft 365"}</span>
           </button>
           
-          <p style={{ textAlign: "center", fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", margin: "0.25rem 0" }}>
+          <p style={{ textAlign: "center", fontSize: "0.78rem", color: "hsl(var(--muted-foreground))", margin: "0.25rem 0" }}>
             Usa tu cuenta corporativa @tnoutsourcing.com
           </p>
-
         </div>
-
-        {/* Divider */}
-        <div style={{ display: "flex", alignItems: "center", margin: "1.5rem 0", gap: "0.75rem" }}>
-          <div style={{ flex: 1, height: "1px", backgroundColor: "hsl(var(--border) / 0.6)" }} />
-          <button
-            type="button"
-            onClick={() => setShowCredentials(!showCredentials)}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              fontSize: "0.78rem",
-              color: "hsl(var(--muted-foreground))",
-              fontWeight: 500
-            }}
-          >
-            {showCredentials ? "Ocultar acceso legacy ▲" : "Acceso con contraseña ▼"}
-          </button>
-          <div style={{ flex: 1, height: "1px", backgroundColor: "hsl(var(--border) / 0.6)" }} />
-        </div>
-
-        {/* Collapsible Local Credentials Form */}
-        {showCredentials && (
-          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }} className="animate-in">
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "hsl(var(--muted-foreground))" }}>
-                Correo Electrónico
-              </label>
-              <div style={{ position: "relative" }}>
-                <Mail size={18} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "hsl(var(--muted-foreground))" }} />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="usuario@tnoutsourcing.com"
-                  className="input"
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem 1rem 0.75rem 2.75rem",
-                    borderRadius: "0.6rem",
-                    border: "1px solid hsl(var(--border))",
-                    backgroundColor: "hsl(var(--surface))",
-                    color: "hsl(var(--foreground))",
-                    fontSize: "0.95rem"
-                  }}
-                />
-              </div>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "hsl(var(--muted-foreground))" }}>
-                Contraseña
-              </label>
-              <div style={{ position: "relative" }}>
-                <Lock size={18} style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "hsl(var(--muted-foreground))" }} />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="input"
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem 2.75rem 0.75rem 2.75rem",
-                    borderRadius: "0.6rem",
-                    border: "1px solid hsl(var(--border))",
-                    backgroundColor: "hsl(var(--surface))",
-                    color: "hsl(var(--foreground))",
-                    fontSize: "0.95rem"
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{
-                    position: "absolute",
-                    right: "1rem",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "hsl(var(--muted-foreground))",
-                    padding: "0.25rem",
-                    display: "flex",
-                    alignItems: "center"
-                  }}
-                  title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading || loadingMs}
-              style={{
-                width: "100%",
-                padding: "0.875rem",
-                borderRadius: "0.6rem",
-                backgroundColor: "hsl(var(--primary))",
-                color: "hsl(var(--primary-foreground))",
-                fontSize: "0.95rem",
-                fontWeight: 600,
-                cursor: loading ? "not-allowed" : "pointer",
-                transition: "opacity 0.2s",
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                gap: "0.5rem"
-              }}
-            >
-              {loading ? "Iniciando sesión..." : "Iniciar con Contraseña"}
-            </button>
-          </form>
-        )}
 
         <div style={{ marginTop: "2rem", fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", textAlign: "center", lineHeight: "1.5" }}>
           Desarrollado por IT Telecom Support Team<br/>

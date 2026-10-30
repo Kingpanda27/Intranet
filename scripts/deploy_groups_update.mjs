@@ -110,6 +110,11 @@ async function main() {
     { local: 'app/actions/embeddingActions.ts', remote: '/var/www/html/app/actions/embeddingActions.ts' },
     { local: 'app/components/Admin/Config/OllamaManager.tsx', remote: '/var/www/html/app/components/Admin/Config/OllamaManager.tsx' },
     { local: 'app/components/KnowledgeBase/KBList.tsx', remote: '/var/www/html/app/components/KnowledgeBase/KBList.tsx' },
+    { local: 'app/components/Auth/LoginForm.tsx', remote: '/var/www/html/app/components/Auth/LoginForm.tsx' },
+    { local: 'lib/version.ts', remote: '/var/www/html/lib/version.ts' },
+    { local: 'package.json', remote: '/var/www/html/package.json' },
+    { local: 'CHANGELOG.md', remote: '/var/www/html/CHANGELOG.md' },
+    { local: 'DOCUMENTACION.md', remote: '/var/www/html/DOCUMENTACION.md' },
     { local: 'prisma/schema.prisma', remote: '/var/www/html/prisma/schema.prisma' },
     { local: 'tsconfig.json', remote: '/var/www/html/tsconfig.json' },
   ];
